@@ -1,0 +1,59 @@
+"""Налаштування статус-бару: які цифри показувати і в якому стилі.
+
+Зберігаються в JSON у папці даних застосунку. Запис атомарний (тимчасовий файл + replace).
+Некоректний або пошкоджений файл не ламає запуск: беруться значення за замовчуванням.
+"""
+import json
+import os
+
+DEFAULTS = {"cpu": True, "ram": True, "gpu": True, "style": "both", "interval": 2,
+            "alerts": True, "dailyCheck": True}
+STYLES = ("both", "icon", "text")   # іконка і цифри / лише іконка / лише цифри
+INTERVALS = (1, 2, 5)              # секунд між вибірками показників
+
+
+class Prefs:
+    def __init__(self, path):
+        self._path = path
+        self._data = dict(DEFAULTS)
+        self._load()
+
+    def _load(self):
+        try:
+            with open(self._path, encoding="utf-8") as fh:
+                raw = json.load(fh)
+        except (OSError, ValueError):
+            return
+        if not isinstance(raw, dict):
+            return
+        for key in ("cpu", "ram", "gpu", "alerts", "dailyCheck"):
+            if isinstance(raw.get(key), bool):
+                self._data[key] = raw[key]
+        if raw.get("style") in STYLES:
+            self._data["style"] = raw["style"]
+        if raw.get("interval") in INTERVALS:
+            self._data["interval"] = raw["interval"]
+
+    def get(self, key):
+        return self._data[key]
+
+    def set(self, key, value):
+        if key in ("cpu", "ram", "gpu", "alerts", "dailyCheck"):
+            value = bool(value)
+        elif key == "style":
+            if value not in STYLES:
+                raise ValueError(f"Невідомий стиль: {value}")
+        elif key == "interval":
+            if value not in INTERVALS:
+                raise ValueError(f"Недопустимий інтервал: {value}")
+        else:
+            raise KeyError(key)
+        self._data[key] = value
+        self._save()
+
+    def _save(self):
+        os.makedirs(os.path.dirname(self._path), exist_ok=True)
+        tmp = f"{self._path}.tmp.{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(self._data, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp, self._path)

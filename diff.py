@@ -1,0 +1,40 @@
+"""Порівняння двох звітів безпеки: що змінилось з попереднього знімка.
+
+Перевірки співставляються за назвою (label). Зміна: значення або статус різні, або перевірка
+з'явилась чи зникла. Модуль нічого не читає з диска: на вхід подаються списки елементів «security».
+"""
+
+
+KIND_UA = {"good": "ок", "info": "до відома", "warning": "увага", "critical": "критично"}
+
+
+def _shown(item):
+    """Значення разом зі статусом, щоб зміна статусу без зміни тексту була видна."""
+    value = item.get("value")
+    kind = item.get("kind")
+    return f"{value} · {KIND_UA.get(kind, kind)}" if kind else value
+
+
+def _by_label(items):
+    out = {}
+    for item in items or []:
+        if isinstance(item, dict) and isinstance(item.get("label"), str):
+            out[item["label"]] = item
+    return out
+
+
+def security_changes(old_items, new_items):
+    """Список змін: {label, from, to}. from None — перевірка з'явилась, to None — зникла."""
+    old = _by_label(old_items)
+    new = _by_label(new_items)
+    changes = []
+    for label, item in new.items():
+        prev = old.get(label)
+        if prev is None:
+            changes.append({"label": label, "from": None, "to": _shown(item)})
+        elif (prev.get("kind"), prev.get("value")) != (item.get("kind"), item.get("value")):
+            changes.append({"label": label, "from": _shown(prev), "to": _shown(item)})
+    for label, prev in old.items():
+        if label not in new:
+            changes.append({"label": label, "from": _shown(prev), "to": None})
+    return changes
