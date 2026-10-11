@@ -1,129 +1,96 @@
 # MacSafe
 
-Застосунок для macOS: показує навантаження (CPU, RAM, GPU) і процеси в статус-барі, перевіряє
-стан захисту системи без root і без Full Disk Access, веде історію звітів з календарем днів і
-очищує кеші та пам'ять з підтвердженням.
+A macOS menu bar monitor, a security report, and a safe cache cleaner in one small app.
 
-## Встановлення
+- **Menu bar:** CPU, memory, GPU, disk, network and battery at a glance, with a popover for details, the process list and quick actions.
+- **Report window:** a security and health report with an issue list, an action plan, history, and a cleaning panel.
+- **Safe by design:** no root, no system changes. It deletes only caches and old logs, and anything it removes goes to the Trash first.
+- **English and Ukrainian:** switch the language in the menu bar settings. By default it follows macOS.
 
-```bash
-./build_app.sh --install      # збирає MacSafe.app і ставить у /Applications (або ~/Applications)
+![Report window: overview](docs/screenshots/window-overview.png)
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/panel-cpu.png" alt="Menu bar popover with the CPU details open" width="260"></td>
+    <td><img src="docs/screenshots/panel-appearance.png" alt="Popover appearance settings, including the language switch" width="260"></td>
+    <td><img src="docs/screenshots/panel-actions.png" alt="Popover actions: quick clean, check, detailed clean, free memory" width="260"></td>
+  </tr>
+</table>
+
+## Features
+
+**Menu bar and popover**
+- Live CPU, memory, GPU, disk, network and battery values, with 60-second history graphs.
+- Per-core load, process groups by CPU and memory, with the ability to quit a process (asks for a second click to confirm).
+- Choose which values show in the menu bar, the style (icon and numbers, icon only, numbers only), and the refresh interval (1, 2 or 5 seconds).
+- Quick clean of safe caches, a free-memory action (asks for the administrator password), and start at login.
+
+**Report**
+- Security checks without root or Full Disk Access: FileVault, firewall, stealth mode, SIP, Gatekeeper, listening ports, system extensions, login items, XProtect version.
+- Health checks: memory pressure, swap, disk fullness, battery health, uptime, crash reports, kernel panics, Time Machine status.
+- A score with the issues ordered by urgency, each with evidence, the reason it matters, the steps, and how to verify it.
+- Changes since the previous report, a score trend, and a calendar of past reports.
+
+**Maintenance**
+- **Cleaning:** choose caches by category (developer tools, logs, app caches) and by age (7, 30 or 90 days). The panel shows memory before and after.
+- **Large files:** search the home folder (outside `~/Library`) and show files in Finder or move them to the Trash.
+- **Leftovers:** folders from apps that are no longer installed. Selected items go to the Trash.
+
+**Alerts**
+- Notifications for sustained high memory use, low free disk space, and low battery.
+- Notifications for new LaunchAgents and LaunchDaemons (checked every 10 minutes against a saved baseline).
+- A daily security check, when no report exists for the day.
+
+See [docs/modes.md](docs/modes.md) for every section and what it shows.
+
+## Requirements
+
+- macOS on Apple silicon. Developed and tested on macOS 27.
+- Xcode Command Line Tools, to build the app (see [docs/building.md](docs/building.md)).
+
+## Install
+
+Build the app and install it into `/Applications`:
+
+```sh
+./build_app.sh --install
 ```
 
-Збірка створює самодостатній бандл: код, генератор звітів, шаблон, іконка і вбудований Python з
-pywebview і psutil. Після збірки репозиторій можна переносити: застосунок працює з бандла.
-Підпис ad-hoc, тому на іншій машині macOS попередить про непідписаний застосунок.
+Open **MacSafe** from Applications. The icon appears in the menu bar, and the report window opens on the first launch.
 
-Вимоги: macOS 13 або новіше, Python 3 з Command Line Tools (`/usr/bin/python3`), інтернет під час збірки.
+The app is signed ad hoc. That is enough on the Mac that built it. On other Macs, macOS will warn about an unidentified developer until the app is signed with a Developer ID and notarized. See [docs/building.md](docs/building.md).
 
-## Запуск і статус-бар
+## Language
 
-- Звичайний запуск відкриває вікно звітів. Закриття вікна ховає його, застосунок лишається в статус-барі.
-- `--background` запускає лише статус-бар (так працює автозапуск).
-- В статус-барі: CPU, RAM, GPU у відсотках і крапка, якщо є проблеми безпеки (оранжева — увага, червона — критично).
-- Панель статус-бару: три блоки показників зі спарклайнами (60 секунд), далі зони «Процеси», «Вигляд»
-  (які показники показувати і в якому стилі) і «Дії». Відкрита одна зона за раз.
-- У зоні «Процеси» кожен рядок має «×». Перший клік показує «Так?», другий надсилає SIGTERM усім процесам
-  групи, що належать поточному користувачу. MacSafe себе не завершує.
-- «Перевірити зараз» запускає перевірку у фоні. У панелі показується прогрес.
-- Агент статус-бару не має WebKit і не сканує процеси, поки панель закрита. Вікно звітів запускається
-  окремим процесом і завершується разом зі своїм вікном.
-- Один екземпляр: другий звичайний запуск просить показати вікно вже працюючого.
+Open the menu bar icon, then **Appearance**, then **Language**: **Українська** or **English**. The app restarts to apply the change. The report window follows the same setting. By default MacSafe uses English unless macOS lists Ukrainian as the first language. Details are in [docs/languages.md](docs/languages.md).
 
-## Диск, мережа, батарея і сповіщення
+## Your data
 
-- Під показниками CPU, RAM, GPU у панелі є рядок: вільне місце на диску, швидкість мережі, заряд батареї.
-- Сповіщення macOS (перемикач «Сповіщення» у «Вигляд»): памʼять ≥ 92% довше хвилини, вільно менше 10 ГБ,
-  заряд ≤ 15% без живлення, зросла кількість проблем безпеки. Те саме сповіщення не частіше разу на годину.
-- Автозапуск системи: раз на 10 хвилин MacSafe порівнює LaunchAgents і LaunchDaemons з базовим списком і сповіщає про новий елемент
-  (перший запуск лише запамʼятовує список).
-- «Щоденна перевірка»: якщо за сьогодні звіту ще немає, агент сам запускає перевірку (через хвилину після старту, далі щогодини).
+MacSafe keeps its data in `~/Library/Application Support/MacSafe`: HTML and JSON reports, history, settings, and the autostart baseline. Nothing is sent over the network. The Agents section copies commands for you to run yourself in Terminal.
 
-## Автозапуск
+## Documentation
 
-«Запускати при вході» записує LaunchAgent `com.user.macsafe` в `~/Library/LaunchAgents`.
-Вимкнення прибирає plist і знімає сервіс з launchd, якщо він не є поточним процесом.
+- [Modes and sections](docs/modes.md): what each section shows and how to use it.
+- [How it works](docs/how-it-works.md): the components, data flow, and report generation.
+- [Safety](docs/safety.md): what MacSafe can and cannot change, and how deletion is limited.
+- [Languages](docs/languages.md): how the translation works and how to add a language.
+- [Building and distribution](docs/building.md): build, install, signing, and the DMG.
+- [Design references](docs/design-references.md): the apps and sources used for the interface.
 
-## Дані
+## Development
 
-Усі дані в `~/Library/Application Support/MacSafe`:
-
-- `report-*.html` і `report-*.json` — знімки станів з часом, `dashboard.html` — центральна сторінка звітів.
-- `дані/` — JSON-знімки, історія, налаштування статус-бару, журнал автозапуску.
-- `Архів/` — архів старої папки звітів (до переходу на MacSafe).
-
-Тижневий звіт (`com.user.system-report-weekly`, понеділок о 09:00) запускає генератор з бандла.
-
-## Перевірки безпеки
-
-Кожна перевірка має команду, статус (ок / увага / критично / немає даних) і коротку пораду.
-Без root і без Full Disk Access:
-
-- Gatekeeper (`spctl --status`), SIP (`csrutil status`), FileVault (`fdesetup status`)
-- брандмауер і режим невидимості (`socketfilterfw`)
-- TCP-слухачі (`lsof`): скільки видно і скільки поза localhost
-- системні розширення (`systemextensionsctl list`)
-- агенти й демони автозапуску (`LaunchAgents`, `LaunchDaemons`)
-- версія XProtect, Time Machine, Spotlight, DEP/MDM (`profiles status`), оновлення (`softwareupdate -l`)
-
-Чого MacSafe не робить: не сканує на шкідливе ПЗ, не керує брандмауером, не читає захищені папки
-(`~/Library/Mail` тощо) і не змінює налаштування системи. Перевірки, для яких потрібні root або
-Full Disk Access, не додаються. Статус «немає даних» означає, що команда не відповіла, а не що все добре.
-
-## Очищення
-
-Очищення видаляє лише файли, яких не змінювали 7, 30 (за замовчуванням) або 90 днів, у папках з білого списку:
-`~/.npm`, `~/Library/Caches` (без `com.apple.*` і символічних посилань), `~/Library/Logs`, pip, Homebrew,
-Xcode DerivedData. Порожні папки всередині прибираються, самі корені лишаються.
-
-- Швидке очищення (панель статус-бару, «Дії»): фіксовані кеші розробника і логи, двоетапне підтвердження.
-- Детальне очищення (вікно, «Очищення»): категорії-прапорці (інструменти розробника, логи, кеші застосунків),
-  вибір порогу віку і окремих папок. Категорії і поріг перевіряються ще й на боці Python, тож невибране не видаляється.
-- Великі файли (вікно, «Очищення»): пошук файлів від 50 МБ до 1 ГБ у домашній папці без Library, лише перегляд і «У Finder».
-  Нічого не видаляється. Downloads і Documents macOS може попросити дозволити.
-- Аналіз памʼяті: до і після очищення береться знімок (доступна, вільна, неактивна, swap), різниця показується
-  у вікні і в примітці панелі. Видалення кешів на диску майже не змінює памʼять, це знімок, а не обіцянка.
-- Очищення памʼяті (`purge`) запитує пароль адміністратора при кожному виклику: macOS не дає дозволити це наперед.
-  Результат теж показує зміну доступної памʼяті.
-
-## Розповсюдження
-
-Бандл самодостатній: Python3.framework скопійовано в `Contents/Frameworks`, пакунки лежать у `Resources/site-packages`,
-посилань за межі бандла немає, тож строгий `codesign --verify --deep --strict` проходить. Збірка потребує Command Line Tools.
-
-`SIGN_IDENTITY="Developer ID Application: ..." ./build_app.sh`, далі `NOTARY_PROFILE=... packaging/make_dmg.sh` робить DMG
-і віддає його на notarization. Для цього потрібен платний акаунт Apple Developer і профіль
-`xcrun notarytool store-credentials`. Без нього DMG збирається з ad-hoc підписом і працює на цьому Mac; на іншому
-macOS попередить про непідписаний застосунок. Саму notarization я не запускав.
-
-## Тести
-
-```bash
-/usr/bin/python3 -m unittest discover -s tests -v
+```sh
+python3 -m unittest discover -s tests
 ```
 
-Тести не чіпають реальні дані: шляхи підміняються на тимчасові, launchctl і ioreg не викликаються.
-Покрито: налаштування, розбір GPU, автозапуск, очищення кешів у фальшивому домі, підсумок безпеки,
-множина слів.
+The tests cover cleaning rules, alerts, persistence, large files, leftovers, the Trash targets, the preferences, and translation coverage. Code comments are in Ukrainian.
 
-## Структура
+## Limitations
 
-- `agent.py` — фоновий процес: статус-бар, один екземпляр, дії меню (без WebKit)
-- `app.py` — вікно звітів; запускається агентом на запит і завершується разом зі своїм вікном
-- `engine.py` — спільна логіка без інтерфейсу: звіти, перевірка, очищення, пам'ять
-- `menubar.py` — статус-бар, панель з блоками показників, зонами, спарклайнами, анімаціями
-- `metrics.py` — CPU, RAM, GPU, процеси з групуванням за застосунком
-- `gpu_iokit.py` — GPU через IOKit напряму (запасний шлях — `ioreg`)
-- `cleanup.py` — кеші з білим списком і підтвердженням
-- `autostart.py` — LaunchAgent
-- `prefs.py` — налаштування статус-бару
-- `core/generate-report.sh`, `core/template.html` — генератор звітів і шаблон
-- `packaging/make_icon.py` — іконка застосунку
-- `build_app.sh` — збірка і встановлення `.app`
-- `tests/` — тести логіки
+- CPU and GPU temperatures are not readable without root on Apple silicon. The Temperatures section shows what macOS exposes and marks the rest as unavailable.
+- Notarization is not done yet. It needs an Apple Developer ID.
+- The report is generated by a shell script and HTML template. Some diagnostic messages from the script stay in Ukrainian.
 
-## Обмеження
+## License
 
-- Минулий день без знімка не можна створити задним числом: знімок фіксує систему в момент запуску.
-- Клікабельність і анімації панелі перевірені на стенді та живому статус-барі; повний набір кліків по всіх сторінках ще не автоматизовано.
-- Підпис і нотаризація Developer ID не зроблені: потрібен сертифікат розробника.
+Not chosen yet.
