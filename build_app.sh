@@ -28,7 +28,7 @@ rm -rf "$APP" "$TMP"
 mkdir -p "$APP/Contents/MacOS" "$RES/core" "$TMP"
 
 # 1. Код застосунку і генератор (без службових файлів)
-for f in agent.py alerts.py bigfiles.py persistence.py trash.py leftovers.py engine.py app.py metrics.py gpu_iokit.py menubar.py prefs.py autostart.py cleanup.py diff.py bar.js app.html requirements.txt; do
+for f in agent.py alerts.py bigfiles.py persistence.py trash.py leftovers.py engine.py app.py i18n.py metrics.py gpu_iokit.py menubar.py prefs.py autostart.py cleanup.py diff.py bar.js app.html requirements.txt; do
   cp "$HERE/$f" "$RES/" || fail "копіювання $f"
 done
 cp "$HERE/core/generate-report.sh" "$HERE/core/template.html" "$RES/core/" || fail "копіювання core/"
@@ -95,7 +95,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSAppleEventsUsageDescription</key><string>MacSafe керує Finder, щоб очистити кошик, і запускає системні команди для очищення пам’яті з підтвердженням.</string>
+  <key>NSAppleEventsUsageDescription</key><string>MacSafe controls Finder to empty the Trash, and runs the system memory cleanup command after you confirm.</string>
 </dict>
 </plist>
 PLIST
