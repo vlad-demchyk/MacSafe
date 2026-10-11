@@ -292,6 +292,27 @@ class Api:
             return {"ok": False, "error": str(exc)}
         return {"ok": True}
 
+    def save_snapshot(self, name, text):
+        """Saves the JSON of the selected snapshot to Downloads. Accepts only a file name, not a path; an existing file is not overwritten."""
+        if not isinstance(name, str) or not isinstance(text, str) or len(text) > 20_000_000:
+            return {"ok": False, "error": T("Не вдалося зберегти")}
+        base = re.sub(r"[^\w.\- ]", "_", os.path.basename(name.replace("\\", "/"))) or "snapshot.json"
+        if not base.lower().endswith(".json"):
+            base += ".json"
+        folder = os.path.expanduser("~/Downloads")
+        stem, ext = os.path.splitext(base)
+        path, n = os.path.join(folder, base), 1
+        try:
+            os.makedirs(folder, exist_ok=True)
+            while os.path.exists(path):
+                path = os.path.join(folder, f"{stem} {n}{ext}")
+                n += 1
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+        except OSError as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, "name": os.path.basename(path), "path": path}
+
     def status(self):
         with self._guard:
             s = dict(self._state)

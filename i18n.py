@@ -100,6 +100,7 @@ EN = {
     "Звіти": "Reports",
     "Відкрити додаток": "Open app",
     "Невідома мова": "Unknown language",
+    "Не вдалося зберегти": "Could not save",
     "Вийти": "Quit",
     "Коротко: безпека і зміни від попереднього звіту": "Summary: security and changes since the previous report",
     "ТОП ПРОЦЕСІВ": "TOP PROCESSES",

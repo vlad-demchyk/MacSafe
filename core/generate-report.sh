@@ -17,16 +17,16 @@ for arg in "$@"; do
   case "$arg" in
     --deep) DEEP=1 ;;
     --check-updates) CHECK_UPDATES=1 ;;
-    --regen) break ;;   # обробляється нижче, разом з ідентифікатором знімка
+    --regen) break ;;   # handled below, together with the snapshot identifier
     *) echo "Unknown parameter: $arg" >&2; exit 2 ;;
   esac
 done
 
 # ---------- Settings ----------
-MAX_REPORTS=60                  # скільки HTML-звітів зберігати (один на день)
-MAX_SNAPSHOTS=60                # скільки JSON-знімків зберігати (календар показує ці дні)
-MAX_HISTORY=52                  # скільки записів історії тримати (рік щотижня)
-REPORT_PERIOD_DAYS=7            # вікно для аварійних звітів
+MAX_REPORTS=60                  # how many HTML reports to keep (one per day)
+MAX_SNAPSHOTS=60                # how many JSON snapshots to keep (the calendar shows these days)
+MAX_HISTORY=52                  # how many history entries to keep (a year of weekly entries)
+REPORT_PERIOD_DAYS=7            # window for crash reports
 # Background processes needed for work. Their average CPU time is not considered a problem:
 # only current spikes, restart loops and errors in the logs are checked.
 EXPECTED_PROCESS_RE='^(brain-daemon|codebase-memory-mcp)$'
@@ -141,7 +141,7 @@ read_security() {
   [ ! -s "$WORK/security-command.err" ] || return 1
   printf '%s' "$out"
 }
-add_security() { # назва kind значення команда порада
+add_security() { # name kind value command advice
   local kind="$2" value="$3" advice="$5" status
   case "$kind" in
     good) status="ок" ;;
@@ -321,7 +321,7 @@ pretty_name() {
   esac
 }
 
-proc_json() { # pid назва %CPU RSS_MB життя% очікуваний
+proc_json() { # pid name %CPU RSS_MB life% expected
   obj "$(kn pid "$1")" "$(kv name "$(pretty_name "$2")")" "$(kn cpu "$3")" "$(kn rssMb "$4")" "$(kn life "$5")" "$(kv category "$(category_of "$2")")" "$(kb expected "$6")"
 }
 
@@ -618,7 +618,7 @@ XB_ADDR_IN_USE="${XB_ADDR_IN_USE:-0}"; XB_BANNERS="${XB_BANNERS:-0}"; XB_DB_ERRO
 # ---------- Cleaning: candidates (display only, nothing is deleted) ----------
 note "Collecting: caches and cleaning candidates"
 CLEANUP=(); SAFE_TOTAL_MB=0
-add_cleanup() { # назва шлях ризик пояснення команда
+add_cleanup() { # name path risk explanation command
   [ -n "$2" ] || return 0
   local mb
   mb="$(size_mb "$2")"
@@ -1186,7 +1186,7 @@ $core->{history} = $history;
 $core->{systems} = \@systems;
 
 my $data = $json->encode($core);
-$data =~ s/</\\u003c/g;   # "<" у JSON є лише всередині рядків, тож < безпечний для <script>
+$data =~ s/</\\u003c/g;   # "<" in JSON appears only inside strings, so < is safe for <script>
 my $html = slurp($tpl_path);
 $html =~ s/__REPORT_JSON__/$data/ or die "The template has no place for data (__REPORT_JSON__)\n";
 open my $ofh, '>:raw', $out_path or die "Could not write the report: $!\n";

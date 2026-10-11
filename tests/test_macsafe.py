@@ -13,13 +13,14 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 
 def setUpModule():
-    # Старі тести перевіряють українські тексти; мова за замовчуванням тепер англійська
+    # Old tests check Ukrainian texts; the default language is now English
     import i18n
     i18n.set_language("uk")
 
@@ -367,7 +368,7 @@ class PluralTests(unittest.TestCase):
 
 
 class UndefinedNamesTests(unittest.TestCase):
-    """Перевіряє, що кожне ім'я, яке модуль використовує, визначене або імпортоване в ньому (ловить забутий імпорт T)."""
+    """Checks that every name a module uses is defined or imported in it (catches a forgotten import of T)."""
 
     def test_no_undefined_names(self):
         import ast
@@ -470,6 +471,21 @@ class I18nTests(unittest.TestCase):
                 self.assertFalse(engine.Api().set_language("de")["ok"])
             finally:
                 engine.LANG_REQUEST = original
+
+    def test_snapshot_export_saves_into_downloads_without_overwriting(self):
+        import engine
+        with tempfile.TemporaryDirectory() as home, unittest.mock.patch.dict(os.environ, {"HOME": home}):
+            api = engine.Api()
+            first = api.save_snapshot("аудит-mac.json", '{"a": 1}')
+            second = api.save_snapshot("аудит-mac.json", '{"a": 2}')
+            self.assertTrue(first["ok"] and second["ok"])
+            self.assertNotEqual(first["name"], second["name"])
+            with open(first["path"], encoding="utf-8") as fh:
+                self.assertEqual(fh.read(), '{"a": 1}')
+            self.assertTrue(first["path"].startswith(os.path.join(home, "Downloads")))
+            # шлях із папками не виходить за межі «Завантаження»
+            traversal = api.save_snapshot("../../evil.json", "{}")
+            self.assertTrue(traversal["path"].startswith(os.path.join(home, "Downloads")))
 
     def test_language_pref_accepts_only_known_values(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -37,6 +37,9 @@
     .sub { color:var(--muted); margin:8px 0 0; font-size:13.5px; }
     .sub b { color:var(--ink); font-weight:650; }
     .top__actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .toolbar__tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .toolbar__tools .search { flex:0 1 260px; width:260px; min-width:0; }
+    .snap-bar { margin:0 0 14px; }
     .search { font:inherit; font-size:14px; color:var(--ink); background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:7px 12px; min-width:240px; }
     .btn { font:inherit; font-size:13px; color:var(--ink); background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:7px 12px; cursor:pointer; transition:transform .15s var(--ease),background .2s; }
     .btn:hover { background:var(--card2); } .btn:active { transform:scale(.97); }
@@ -329,21 +332,19 @@
           <h1 id="title">MacSafe</h1>
           <p class="sub" id="meta"></p>
         </div>
-        <div class="top__actions">
+      </header>
+
+      <!-- Mode “State” -->
+      <section class="view" data-view="overview" aria-label="Огляд">
+        <div class="toolbar snap-bar">
           <div class="daypick" id="day-pick-wrap" hidden>
             <button class="search daypick__btn" id="day-pick" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Вибір дня звіту"></button>
             <div class="daypick__menu" id="day-menu" role="dialog" aria-label="Календар звітів" hidden></div>
           </div>
-          <input class="search" id="q" type="search" placeholder="Пошук по розділах" aria-label="Пошук">
-          <button class="btn" type="button" data-act="expand">Розгорнути</button>
-          <button class="btn" type="button" data-act="collapse">Згорнути</button>
-          <button class="btn" type="button" data-act="export">Експорт JSON</button>
-          <button class="btn" type="button" data-act="print">Друк</button>
+          <div class="toolbar__tools">
+            <button class="btn" type="button" data-act="export">Експорт JSON</button>
+          </div>
         </div>
-      </header>
-
-      <!-- Режим «Стан» -->
-      <section class="view" data-view="overview" aria-label="Огляд">
         <div class="hero" id="hero"></div>
         <div class="block" id="overview-priorities"></div>
         <div class="block" id="overview-changes"></div>
@@ -354,6 +355,11 @@
         <div class="block" id="issues">
           <div class="block__head"><h2>Проблеми</h2><p class="hint">Спершу терміново, потім увага і до відома. Кожна проблема розгортається: докази, чому важливо, кроки і перевірка.</p></div>
           <div class="toolbar">
+            <div class="toolbar__tools">
+              <input class="search search-q" type="search" placeholder="Пошук проблем" aria-label="Пошук проблем">
+              <button class="btn" type="button" data-act="expand">Розгорнути</button>
+              <button class="btn" type="button" data-act="collapse">Згорнути</button>
+            </div>
             <div class="chips" role="group" aria-label="Фільтр за важливістю">
               <button class="chip" type="button" data-sev="all" aria-pressed="true">Усі <span class="chip__n"></span></button>
               <button class="chip" type="button" data-sev="critical" aria-pressed="false">Терміново <span class="chip__n"></span></button>
@@ -374,7 +380,7 @@
         </div>
       </section>
 
-      <!-- Режим «Система» -->
+      <!-- Mode “System” -->
       <section class="view" data-view="system" aria-label="Система">
         <div class="block" id="system">
           <div class="block__head"><h2>Система</h2><p class="hint">Модель, батарея, сховище і навантаження на момент звіту.</p></div>
@@ -431,7 +437,7 @@
         </div>
       </section>
 
-      <!-- Режим «Очищення» -->
+      <!-- Mode “Cleaning” -->
       <section class="view" data-view="cleanup" aria-label="Очищення">
         <div class="block" id="cleanup">
           <div class="block__head"><h2>Очищення</h2><p class="hint">Кандидати з розміром і командою. Звіт нічого не видаляє сам.</p></div>
@@ -483,7 +489,7 @@
         </div>
       </section>
 
-      <!-- Режим «Дії» -->
+      <!-- Mode “Actions” -->
       <section class="view" data-view="actions" aria-label="Кнопки дій">
         <div class="block" id="actions">
           <div class="block__head"><h2>Кнопки дій</h2><p class="hint">Команди для Terminal на цьому Mac. Сторінка нічого не запускає: команду копіюєте і виконуєте самі. Руйнівні позначені червоним.</p></div>
@@ -498,10 +504,11 @@
         </div>
       </section>
 
-      <!-- Режим «Довідка» -->
+      <!-- Mode “Help” -->
       <section class="view" data-view="advice" aria-label="Поради">
         <div class="block" id="advice">
-          <div class="block__head"><h2>Поради</h2><p class="hint">Довідка за темами. Пошук зверху фільтрує і цей список.</p></div>
+          <div class="block__head"><h2>Поради</h2><p class="hint">Довідка за темами. Пошук фільтрує цей список.</p></div>
+          <div class="toolbar"><input class="search search-q" type="search" placeholder="Пошук порад" aria-label="Пошук порад"></div>
           <div id="advice-list"></div>
         </div>
       </section>
@@ -524,7 +531,7 @@
         </div>
       </section>
 
-      <!-- Налаштування застосунку: мова. Меню-бар теж має перемикач у розділі «Вигляд» -->
+      <!-- App settings: language. The menu bar also has a switch in the Appearance section -->
       <section class="view" data-view="settings" aria-label="Налаштування">
         <div class="block">
           <div class="block__head"><h2>Налаштування</h2><p class="hint">Мова застосунку. Меню-бар перезапускається сам і показує вибрану мову.</p></div>
@@ -789,6 +796,7 @@
  "Добрий загальний стан за доступними сигналами.": "Good overall condition based on the available signals.",
  "Довідка": "Help",
  "Довідка за темами. Пошук зверху фільтрує і цей список.": "Help by topic. Search at the top filters this list too.",
+ "Довідка за темами. Пошук фільтрує цей список.": "Help by topic. Search filters this list.",
  "Додайте другу копію у хмару або на інший диск (правило #-#-#).": "Add a second copy in the cloud or on another disk (the #-#-# rule).",
  "Додайте ротацію логу або обріжте його після зупинки daemon.": "Add log rotation or trim it after stopping the daemon.",
  "Додайте туди непотрібні папки": "Add unneeded folders there",
@@ -982,6 +990,7 @@
  "Нд": "Sun",
  "Не вдалося": "Failed",
  "Не вдалося запустити перевірку": "Could not start the check",
+ "Не вдалося зберегти": "Could not save",
  "Не вдалося знайти файли:": "Could not find files:",
  "Не вдалося знайти:": "Could not find:",
  "Не вдалося оновити розміри:": "Could not update sizes:",
@@ -1181,6 +1190,8 @@
  "Пошук": "Search",
  "Пошук зупинено за часом: список неповний.": "Search stopped due to time: the list is incomplete.",
  "Пошук по розділах": "Search sections",
+ "Пошук порад": "Search tips",
+ "Пошук проблем": "Search issues",
  "Пошук у домашній папці без Library. Тільки перегляд: файли не видаляються, їх можна показати у Finder. Downloads і Documents macOS може попросити дозволити.": "Search in the home folder without Library. View only: files are not deleted, they can be shown in Finder. macOS may ask for permission for Downloads and Documents.",
  "Пояснення проблеми від моделі. Команди копіюєте в Terminal самі. Текст проблеми надсилається провайдеру, перевірте його перед запуском.": "Explanation of the problem by a model. You copy the commands into Terminal yourself. The problem text is sent to the provider, check it before running.",
  "Права": "Permissions",
@@ -1531,10 +1542,10 @@
       document.querySelectorAll('#lang-choice [data-lang]').forEach(button => {
         button.setAttribute('aria-pressed', String(button.dataset.lang === lang));
         button.addEventListener('click', async () => {
-          // Застосунок зберігає мову і перезапускає меню-бар; у браузері мова лише запам'ятовується
+          // The app saves the language and restarts the menu bar; in a browser the language is only remembered
           const window_ = window.pywebview && window.pywebview.api;
           if (window_ && typeof window_.set_language === 'function') await window_.set_language(button.dataset.lang);
-          try { localStorage.setItem('macsafe-lang', button.dataset.lang); } catch (e) { /* без збереження */ }
+          try { localStorage.setItem('macsafe-lang', button.dataset.lang); } catch (e) { /* without saving */ }
           const next = new URL(location.href);
           next.searchParams.set('lang', button.dataset.lang);
           location.replace(next.href);
@@ -1566,7 +1577,7 @@
     // Access to localStorage may be blocked by the browser: then simply without saving
     const store = {
       get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
-      set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* без збереження */ } },
+      set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* without saving */ } },
     };
     const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const state = { sev: 'all', q: '' };
@@ -1626,7 +1637,7 @@
       el.innerHTML = `<button class="acc__btn" type="button" aria-expanded="${open}"><span class="acc__head">${head}</span><span class="acc__chev" aria-hidden="true">&#9662;</span></button><div class="acc__panel"><div class="acc__inner">${body}</div></div>`;
       const btn = $('.acc__btn', el);
       const panel = $('.acc__panel', el);
-      panel.inert = !open;   // закрита панель не отримує фокус з Tab
+      panel.inert = !open;   // a closed panel does not get focus from Tab
       btn.addEventListener('click', () => {
         const isOpen = el.classList.toggle('open');
         btn.setAttribute('aria-expanded', String(isOpen));
@@ -1820,7 +1831,7 @@
       DATA = selectData(id);
       state.q = '';
       state.sev = 'all';
-      $('#q').value = '';
+      $$('.search-q').forEach(input => { input.value = ''; });
       renderAll();
       refreshSideCounts();
       route(false);
@@ -2014,7 +2025,7 @@
     }
 
     function renderCleanup() {
-      const q = state.q.trim().toLowerCase();
+      const q = '';   // the cleaning list is not filtered by search
       const all = list(DATA.cleanup);
       const items = all.slice()
         .sort((a, b) => (b.sizeMb ?? -1) - (a.sizeMb ?? -1))
@@ -2479,29 +2490,41 @@
       });
     }
 
+    // Snapshot export: the app saves the file to Downloads; in a browser it is a normal download
+    async function saveSnapshot() {
+      // Only the selected snapshot: history and other systems' data do not go into the file
+      const { history, systems, ...snap } = DATA;
+      const text = JSON.stringify(snap, null, 2);
+      const name = `аудит-${(DATA.meta && DATA.meta.computer) || 'mac'}-${currentId() || 'звіт'}.json`;
+      const api = window.pywebview && window.pywebview.api;
+      if (api && typeof api.save_snapshot === 'function') {
+        const res = await api.save_snapshot(name, text);
+        toast(res && res.ok ? `Збережено: ${res.name}` : ((res && res.error) || 'Не вдалося зберегти'));
+        return;
+      }
+      const blob = new Blob([text], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
     // ---------- Actions (built-in): search marking ----------
     function bindToolbar() {
-      $('#q').addEventListener('input', e => {
+      $$('.search-q').forEach(input => input.addEventListener('input', e => {
         state.q = e.target.value;
+        $$('.search-q').forEach(other => { if (other !== e.target) other.value = state.q; });
         renderIssues(); renderAdvice(); renderCleanup();
-      });
-      document.querySelector('.topbar .top__actions').addEventListener('click', e => {
+      }));
+      document.addEventListener('click', e => {
         const b = e.target.closest('[data-act]');
         if (!b) return;
         const act = b.dataset.act;
-        if (act === 'expand') $$('.acc').forEach(a => { a.classList.add('open'); $('.acc__btn', a).setAttribute('aria-expanded', 'true'); });
-        if (act === 'collapse') $$('.acc').forEach(a => { a.classList.remove('open'); $('.acc__btn', a).setAttribute('aria-expanded', 'false'); });
-        if (act === 'print') window.print();
-        if (act === 'export') {
-          // Export only the selected snapshot: history and other systems' data do not go into the file
-          const { history, systems, ...snap } = DATA;
-          const blob = new Blob([JSON.stringify(snap, null, 2)], { type: 'application/json' });
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = `аудит-${(DATA.meta && DATA.meta.computer) || 'mac'}.json`;
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-        }
+        const view = document.querySelector('.view.is-active');
+        if (act === 'expand') $$('.acc', view).forEach(a => { a.classList.add('open'); $('.acc__btn', a).setAttribute('aria-expanded', 'true'); });
+        if (act === 'collapse') $$('.acc', view).forEach(a => { a.classList.remove('open'); $('.acc__btn', a).setAttribute('aria-expanded', 'false'); });
+        if (act === 'export') { saveSnapshot(); return; }
       });
       $('#issues .chips').addEventListener('click', e => {
         const c = e.target.closest('.chip');
