@@ -1,0 +1,816 @@
+"""Тести логіки MacSafe. Запуск: /usr/bin/python3 -m unittest discover -s tests -v
+
+Тести не чіпають реальні дані користувача: шляхи підміняються на тимчасові папки,
+launchctl і ioreg не викликаються.
+"""
+import importlib
+import json
+import os
+import plistlib
+import shutil
+import sys
+import tempfile
+import time
+import unittest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+
+class PrefsTests(unittest.TestCase):
+    def setUp(self):
+        import prefs
+        self.prefs = prefs
+        self.dir = tempfile.mkdtemp(prefix="macsafe-prefs-")
+        self.path = os.path.join(self.dir, "налаштування.json")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_defaults_when_no_file(self):
+        p = self.prefs.Prefs(self.path)
+        self.assertEqual((p.get("cpu"), p.get("ram"), p.get("gpu"), p.get("style")), (True, True, True, "both"))
+
+    def test_roundtrip_persists(self):
+        p = self.prefs.Prefs(self.path)
+        p.set("gpu", False)
+        p.set("style", "text")
+        q = self.prefs.Prefs(self.path)
+        self.assertFalse(q.get("gpu"))
+        self.assertEqual(q.get("style"), "text")
+
+    def test_invalid_style_rejected(self):
+        with self.assertRaises(ValueError):
+            self.prefs.Prefs(self.path).set("style", "neon")
+
+    def test_unknown_key_rejected(self):
+        with self.assertRaises(KeyError):
+            self.prefs.Prefs(self.path).set("cpu_temp", True)
+
+    def test_corrupt_file_falls_back_to_defaults(self):
+        with open(self.path, "w", encoding="utf-8") as fh:
+            fh.write("{не json")
+        self.assertEqual(self.prefs.Prefs(self.path).get("style"), "both")
+
+    def test_wrong_types_are_ignored(self):
+        with open(self.path, "w", encoding="utf-8") as fh:
+            json.dump({"cpu": "так", "style": "neon", "ram": False}, fh)
+        p = self.prefs.Prefs(self.path)
+        self.assertTrue(p.get("cpu"))
+        self.assertEqual(p.get("style"), "both")
+        self.assertFalse(p.get("ram"))
+
+
+class IntervalPrefTests(PrefsTests):
+    def test_interval_default_and_roundtrip(self):
+        p = self.prefs.Prefs(self.path)
+        self.assertEqual(p.get("interval"), 2)
+        p.set("interval", 5)
+        self.assertEqual(self.prefs.Prefs(self.path).get("interval"), 5)
+
+    def test_invalid_interval_rejected(self):
+        with self.assertRaises(ValueError):
+            self.prefs.Prefs(self.path).set("interval", 3)
+
+    def test_bad_interval_in_file_falls_back(self):
+        with open(self.path, "w", encoding="utf-8") as fh:
+            json.dump({"interval": 60}, fh)
+        self.assertEqual(self.prefs.Prefs(self.path).get("interval"), 2)
+
+    def test_monitor_interval_changes(self):
+        import metrics
+        m = metrics.Monitor(interval=1.0)
+        m.set_interval(2)
+        self.assertEqual(m._interval, 2.0)
+        m.set_interval(0)
+        self.assertEqual(m._interval, 2.0)
+
+
+class ParseGpuTests(unittest.TestCase):
+    def setUp(self):
+        import metrics
+        self.parse = metrics.parse_gpu
+
+    def _ioreg(self, *stats_list):
+        return plistlib.dumps([{"PerformanceStatistics": s} for s in stats_list], fmt=plistlib.FMT_XML)
+
+    def test_device_utilization_key(self):
+        self.assertEqual(self.parse(self._ioreg({"Device Utilization %": 37})), 37.0)
+
+    def test_fallback_key(self):
+        self.assertEqual(self.parse(self._ioreg({"GPU Activity(%)": 12})), 12.0)
+
+    def test_max_across_devices_not_sum(self):
+        raw = self._ioreg({"Device Utilization %": 20}, {"Device Utilization %": 55})
+        self.assertEqual(self.parse(raw), 55.0)
+
+    def test_missing_key_is_none(self):
+        self.assertIsNone(self.parse(self._ioreg({"Renderer Utilization %": 9})))
+
+    def test_bool_is_not_a_number(self):
+        self.assertIsNone(self.parse(self._ioreg({"Device Utilization %": True})))
+
+    def test_clamped_to_range(self):
+        self.assertEqual(self.parse(self._ioreg({"Device Utilization %": 250})), 100.0)
+
+    def test_garbage_and_empty_are_none(self):
+        self.assertIsNone(self.parse(b"not a plist"))
+        self.assertIsNone(self.parse(b""))
+        self.assertIsNone(self.parse(None))
+
+
+class AutostartTests(unittest.TestCase):
+    def setUp(self):
+        import autostart
+        self.autostart = autostart
+        self.dir = tempfile.mkdtemp(prefix="macsafe-agent-")
+        self.saved = (autostart.AGENT_DIR, autostart.AGENT, autostart._is_loaded, autostart._launchctl)
+        autostart.AGENT_DIR = self.dir
+        autostart.AGENT = os.path.join(self.dir, autostart.LABEL + ".plist")
+        self.calls = []
+        autostart._launchctl = lambda *a: (self.calls.append(a) or (True, ""))
+        self.loaded = False
+        autostart._is_loaded = lambda: self.loaded
+
+    def tearDown(self):
+        a = self.autostart
+        a.AGENT_DIR, a.AGENT, a._is_loaded, a._launchctl = self.saved
+        shutil.rmtree(self.dir, ignore_errors=True)
+        os.environ.pop("XPC_SERVICE_NAME", None)
+
+    def test_plist_has_background_flag_and_no_keepalive(self):
+        self.autostart.enable(["/x/launcher"], "/x", "/x/log")
+        with open(self.autostart.AGENT, "rb") as fh:
+            p = plistlib.load(fh)
+        self.assertEqual(p["ProgramArguments"], ["/x/launcher", "--background"])
+        self.assertTrue(p["RunAtLoad"])
+        self.assertNotIn("KeepAlive", p)
+
+    def test_enable_bootstraps_when_not_loaded(self):
+        self.autostart.enable(["/x/launcher"], "/x", "/x/log")
+        self.assertEqual([c[0] for c in self.calls], ["bootstrap"])
+
+    def test_changed_plist_reloads_when_loaded(self):
+        self.loaded = True
+        self.autostart.enable(["/old/launcher"], "/x", "/x/log")
+        self.calls.clear()
+        self.autostart.enable(["/new/launcher"], "/x", "/x/log")
+        self.assertEqual([c[0] for c in self.calls], ["bootout", "bootstrap"])
+
+    def test_same_plist_does_not_reload(self):
+        self.loaded = True
+        self.autostart.enable(["/x/launcher"], "/x", "/x/log")
+        self.calls.clear()
+        self.autostart.enable(["/x/launcher"], "/x", "/x/log")
+        self.assertEqual(self.calls, [])
+
+    def test_disable_removes_plist_and_boots_out(self):
+        self.autostart.enable(["/x/launcher"], "/x", "/x/log")
+        self.loaded = True
+        self.calls.clear()
+        self.autostart.disable()
+        self.assertFalse(self.autostart.is_enabled())
+        self.assertEqual([c[0] for c in self.calls], ["bootout"])
+
+    def test_self_job_never_boots_itself_out(self):
+        self.autostart.enable(["/x/launcher"], "/x", "/x/log")
+        self.loaded = True
+        os.environ["XPC_SERVICE_NAME"] = self.autostart.LABEL
+        self.calls.clear()
+        self.autostart.disable()
+        self.assertEqual(self.calls, [])
+
+
+class CleanupTests(unittest.TestCase):
+    """cleanup читає HOME при імпорті, тому перезавантажуємо модуль з тимчасовим домом."""
+
+    def setUp(self):
+        # realpath: на macOS /var — симлінк на /private/var; очищення відмовляє шляхам через посилання
+        self.home = os.path.realpath(tempfile.mkdtemp(prefix="macsafe-home-"))
+        self.saved_home = os.environ.get("HOME")
+        os.environ["HOME"] = self.home
+        caches = os.path.join(self.home, "Library", "Caches")
+        os.makedirs(os.path.join(caches, "testapp", "sub"))
+        os.makedirs(os.path.join(caches, "com.apple.Safari"))
+        os.makedirs(os.path.join(self.home, "outside"))
+        with open(os.path.join(caches, "testapp", "a.bin"), "wb") as fh:
+            fh.write(b"x" * 300_000)
+        with open(os.path.join(caches, "testapp", "sub", "b.bin"), "wb") as fh:
+            fh.write(b"x" * 200_000)
+        # Очищення чіпає лише файли старші за поріг: старі a.bin і b.bin, свіжий fresh.bin лишається
+        for rel in (("testapp", "a.bin"), ("testapp", "sub", "b.bin")):
+            stamp = time.time() - 90 * 86400
+            os.utime(os.path.join(caches, *rel), (stamp, stamp))
+        with open(os.path.join(caches, "testapp", "fresh.bin"), "wb") as fh:
+            fh.write(b"f" * 100_000)
+        with open(os.path.join(caches, "com.apple.Safari", "keep"), "w") as fh:
+            fh.write("keep")
+        with open(os.path.join(self.home, "outside", "secret"), "w") as fh:
+            fh.write("secret")
+        os.symlink(os.path.join(self.home, "outside"), os.path.join(caches, "linkapp"))
+        import cleanup
+        self.cleanup = importlib.reload(cleanup)
+        self.caches = caches
+
+    def tearDown(self):
+        if self.saved_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = self.saved_home
+        shutil.rmtree(self.home, ignore_errors=True)
+        importlib.reload(self.cleanup)
+
+    def test_scan_lists_app_cache_but_not_apple_or_links(self):
+        ids = [i["id"] for i in self.cleanup.scan()["items"]]
+        self.assertIn("cache:testapp", ids)
+        self.assertNotIn("cache:com.apple.Safari", ids)
+        self.assertNotIn("cache:linkapp", ids)
+
+    def test_clean_removes_only_old_files_keeps_folder(self):
+        result = self.cleanup.clean(["cache:testapp"])
+        self.assertTrue(result["ok"])
+        self.assertTrue(os.path.isdir(os.path.join(self.caches, "testapp")))
+        self.assertEqual(os.listdir(os.path.join(self.caches, "testapp")), ["fresh.bin"])
+        self.assertGreater(result["freedMb"], 0.4)
+
+    def test_scan_size_counts_only_old_files(self):
+        item = next(i for i in self.cleanup.scan()["items"] if i["id"] == "cache:testapp")
+        self.assertAlmostEqual(item["sizeMb"], 0.5, delta=0.05)
+
+    def test_clean_refuses_traversal_apple_symlink_unknown(self):
+        for bad in ("cache:../../outside", "cache:com.apple.Safari", "cache:linkapp", "rm -rf /"):
+            with self.subTest(bad=bad):
+                r = self.cleanup.clean([bad])["results"][0]
+                self.assertIn("error", r)
+        self.assertTrue(os.path.isfile(os.path.join(self.home, "outside", "secret")))
+        self.assertTrue(os.path.isfile(os.path.join(self.caches, "com.apple.Safari", "keep")))
+
+    def test_clean_requires_nonempty_list(self):
+        self.assertFalse(self.cleanup.clean([])["ok"])
+        self.assertFalse(self.cleanup.clean("cache:testapp")["ok"])
+
+
+class SecuritySummaryTests(unittest.TestCase):
+    def setUp(self):
+        import engine
+        self.app = engine
+        self.dir = tempfile.mkdtemp(prefix="macsafe-data-")
+        os.makedirs(os.path.join(self.dir, "дані"))
+        self.saved = engine.DATA_DIR
+        engine.DATA_DIR = self.dir
+
+    def tearDown(self):
+        self.app.DATA_DIR = self.saved
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _report(self, name, kinds):
+        items = [{"kind": k, "label": f"x{i}", "value": "v"} for i, k in enumerate(kinds)]
+        with open(os.path.join(self.dir, "дані", name), "w", encoding="utf-8") as fh:
+            json.dump({"security": items}, fh, ensure_ascii=False)
+
+    def test_no_report_is_none(self):
+        self.assertEqual(self.app.security_summary()["level"], "none")
+
+    def test_ok_when_only_good_and_info(self):
+        self._report("report-2026-10-10.json", ["good", "info", "good"])
+        s = self.app.security_summary()
+        self.assertEqual((s["level"], s["issues"]), ("ok", 0))
+        self.assertEqual(s["checkedAt"], "2026-10-10")
+
+    def test_warning_counted(self):
+        self._report("report-2026-10-10.json", ["good", "warning"])
+        s = self.app.security_summary()
+        self.assertEqual((s["level"], s["issues"], s["critical"]), ("warning", 1, 0))
+
+    def test_critical_wins_and_counts_both(self):
+        self._report("report-2026-10-10.json", ["critical", "warning", "warning"])
+        s = self.app.security_summary()
+        self.assertEqual((s["level"], s["issues"], s["critical"]), ("critical", 3, 1))
+
+    def test_uses_latest_report(self):
+        self._report("report-2026-10-09.json", ["critical"])
+        self._report("report-2026-10-10.json", ["good"])
+        self.assertEqual(self.app.security_summary()["level"], "ok")
+
+    def test_broken_json_is_none(self):
+        with open(os.path.join(self.dir, "дані", "report-2026-10-10.json"), "w") as fh:
+            fh.write("{")
+        self.assertEqual(self.app.security_summary()["level"], "none")
+
+
+class DiffTests(unittest.TestCase):
+    def setUp(self):
+        from diff import security_changes
+        self.changes = security_changes
+
+    def test_no_change_is_empty(self):
+        items = [{"label": "FileVault", "kind": "good", "value": "Увімкнено"}]
+        self.assertEqual(self.changes(items, items), [])
+
+    def test_value_change_detected(self):
+        old = [{"label": "Брандмауер", "kind": "good", "value": "Увімкнено"}]
+        new = [{"label": "Брандмауер", "kind": "warning", "value": "Вимкнено"}]
+        self.assertEqual(self.changes(old, new),
+                         [{"label": "Брандмауер", "from": "Увімкнено · ок", "to": "Вимкнено · увага"}])
+
+    def test_new_and_removed_checks(self):
+        old = [{"label": "A", "kind": "good", "value": "1"}]
+        new = [{"label": "B", "kind": "good", "value": "2"}]
+        got = sorted(self.changes(old, new), key=lambda c: c["label"])
+        self.assertEqual(got, [{"label": "A", "from": "1 · ок", "to": None},
+                               {"label": "B", "from": None, "to": "2 · ок"}])
+
+    def test_bad_items_ignored(self):
+        self.assertEqual(self.changes(None, [{"value": "без назви"}, "не словник"]), [])
+
+
+class SecuritySummaryChangesTests(SecuritySummaryTests):
+    def test_changes_against_previous_report(self):
+        self._report("report-2026-10-09.json", ["good"])
+        with open(os.path.join(self.dir, "дані", "report-2026-10-10.json"), "w", encoding="utf-8") as fh:
+            json.dump({"security": [{"kind": "warning", "label": "x0", "value": "v"}]}, fh)
+        s = self.app.security_summary()
+        self.assertEqual(s["changeCount"], 1)
+        self.assertEqual(s["changes"][0]["label"], "x0")
+
+    def test_first_report_has_no_changes(self):
+        self._report("report-2026-10-10.json", ["good"])
+        self.assertEqual(self.app.security_summary()["changeCount"], 0)
+
+
+class PluralTests(unittest.TestCase):
+    def test_ukrainian_plural(self):
+        import menubar
+        cases = {1: "проблема", 2: "проблеми", 4: "проблеми", 5: "проблем", 11: "проблем",
+                 12: "проблем", 21: "проблема", 22: "проблеми", 112: "проблем", 101: "проблема"}
+        for n, word in cases.items():
+            with self.subTest(n=n):
+                self.assertEqual(menubar._plural_problems(n), word)
+
+
+
+
+class MonitorScanTests(unittest.TestCase):
+    """Список процесів сканується лише коли він відкритий: закритий агент не торкається процесів."""
+
+    def setUp(self):
+        import metrics
+        self.metrics = metrics
+        self.calls = 0
+        self._orig = metrics.take_processes
+
+        def counting():
+            self.calls += 1
+            return [], [], [], []
+        metrics.take_processes = counting
+
+    def tearDown(self):
+        self.metrics.take_processes = self._orig
+
+    def test_no_process_scan_while_closed(self):
+        import time
+        mon = self.metrics.Monitor(interval=0.05)
+        mon.start()
+        try:
+            time.sleep(0.4)
+            self.assertEqual(self.calls, 0)
+            self.assertIsNotNone(mon.latest())
+        finally:
+            mon.stop()
+
+    def test_last_list_kept_after_close(self):
+        import time
+        group = {"name": "claude", "cpu": 1.0, "rss": 10, "gpu": None, "count": 1,
+                 "pids": [1], "all": [1], "killable": True}
+        self.metrics.take_processes = lambda: ([group], [group], [], [group])
+        mon = self.metrics.Monitor(interval=0.05)
+        mon.start()
+        try:
+            mon.set_detail(True)
+            time.sleep(0.5)
+            mon.set_detail(False)
+            time.sleep(0.2)
+            self.assertEqual([g["name"] for g in mon.latest()["topRam"]], ["claude"])
+        finally:
+            mon.stop()
+
+    def test_scan_resumes_when_opened_and_stops_when_closed(self):
+        import time
+        mon = self.metrics.Monitor(interval=0.05)
+        mon.start()
+        try:
+            mon.set_detail(True)
+            time.sleep(0.4)
+            self.assertGreaterEqual(self.calls, 2)   # прайм і хоча б один справжній замір
+            mon.set_detail(False)
+            time.sleep(0.1)
+            stopped_at = self.calls
+            time.sleep(0.3)
+            self.assertEqual(self.calls, stopped_at)
+        finally:
+            mon.stop()
+
+
+class BundlePathTests(unittest.TestCase):
+    def test_app_bundle_from_executable_path(self):
+        import metrics
+        exe = "/Applications/Ghostty.app/Contents/MacOS/ghostty"
+        self.assertEqual(metrics.bundle_path(exe), "/Applications/Ghostty.app")
+
+    def test_plain_binary_has_no_bundle(self):
+        import metrics
+        self.assertIsNone(metrics.bundle_path("/usr/bin/yes"))
+        self.assertIsNone(metrics.bundle_path(""))
+
+
+class CoreTypesTests(unittest.TestCase):
+    def test_pairs_cluster_type_with_logical_cpu_in_same_node(self):
+        import metrics
+        sample = """
++-o cpu0  <class X>
+    | |   "cluster-type" = <"E">
+    | |   "logical-cpu-id" = 0
++-o cpu6  <class X>
+    | |   "cluster-type" = <"P">
+    | |   "logical-cpu-id" = 6
+"""
+        self.assertEqual(metrics.parse_core_types(sample), ["E", "P"])
+
+    def test_empty_output_gives_no_types(self):
+        import metrics
+        self.assertEqual(metrics.parse_core_types(""), [])
+
+
+class QuickMetricsTests(unittest.TestCase):
+    def test_per_core_loads_cover_every_core(self):
+        import metrics
+        import psutil
+        snap = metrics.take_quick()
+        self.assertEqual(len(snap["perCore"]), psutil.cpu_count())
+
+
+
+class OldCacheCleanTests(unittest.TestCase):
+    """Швидке очищення: лише файли старші за порогом; свіжі, символічні посилання і корінь лишаються."""
+
+    def setUp(self):
+        import cleanup
+        self.cleanup = cleanup
+        self.tmp = tempfile.mkdtemp()
+        self.root = os.path.join(self.tmp, "cache")
+        os.makedirs(os.path.join(self.root, "sub", "empty"))
+        self.old = os.path.join(self.root, "sub", "old.bin")
+        self.new = os.path.join(self.root, "fresh.bin")
+        for path, age_days in ((self.old, 90), (self.new, 1)):
+            with open(path, "wb") as fh:
+                fh.write(b"x" * 1024 * 1024)
+            stamp = time.time() - age_days * 86400
+            os.utime(path, (stamp, stamp))
+        self.link = os.path.join(self.root, "link")
+        os.symlink(self.old, self.link)
+        self._orig_target = cleanup._target
+        cleanup._target = lambda cid: self.root
+
+    def tearDown(self):
+        self.cleanup._target = self._orig_target
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_only_old_files_removed(self):
+        result = self.cleanup.clean_old(["npm"], days=30)
+        self.assertTrue(result["ok"])
+        self.assertFalse(os.path.exists(self.old))
+        self.assertTrue(os.path.exists(self.new))
+        self.assertTrue(os.path.islink(self.link))
+        self.assertTrue(os.path.isdir(self.root))
+        self.assertFalse(os.path.exists(os.path.join(self.root, "sub", "empty")))
+        self.assertGreater(result["freedMb"], 0.9)
+
+    def test_size_matches_what_gets_removed(self):
+        cutoff = time.time() - 30 * 86400
+        found = self.cleanup._walk_old(self.root, cutoff)
+        self.assertEqual([path for path, _ in found], [self.old])
+
+
+class CategoryCleanTests(OldCacheCleanTests):
+    """Детальне очищення: категорії, поріг віку, знімок памʼяті; логи тепер у дозволених коренях."""
+
+    def test_unselected_category_is_skipped(self):
+        result = self.cleanup.clean_old(["npm"], days=30, categories=["logs"])
+        self.assertTrue(os.path.exists(self.old))
+        self.assertIn("error", result["results"][0])
+
+    def test_selected_category_cleans(self):
+        result = self.cleanup.clean_old(["npm"], days=30, categories=["dev"])
+        self.assertFalse(os.path.exists(self.old))
+        self.assertGreater(result["results"][0]["freedMb"], 0.9)
+
+    def test_invalid_days_falls_back_to_default(self):
+        result = self.cleanup.clean_old(["npm"], days=1, categories=None)   # 1 день не дозволено
+        self.assertEqual(result["days"], self.cleanup.OLD_DAYS)
+        self.assertTrue(os.path.exists(self.new))
+
+    def test_result_has_memory_block(self):
+        result = self.cleanup.clean_old(["npm"])
+        self.assertIn("memory", result)
+        self.assertEqual(set(result["memory"]), {"before", "after", "delta"})
+
+    def test_categories_of_ids(self):
+        c = self.cleanup
+        self.assertEqual(c.category_of("npm"), "dev")
+        self.assertEqual(c.category_of("logs"), "logs")
+        self.assertEqual(c.category_of("cache:Foo"), "apps")
+        self.assertIsNone(c.category_of("../etc"))
+
+    def test_memory_delta(self):
+        a = {"freeMb": 10, "availableMb": 100, "inactiveMb": 5, "swapMb": 0}
+        b = {"freeMb": 30, "availableMb": 90, "inactiveMb": 1, "swapMb": 2}
+        self.assertEqual(self.cleanup.memory_delta(a, b),
+                         {"freeMb": 20, "availableMb": -10, "inactiveMb": -4, "swapMb": 2})
+        self.assertIsNone(self.cleanup.memory_delta(None, b))
+
+
+class LogsRootTests(unittest.TestCase):
+    def test_logs_root_allowed(self):
+        import cleanup
+        logs = os.path.join(cleanup.HOME, "Library", "Logs")
+        self.assertIn(logs, cleanup.ALLOWED_ROOTS)
+
+
+class KillableTests(unittest.TestCase):
+    """«×» доступний для будь-якого процесу користувача, крім самого MacSafe."""
+
+    def test_user_process_is_killable(self):
+        import metrics
+        self.assertTrue(metrics.killable("Ghostty", [101]))
+        self.assertTrue(metrics.killable("claude", [202, 203]))
+        self.assertTrue(metrics.killable("Finder", [303]))
+
+    def test_group_without_own_processes_is_not_killable(self):
+        import metrics
+        self.assertFalse(metrics.killable("WindowServer", []))
+
+    def test_self_is_not_killable(self):
+        import metrics
+        self.assertFalse(metrics.killable(metrics.SELF_NAME, [404]))
+
+
+
+class KillMarkTests(unittest.TestCase):
+    """«Так?» стоїть на одному рядку з наскрізним індексом: CPU-рядки, потім RAM-рядки."""
+
+    class _Button:
+        def __init__(self):
+            self.title = "×"
+
+        def setTitle_(self, title):
+            self.title = title
+
+    def test_armed_title_across_both_lists(self):
+        import menubar
+        cpu = [(None, None, None, None, self._Button(), None, None) for _ in range(2)]
+        ram = [(None, None, None, None, self._Button(), None, None) for _ in range(2)]
+
+        class Panel:
+            process_rows = [cpu, ram]
+        bar = menubar.StatusBar.__new__(menubar.StatusBar)
+        bar._panel = Panel()
+        bar._mark_kill(2)   # перший рядок RAM
+        self.assertEqual([r[4].title for r in cpu + ram], ["×", "×", "Так?", "×"])
+        bar._mark_kill(None)
+        self.assertEqual([r[4].title for r in cpu + ram], ["×", "×", "×", "×"])
+
+
+class PinnedRowsTests(unittest.TestCase):
+    """Зафіксовані рядки: порядок лишається, значення беруться зі свіжого знімка, зниклі позначаються."""
+
+    def test_stable_names_keep_positions_and_fill_free_slots(self):
+        import menubar
+        top = [{"name": "a"}, {"name": "c"}, {"name": "b"}]
+        # b вже випав з топ-2: його місце займає c, a лишається на місці
+        self.assertEqual(menubar._stable_names(["a", "b"], top, 2), ["a", "c"])
+        # порядок уже відомих рядків не міняється, навіть якщо за CPU тепер інший порядок
+        self.assertEqual(menubar._stable_names(["b", "a"], [{"name": "a"}, {"name": "b"}], 2), ["b", "a"])
+        # спочатку список порожній: нові займають місця в порядку CPU, зайві слоти — None
+        self.assertEqual(menubar._stable_names([], [{"name": "x"}, {"name": "y"}], 3), ["x", "y", None])
+
+    def test_pinned_keeps_position_and_takes_fresh_values(self):
+        import menubar
+        pinned = [{"name": "a", "cpu": 1.0}, None, {"name": "b", "cpu": 2.0}]
+        live = {"b": {"name": "b", "cpu": 9.0}, "a": {"name": "a", "cpu": 5.0}}
+        out = menubar._pinned_groups(pinned, live)
+        self.assertEqual([(g and g["cpu"], stale) for g, stale in out], [(5.0, False), (None, False), (9.0, False)])
+
+    def test_pinned_marks_vanished_process_stale(self):
+        import menubar
+        pinned = [{"name": "gone", "cpu": 3.0}]
+        out = menubar._pinned_groups(pinned, {})
+        self.assertEqual(out[0][0]["cpu"], 3.0)   # останні відомі значення
+        self.assertTrue(out[0][1])                 # позначено як зниклий
+
+
+class AlertsTests(unittest.TestCase):
+    def setUp(self):
+        import alerts
+        self.alerts = alerts
+        self.now = [0.0]
+        self.rules = alerts.Alerts(clock=lambda: self.now[0])
+
+    def snap(self, ram=50, free=100, bat=None):
+        return {"ram": {"percent": ram}, "disk": {"freeGb": free}, "battery": bat}
+
+    def test_ram_needs_hold_then_cooldown(self):
+        self.assertEqual(self.rules.check(self.snap(ram=95)), [])
+        self.now[0] = 61
+        self.assertEqual(len(self.rules.check(self.snap(ram=95))), 1)
+        self.now[0] = 200
+        self.assertEqual(self.rules.check(self.snap(ram=95)), [])      # пауза
+        self.now[0] = 4000
+        self.assertEqual(len(self.rules.check(self.snap(ram=95))), 1)  # пауза минула
+
+    def test_ram_recovery_resets_hold(self):
+        self.rules.check(self.snap(ram=95))
+        self.now[0] = 30
+        self.rules.check(self.snap(ram=50))
+        self.now[0] = 70
+        self.assertEqual(self.rules.check(self.snap(ram=95)), [])
+
+    def test_disk_and_battery_fire_at_once(self):
+        out = self.rules.check(self.snap(free=3, bat={"percent": 10.0, "plugged": False}))
+        self.assertEqual(len(out), 2)
+
+    def test_charging_battery_silent(self):
+        self.assertEqual(self.rules.check(self.snap(bat={"percent": 5.0, "plugged": True})), [])
+
+    def test_security_increase_only(self):
+        self.assertEqual(self.rules.check(self.snap(), {"level": "warning", "issues": 2}), [])
+        self.assertEqual(self.rules.check(self.snap(), {"level": "warning", "issues": 2}), [])
+        self.assertEqual(len(self.rules.check(self.snap(), {"level": "warning", "issues": 3})), 1)
+
+
+class NewPrefsTests(PrefsTests):
+    def test_flags_roundtrip(self):
+        from prefs import Prefs
+        p = Prefs(self.path)
+        self.assertTrue(p.get("alerts"))
+        p.set("dailyCheck", False)
+        self.assertFalse(Prefs(self.path).get("dailyCheck"))
+
+
+class SystemMetricsTests(unittest.TestCase):
+    def test_disk_and_battery_shapes(self):
+        import metrics
+        d = metrics.disk_info()
+        self.assertTrue(d is None or d["totalGb"] > 0)
+        b = metrics.battery_info()
+        self.assertTrue(b is None or 0 <= b["percent"] <= 100)
+
+    def test_net_rates_first_call_none(self):
+        import metrics
+        metrics._NET.update(at=None, rx=None, tx=None)
+        self.assertIsNone(metrics.net_rates(1.0))
+        r = metrics.net_rates(2.0)
+        self.assertTrue(r is None or (r[0] >= 0 and r[1] >= 0))
+
+
+class BigFilesTests(unittest.TestCase):
+    def setUp(self):
+        import bigfiles
+        self.b = bigfiles
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        os.makedirs(os.path.join(self.tmp, "Library"))
+        os.makedirs(os.path.join(self.tmp, "Movies"))
+        os.makedirs(os.path.join(self.tmp, ".hidden"))
+        self.big = os.path.join(self.tmp, "Movies", "big.mov")
+        self.mid = os.path.join(self.tmp, "mid.bin")
+        for path, mb in ((self.big, 60), (self.mid, 51), (os.path.join(self.tmp, "small.txt"), 1),
+                         (os.path.join(self.tmp, "Library", "skipped.bin"), 60),
+                         (os.path.join(self.tmp, ".hidden", "skipped.bin"), 60)):
+            with open(path, "wb") as fh:
+                fh.truncate(mb * 1024 * 1024)
+        os.symlink(self.big, os.path.join(self.tmp, "link.mov"))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_finds_sorted_and_skips_service_dirs_and_links(self):
+        r = self.b.find_big(50, root=self.tmp)
+        self.assertEqual([f["path"] for f in r["files"]], [self.big, self.mid])
+        self.assertFalse(r["truncated"])
+
+    def test_limit(self):
+        self.assertEqual(len(self.b.find_big(50, limit=1, root=self.tmp)["files"]), 1)
+
+    def test_invalid_min_falls_back(self):
+        self.assertEqual(self.b.find_big(7, root=self.tmp)["minMb"], 100)
+
+    def test_safe_path(self):
+        orig = self.b.HOME
+        self.b.HOME = self.tmp
+        try:
+            self.assertEqual(self.b.safe_path(self.big), self.big)
+            self.assertIsNone(self.b.safe_path(os.path.join(self.tmp, "link.mov")))
+            self.assertIsNone(self.b.safe_path("/etc/hosts"))
+            self.assertIsNone(self.b.safe_path("relative/path"))
+            self.assertIsNone(self.b.safe_path(os.path.join(self.tmp, "..", "x")))
+        finally:
+            self.b.HOME = orig
+
+
+class PersistenceTests(unittest.TestCase):
+    def setUp(self):
+        import persistence
+        self.p = persistence
+        self.tmp = tempfile.mkdtemp()
+        self.dir = os.path.join(self.tmp, "LaunchAgents")
+        os.makedirs(self.dir)
+        self.state = os.path.join(self.tmp, "state", "s.json")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def write(self, name, label):
+        import plistlib
+        with open(os.path.join(self.dir, name), "wb") as fh:
+            plistlib.dump({"Label": label, "ProgramArguments": ["/bin/echo", "x"]}, fh)
+
+    def test_first_run_is_silent_then_new_item_reported(self):
+        self.write("a.plist", "com.a")
+        self.assertEqual(self.p.check(self.state, (self.dir,)), [])
+        self.assertEqual(self.p.check(self.state, (self.dir,)), [])
+        self.write("b.plist", "com.b")
+        out = self.p.check(self.state, (self.dir,))
+        self.assertEqual([i["label"] for i in out], ["com.b"])
+        self.assertEqual(out[0]["program"], "/bin/echo")
+        self.assertEqual(self.p.check(self.state, (self.dir,)), [])
+
+    def test_broken_plist_does_not_break_scan(self):
+        with open(os.path.join(self.dir, "bad.plist"), "wb") as fh:
+            fh.write(b"not a plist")
+        found = self.p.scan((self.dir,))
+        self.assertEqual(list(found.values())[0]["label"], "bad")
+
+
+class LeftoversTests(unittest.TestCase):
+    def setUp(self):
+        import leftovers, plistlib
+        self.l = leftovers
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.apps = os.path.join(self.tmp, "Apps")
+        self.support = os.path.join(self.tmp, "Support")
+        app = os.path.join(self.apps, "Kept.app", "Contents")
+        os.makedirs(app)
+        with open(os.path.join(app, "Info.plist"), "wb") as fh:
+            plistlib.dump({"CFBundleIdentifier": "com.vendor.kept"}, fh)
+        broken = os.path.join(self.apps, "Broken.app", "Contents")
+        os.makedirs(broken)
+        with open(os.path.join(broken, "Info.plist"), "wb") as fh:
+            fh.write(b"<not a plist")
+        old = time.time() - 90 * 86400
+        for name in ("com.vendor.kept", "com.vendor.gone", "com.apple.thing", "plain-folder", "com.vendor.fresh"):
+            path = os.path.join(self.support, name)
+            os.makedirs(path)
+            with open(os.path.join(path, "data"), "wb") as fh:
+                fh.write(b"x" * 1024)
+            if name != "com.vendor.fresh":
+                os.utime(path, (old, old))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_only_orphans_found(self):
+        found = self.l.scan((self.support,), (self.apps,))
+        self.assertEqual([i["id"] for i in found], ["com.vendor.gone"])
+
+    def test_broken_info_plist_does_not_break(self):
+        self.assertIn("com.vendor.kept", self.l.installed_ids((self.apps,)))
+
+
+class TrashTargetTests(unittest.TestCase):
+    def setUp(self):
+        import trash
+        self.t = trash
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.orig = trash.HOME
+        trash.HOME = self.tmp
+
+    def tearDown(self):
+        self.t.HOME = self.orig
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_rules(self):
+        f = os.path.join(self.tmp, "a.bin")
+        open(f, "wb").close()
+        os.makedirs(os.path.join(self.tmp, ".Trash"))
+        inside_trash = os.path.join(self.tmp, ".Trash", "x")
+        open(inside_trash, "wb").close()
+        os.symlink(f, os.path.join(self.tmp, "ln"))
+        self.assertEqual(self.t.safe_target(f), f)
+        self.assertIsNone(self.t.safe_target(inside_trash))
+        self.assertIsNone(self.t.safe_target(os.path.join(self.tmp, "ln")))
+        self.assertIsNone(self.t.safe_target(self.tmp))
+        self.assertIsNone(self.t.safe_target("/etc/hosts"))
+        self.assertEqual(self.t.move_to_trash("/etc/hosts"), (False, "Недозволений шлях"))
+
+
+if __name__ == "__main__":
+    unittest.main()
