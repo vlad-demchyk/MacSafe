@@ -1,11 +1,14 @@
 # Languages
 
-MacSafe is available in **English** and **Ukrainian**. The language is a setting. Change it in the menu bar popover under **Appearance → Language**.
+MacSafe is available in **English** and **Ukrainian**. English is the default. The language is a setting with two places to change it: the menu bar popover under **Appearance → Language**, and the report window's **Settings**.
 
 ## Choosing a language
 
-- **auto** (the default): English, unless macOS lists Ukrainian as the first preferred language, in which case Ukrainian.
-- **English** or **Українська**: set explicitly. The app restarts so the menu bar and the agent use the new language. The report window uses it the next time it opens.
+- **English** (the default), or **Українська**.
+- In the menu bar popover: **Appearance → Language**. The agent saves the choice and restarts, so the menu bar shows the new language at once.
+- In the report window: **Settings → Interface language**. The window stores the choice through the agent, which then restarts the menu bar too.
+
+The settings file keeps the choice as `"language": "en"` or `"language": "uk"`. A missing or invalid value means English.
 
 ## How translation works
 
@@ -26,6 +29,6 @@ Tests check that every `T()` call in the code has a translation and that placeho
 
 ## What is not translated
 
-- Code comments, docstrings, and developer scripts (`build_app.sh`, `packaging/`) are in Ukrainian.
-- The log messages of the report generator (`core/generate-report.sh`) are in Ukrainian. Messages that reach the interface are translated.
-- Values that come from your Mac (app names, file names, paths) appear as they are.
+- Values that come from your Mac (app names, file names, paths, command output) appear as they are.
+- Source code keeps the Ukrainian phrases as translation keys. Python and the page compare them with the dictionary, so changing a key means changing its entry too.
+- Code comments, docstrings, build scripts and the report generator's log messages are in English.

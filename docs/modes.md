@@ -12,7 +12,7 @@ Click the MacSafe icon in the menu bar.
 | CPU, RAM, GPU | The current value, a 60-second graph and details. CPU shows per-core load, uptime and the load average. RAM shows memory use, swap and the breakdown. GPU shows the load (if macOS reports it). |
 | Disk, Network, Battery | Free space, network speed, battery charge and power source. |
 | Process lists | The top processes by CPU, GPU and memory, grouped by app. Click a name to pin the row; click × and then **Sure?** to quit a process. Only your own processes can be quit, never MacSafe. |
-| Appearance | Which values show in the menu bar, the menu bar style, the refresh interval, notifications and the daily check, **Language**. |
+| Appearance | Which values show in the menu bar, the menu bar style, the refresh interval, notifications and the daily check, **Language** (English or Ukrainian). |
 | Actions | **Quick clean** (two clicks: the first measures, the second cleans), **Check** (runs the security report), **Detailed clean** (opens the window's cleaning section), **Free memory** (asks for the administrator password), and **Start at login**. |
 | Footer | **Reports** opens the window, the sidebar button shows a short summary, **Quit** closes MacSafe. |
 
@@ -55,6 +55,10 @@ The sidebar groups sections into six areas. Each section shows its issues count 
 - **History**: the score trend across runs, with links to earlier HTML reports.
 - **Other Macs**: a place for snapshots from other Macs. Drop a JSON snapshot onto the area, or put it in the `systems` folder and regenerate the report.
 - **Notes**: free text: what is done, what is checked, what is waiting. Saved in the browser.
+
+### App
+
+- **Settings**: the interface language (English or Ukrainian). The same switch is in the menu bar popover under Appearance. The menu bar restarts itself to apply the choice.
 
 ## Keyboard
 
