@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""MacSafe: агент статус-бару. Працює завжди і не має вікна та WebKit.
+"""MacSafe: menu bar agent. Runs all the time and has no window or WebKit.
 
-Показує CPU, RAM, GPU і процеси в статус-барі, перевіряє безпеку у фоні, запускає очищення і пам'ять.
-Вікно звітів запускається окремим процесом (app.py --window) тільки коли його просять, і завершується
-разом зі своїм вікном. Так у фоні немає ні WebKit, ні зайвого коду.
+Shows CPU, RAM, GPU and processes in the menu bar, checks security in the background, starts cleaning and memory actions.
+The report window runs as a separate process (app.py --window) only when asked, and exits
+together with its window. So there is neither WebKit nor extra code in the background.
 
-Один екземпляр: другий запуск просить показати вікно і тихо виходить (фоновий) або показує вікно (звичайний).
+One instance: a second launch asks to show the window and quietly exits (background) or shows the window (normal).
 """
 import fcntl
 import json
@@ -26,6 +26,7 @@ import cleanup
 import engine
 import i18n
 import menubar
+from i18n import T
 from metrics import Monitor
 from prefs import Prefs
 
@@ -34,7 +35,7 @@ _window_proc = None
 
 
 def _acquire_instance():
-    """Блокування одного агента. Повертає True, якщо це єдиний екземпляр."""
+    """Lock for a single agent. Returns True if this is the only instance."""
     global _lock_handle
     os.makedirs(os.path.dirname(engine.APP_LOCK), exist_ok=True)
     fh = open(engine.APP_LOCK, "w")
@@ -43,7 +44,7 @@ def _acquire_instance():
     except OSError:
         fh.close()
         return False
-    _lock_handle = fh   # тримаємо відкритим: блокування діє, доки живе процес
+    _lock_handle = fh   # we keep it open: the lock holds as long as the process lives
     return True
 
 
@@ -53,7 +54,7 @@ def _request_show():
 
 
 def open_window(section=None):
-    """Запускає вікно звітів окремим процесом. Якщо вікно вже відкрите, нічого не робить."""
+    """Starts the report window as a separate process. If the window is already open, does nothing."""
     global _window_proc
     if _window_proc is not None and _window_proc.poll() is None:
         return
@@ -70,10 +71,10 @@ def close_window():
 
 def main():
     background = "--background" in sys.argv
-    i18n.load(engine.PREFS_FILE)   # мова до створення будь-яких написів
+    i18n.load(engine.PREFS_FILE)   # the language before any labels are created
     if not _acquire_instance():
         if not background:
-            _request_show()   # уже працює: звичайний запуск просить показати вікно
+            _request_show()   # already running: a normal launch asks to show the window
         return
 
     AppKit.NSApplication.sharedApplication().setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
@@ -91,7 +92,7 @@ def main():
         threading.Thread(target=watch_check, daemon=True).start()
 
     def watch_check():
-        # Прогрес перевірки в рядок статус-бару; після завершення індикатор безпеки оновлюється одразу
+        # Check progress in the menu bar line; after it finishes the security indicator updates at once
         last = ""
         while True:
             s = api.status()
@@ -131,7 +132,7 @@ def main():
     daily = {"at": -3600.0}
 
     def notify(title, text):
-        # Сповіщення macOS через osascript у фоні; помилка (немає дозволу) не ламає агента
+        # macOS notifications through osascript in the background; an error (no permission) does not break the agent
         def work():
             script = f'display notification {json.dumps(text, ensure_ascii=False)} with title {json.dumps(title, ensure_ascii=False)}'
             try:
@@ -145,24 +146,33 @@ def main():
             notify(title, text)
 
     def daily_check():
-        # Раз на годину дивимось, чи є звіт за сьогодні; якщо ні і перевірка не йде, запускаємо її
+        # Once an hour we check whether there is a report for today; if not and no check is running, we start one
         now = time.monotonic()
         if now - daily["at"] < 3600:
             return
         daily["at"] = now
-        stale = engine.dashboard_stale()   # після оновлення застосунку сторінка звітів перебудовується новим шаблоном
+        stale = engine.dashboard_stale()   # after an app update the report page is rebuilt with the new template
         due = prefs.get("dailyCheck") and engine.security_summary().get("checkedAt") != time.strftime("%Y-%m-%d")
         if api.status()["status"] != "running" and (stale or due):
             check()
 
     def tick():
-        # Другий запуск лишає запит на показ вікна; перевіряємо раз на секунду
+        # A second launch leaves a request to show the window; we check once a second
         if os.path.exists(engine.SHOW_REQUEST):
             try:
                 os.remove(engine.SHOW_REQUEST)
             except OSError:
                 pass
             open_window()
+        # The report window's Settings leave the chosen language in a request file: apply it here
+        if os.path.exists(engine.LANG_REQUEST):
+            try:
+                with open(engine.LANG_REQUEST, encoding="utf-8") as fh:
+                    code = fh.read().strip()
+                os.remove(engine.LANG_REQUEST)
+            except OSError:
+                code = ""
+            set_language(code)
 
     def cleanup_window():
         open_window("cleanup")
@@ -181,22 +191,22 @@ def main():
         AppHelper.stopEventLoop()
 
     def cache_scan():
-        # Швидке очищення — лише фіксовані безпечні кеші, без кешів окремих застосунків
+        # Quick clean — only the fixed safe caches, without the caches of individual apps
         return cleanup.scan_fixed()
 
     def cache_clean(ids):
-        # Підтвердження — двоетапний клік у панелі; видаляються лише файли старші за OLD_DAYS
+        # Confirmation is a two-step click in the panel; only files older than OLD_DAYS are deleted
         return cleanup.clean_old(ids)
 
     def set_language(code):
-        # Мову застосовуємо під час запуску: зберігаємо її і перезапускаємо агент. Вікно звітів закривається
-        if code not in ("uk", "en"):
+        # We apply the language at launch: we save it and restart the agent. The report window is closed
+        if code not in ("uk", "en") or code == i18n.language():
             return
         prefs.set("language", code)
         restart_later()
 
     def restart_later():
-        # Новий процес стартує після виходу старого: лок одного екземпляра звільниться
+        # The new process starts after the old one exits: the single-instance lock will be released
         cmd = " ".join(shlex.quote(part) for part in engine.LAUNCH_ARGS + ["--background"])
         subprocess.Popen(["/bin/sh", "-c", f"sleep 2; exec {cmd}"], start_new_session=True,
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -215,10 +225,10 @@ def main():
     def install():
         bar["ctrl"] = menubar.install(monitor, actions, autostart.is_enabled(), prefs)
         if not background:
-            open_window()   # звичайний запуск з Finder одразу показує вікно звітів
+            open_window()   # a normal launch from Finder shows the report window at once
 
     def watch_persistence():
-        # Раз на 10 хвилин у фоновому потоці: нові LaunchAgents/LaunchDaemons. Базовий знімок мовчки.
+        # Every 10 minutes in a background thread: new LaunchAgents/LaunchDaemons. The baseline snapshot is recorded silently.
         def work():
             try:
                 fresh = persistence.check(engine.PERSIST_FILE)
@@ -231,7 +241,7 @@ def main():
         AppHelper.callLater(600, watch_persistence)
 
     def start_daily():
-        # Перша перевірка через хвилину після старту: спершу панель і монітор
+        # The first check one minute after start: the panel and the monitor come first
         AppHelper.callLater(60, daily_loop)
 
     def daily_loop():

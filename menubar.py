@@ -1,9 +1,9 @@
-"""Статус-бар і NSPopover: CPU, RAM, GPU, історія, процеси, вигляд і дії.
+"""Menu bar and NSPopover: CPU, RAM, GPU, history, processes, appearance and actions.
 
-Усі виклики AppKit відбуваються на головному потоці (створення через AppHelper.callAfter).
-Вибірку робить metrics.Monitor у фоні; тут лише читається остання вибірка раз на секунду.
-Таймер додано в NSRunLoopCommonModes, тому цифри оновлюються і поки меню відкрите.
-Поки панель або резервне меню відкрите, Monitor збирає процеси щосекунди.
+All AppKit calls happen on the main thread (created through AppHelper.callAfter).
+metrics.Monitor takes samples in the background; here the latest sample is only read once a second.
+The timer is added to NSRunLoopCommonModes, so the numbers update while the menu is open too.
+While the panel or the secondary menu is open, Monitor collects processes every second.
 """
 import os
 import signal
@@ -22,42 +22,42 @@ from metrics import GB, MB, core_types, hardware_info
 from prefs import STYLES
 from i18n import T, language as current_language, plural_problem
 
-# CGColor з AppKit повертає сирий вказівник; PyObjC попереджає про це при кожному виклику, результат коректний
+# CGColor from AppKit returns a raw pointer; PyObjC warns about it on every call, the result is correct
 warnings.filterwarnings("ignore", category=objc.ObjCPointerWarning)
 
-PROC_SLOTS = 10      # скільки рядків за CPU у підменю
-PROC_CPU_ROWS = 6     # рядків за CPU у зоні «Процеси»
-PROC_RAM_ROWS = 3     # рядків за RAM у зоні «Процеси»
-PROC_GPU_ROWS = 3     # рядків за GPU у зоні «Процеси»
-RAM_SLOTS = 5        # скільки рядків за памʼяттю
-NAME_WIDTH = 22      # ширина назви в підменю (моноширинний шрифт, вирівнювання стовпчиків)
+PROC_SLOTS = 10      # how many CPU rows in the submenu
+PROC_CPU_ROWS = 6     # CPU rows in the “Processes” zone
+PROC_RAM_ROWS = 3     # RAM rows in the “Processes” zone
+PROC_GPU_ROWS = 3     # GPU rows in the “Processes” zone
+RAM_SLOTS = 5        # how many memory rows
+NAME_WIDTH = 22      # width of the name in the submenu (monospaced font, column alignment)
 def style_titles():
     return {"both": T("Іконка і цифри"), "icon": T("Лише іконка"), "text": T("Лише цифри")}
 
 
 def metric_titles():
     return {"cpu": T("Показувати CPU"), "ram": T("Показувати RAM"), "gpu": T("Показувати GPU")}
-PANEL_W = 340         # вузька панель
-PANEL_PAD = 16        # відступ по краях
+PANEL_W = 340         # narrow panel
+PANEL_PAD = 16        # margin at the edges
 INNER_W = PANEL_W - 2 * PANEL_PAD
-ZONE_H = 30           # висота рядка зони (Процеси / Вигляд / Дії)
+ZONE_H = 30           # zone row height (Processes / Appearance / Actions)
 STYLE_BY_INDEX = ("both", "icon", "text")
 ZONE_SYMBOLS = {"ЦП": "cpu", "ГПУ": "display", "ОЗП": "memorychip",
-                "Вигляд": "paintpalette", "Дії": "bolt"}   # іконки заголовків зон
-BLOCK_ORDER = ("cpu", "ram", "gpu")   # порядок списків процесів: як у snapshot (topCpu, topRam, topGpu)
+                "Вигляд": "paintpalette", "Дії": "bolt"}   # zone title icons
+BLOCK_ORDER = ("cpu", "ram", "gpu")   # order of process lists: as in the snapshot (topCpu, topRam, topGpu)
 BLOCK_COUNT = {"cpu": PROC_CPU_ROWS, "ram": PROC_RAM_ROWS, "gpu": PROC_GPU_ROWS}
-BLOCK_BASE = {"cpu": 0, "ram": PROC_CPU_ROWS, "gpu": PROC_CPU_ROWS + PROC_RAM_ROWS}   # перший індекс рядка
-DETAIL_ROW = 16      # висота рядка деталей (назва і значення)
-BAR_H = 8            # висота складеної смуги деталей
+BLOCK_BASE = {"cpu": 0, "ram": PROC_CPU_ROWS, "gpu": PROC_CPU_ROWS + PROC_RAM_ROWS}   # the first row index
+DETAIL_ROW = 16      # detail row height (name and value)
+BAR_H = 8            # height of the stacked detail bar
 STYLE_INDEX = {style: i for i, style in enumerate(STYLE_BY_INDEX)}
-INTERVALS = (1, 2, 5)   # секунд між вибірками; сегмент у зоні «Вигляд»
-LANGUAGE_CODES = ("uk", "en")   # порядок сегментів мови в зоні «Вигляд»
+INTERVALS = (1, 2, 5)   # seconds between samples; a segment in the “Appearance” zone
+LANGUAGE_CODES = ("uk", "en")   # order of the language segments in the “Appearance” zone
 INTERVAL_INDEX = {seconds: i for i, seconds in enumerate(INTERVALS)}
-SECURITY_EVERY = 30.0  # секунд між читаннями підсумку безпеки з останнього звіту (файл, не щосекунди)
+SECURITY_EVERY = 30.0  # seconds between reads of the security summary from the latest report (a file, not every second)
 
 
 def _security_line(sec):
-    """Текст і колір стану безпеки для панелі й статус-бару."""
+    """Text and colour of the security state for the panel and the menu bar."""
     level = (sec or {}).get("level", "none")
     if level == "none":
         return T("Безпека: звіту ще немає"), None
@@ -102,12 +102,12 @@ class _PanelView(AppKit.NSView):
         return True
 
     def acceptsFirstMouse_(self, _event):
-        # Клік по контролу відразу спрацьовує, навіть коли застосунок ще не активний
+        # A click on a control works at once, even when the app is not active yet
         return True
 
 
 class _RootView(_PanelView):
-    """Корінь панелі з суцільним фоном: прозорий матеріал підмішував кольори шпалер, і підписи гублялись."""
+    """The panel root with a solid background: the transparent material mixed in the wallpaper colours and the captions got lost."""
 
     def drawRect_(self, rect):
         AppKit.NSColor.windowBackgroundColor().setFill()
@@ -115,7 +115,7 @@ class _RootView(_PanelView):
 
 
 class _Switch(_PanelView):
-    """Перемикач у стилі macOS: доріжка з кружечком. Клік змінює стан і викликає on_change."""
+    """macOS-style switch: a track with a knob. A click changes the state and calls on_change."""
     WIDTH = 34
     HEIGHT = 20
     is_on = False
@@ -145,7 +145,7 @@ class _Switch(_PanelView):
 
 
 class _Segments(_PanelView):
-    """Сегментований вибір у стилі macOS: пігулка з підсвіченим варіантом. Клік вибирає і викликає on_select(i)."""
+    """macOS-style segmented control: a pill with a highlighted option. A click selects and calls on_select(i)."""
     items = ()
     selected = 0
     on_select = None
@@ -192,7 +192,7 @@ class _Segments(_PanelView):
 
 
 class _Card(_PanelView):
-    """Заокруглена підкладка під показники (диск, мережа, батарея)."""
+    """Rounded backing for the metrics (disk, network, battery)."""
 
     def drawRect_(self, _rect):
         path = AppKit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
@@ -202,7 +202,7 @@ class _Card(_PanelView):
 
 
 class _Tile(_PanelView):
-    """Плитка дії: заокруглений фон, іконка і підпис. Малюється сама, тож коректна в обох темах."""
+    """Action tile: rounded background, icon and label. Drawn by itself, so it is correct in both themes."""
     title = ""
     on_click = None
     hot = False
@@ -227,7 +227,7 @@ class _Tile(_PanelView):
 
 
 class _ZoneTitle(_PanelView):
-    """Заголовок зони з шевроном: дивиться вниз, коли зона відкрита. Клік розгортає або згортає зону."""
+    """Zone title with a chevron: points down when the zone is open. A click expands or collapses the zone."""
     title = ""
     opened = False
     on_click = None
@@ -235,7 +235,7 @@ class _ZoneTitle(_PanelView):
 
     def drawRect_(self, _rect):
         b = self.bounds()
-        # Заокруглена плашка: відкрита зона підсвічена акцентом, закриті ледь помітні
+        # Rounded plate: the open zone is highlighted with the accent, closed ones are barely visible
         plate = AppKit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
             AppKit.NSInsetRect(b, 0, 1.5), 9, 9)
         if self.opened:
@@ -248,7 +248,7 @@ class _ZoneTitle(_PanelView):
             AppKit.NSForegroundColorAttributeName: AppKit.NSColor.labelColor(),
         }
         text = AppKit.NSAttributedString.alloc().initWithString_attributes_(self.title, attrs)
-        # Відступ як у NSTextField: заголовок зони вирівнюється з текстом показників і підписів
+        # Inset as in NSTextField: the zone title aligns with the metric text and captions
         text.drawAtPoint_((self.textInset, (b.size.height - text.size().height) / 2))
         cx, cy = b.size.width - 14, b.size.height / 2
         chevron = AppKit.NSBezierPath.bezierPath()
@@ -270,13 +270,13 @@ class _ZoneTitle(_PanelView):
 
 
 def _percent_text(value):
-    """Відсоток фіксованої ширини: цифрові пробіли (U+2007) вирівнюють число, тож зміна цифр не зсуває картку."""
+    """Percent of fixed width: figure spaces (U+2007) align the number, so a change of digits does not shift the card."""
     text = "—" if value is None else f"{value:.0f}%"
     return text.rjust(4, "\u2007")
 
 
 def _legend_row(view, y, color, title):
-    """Рядок деталей: кольорова крапка і назва зліва, значення справа. Повертає (назва, значення)."""
+    """Detail row: a coloured dot and the name on the left, the value on the right. Returns (name, value)."""
     font = AppKit.NSFont.systemFontOfSize_(11)
     left = _label(view, "", 0, y, 220, 11, height=16)
     text = AppKit.NSMutableAttributedString.alloc().initWithString_attributes_(
@@ -292,7 +292,7 @@ def _legend_row(view, y, color, title):
 
 
 def _rate(bytes_per_s):
-    """Швидкість для підпису: КБ/с або МБ/с."""
+    """Speed for the caption: KB/s or MB/s."""
     kb = bytes_per_s / 1024
     return T("{v:.1f} МБ/с", v=kb / 1024) if kb >= 1024 else T("{v:.0f} КБ/с", v=kb)
 
@@ -312,14 +312,14 @@ def _uptime_text(seconds):
 
 
 def _caption(parent, text, y):
-    """Підпис секції: малі великі літери, другорядний колір."""
+    """Section caption: small capitals, a secondary colour."""
     field = _label(parent, text.upper(), 0, y, INNER_W, 10, True, height=14)
     field.setFont_(AppKit.NSFont.systemFontOfSize_weight_(10, 0.4))
     return field
 
 
 def _symbol(name, description):
-    """Іконка SF Symbols для рядка дій. None, якщо символу немає в системі."""
+    """SF Symbols icon for an action row. None if the symbol is not in the system."""
     image = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, description)
     if image is not None:
         image.setTemplate_(True)
@@ -342,7 +342,7 @@ class _BarFill(_PanelView):
 
 
 class _MeterView(_PanelView):
-    """Плоский бар і часова шкала 0–100%, з розривами для недоступних вибірок."""
+    """A flat bar and a time scale 0–100%, with gaps for unavailable samples."""
 
     def drawRect_(self, _rect):
         width = self.bounds().size.width
@@ -358,7 +358,7 @@ class _MeterView(_PanelView):
         baseline.lineToPoint_((width, bottom))
         baseline.setLineWidth_(0.5)
         baseline.stroke()
-        # Неперервні ділянки між розривами: кожна заповнюється під лінією і обводиться зверху
+        # Continuous segments between gaps: each is filled under the line and outlined on top
         runs, run = [], []
         for stamp, value in self.samples:
             if value is None:
@@ -394,9 +394,9 @@ class _MeterView(_PanelView):
 
 
 class _CoresView(_PanelView):
-    """Навантаження кожного ядра: стовпчик на ядро на всю ширину, заповнений знизу відповідно до відсотка."""
+    """Load of each core: a column per core across the full width, filled from the bottom according to the percentage."""
     loads = ()
-    kinds = ()   # «P» або «E» для кожного ядра
+    kinds = ()   # “P” or “E” for each core
 
     def setLoads_(self, loads):
         self.loads = list(loads)
@@ -419,9 +419,9 @@ class _CoresView(_PanelView):
             AppKit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
                 NSMakeRect(x, 0, w, b.size.height), 2, 2).fill()
             value = max(0.0, min(100.0, load))
-            h = max(1.5, b.size.height * value / 100)   # нульове ядро теж видно лінією внизу
+            h = max(1.5, b.size.height * value / 100)   # a zero core is also visible as a line at the bottom
             kind = self.kinds[i] if i < len(self.kinds) else "P"
-            # Економні ядра бірюзові, продуктивні — за рівнем навантаження; високий рівень червоніє в обох
+            # Efficiency cores are teal, performance cores — by load level; a high level turns red in both
             color = _metric_color(value) if value > 80 or kind == "P" else AppKit.NSColor.systemTealColor()
             color.setFill()
             AppKit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
@@ -429,7 +429,7 @@ class _CoresView(_PanelView):
 
 
 class _StackBar(_PanelView):
-    """Складена смуга: сегменти (частка 0–1, колір) на сірому тлі. Вільна частка лишається сірою."""
+    """Stacked bar: segments (fraction 0–1, colour) on a grey background. The free share stays grey."""
     segments = ()
 
     def setSegments_(self, segments):
@@ -450,11 +450,11 @@ class _StackBar(_PanelView):
             x += w
 
 
-SIDE_W = 240   # ширина другого меню «Коротко»
+SIDE_W = 240   # width of the second “Summary” menu
 
 
 class _SidePanel:
-    """Друге меню зліва від панелі: короткий підсумок безпеки і зміни від попереднього звіту. Тільки читання."""
+    """A second menu on the left of the panel: a short security summary and changes since the previous report. Read-only."""
 
     def __init__(self, owner):
         self.owner = owner
@@ -504,9 +504,9 @@ class _SidePanel:
 
 
 class _PopoverPanel:
-    """Один екран: три показники зверху і три розгортні зони знизу (процеси, вигляд, дії).
+    """One screen: three metrics on top and three expandable zones below (processes, appearance, actions).
 
-    Відкрита лише одна зона, висота панелі підлаштовується під неї.
+    Only one zone is open; the panel height adjusts to it.
     """
 
     def __init__(self, owner):
@@ -530,7 +530,7 @@ class _PopoverPanel:
             graph.setWantsLayer_(True)
             graph.fill = _BarFill.alloc().initWithFrame_(NSMakeRect(0, 0, 0, 5))
             graph.fill.setWantsLayer_(True)
-            graph.fill.setHidden_(True)          # смуга-заливка прибрана; лишилась лише лінія історії
+            graph.fill.setHidden_(True)          # the fill bar is removed; only the history line remains
             graph.addSubview_(graph.fill)
             graph.setAccessibilityLabel_(key.upper() + ": " + T("історія за 60 секунд"))
             root.addSubview_(graph)
@@ -542,7 +542,7 @@ class _PopoverPanel:
                 root.addSubview_(self.cores)
                 y += 44
             y += 70
-        # Рядок системних показників: диск, мережа, батарея
+        # System metrics row: disk, network, battery
         self.infos = {}
         col = INNER_W / 3
         for i, (key, caption) in enumerate((("disk", T("ДИСК")), ("net", T("МЕРЕЖА")), ("battery", T("БАТАРЕЯ")))):
@@ -557,9 +557,9 @@ class _PopoverPanel:
         y += 66
         self.divider = AppKit.NSBox.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, y - 8, INNER_W, 1))
         self.divider.setBoxType_(AppKit.NSBoxSeparator)
-        self.divider.setHidden_(True)   # картки й плашки зон відокремлюють блоки без ліній
+        self.divider.setHidden_(True)   # cards and zone plates separate the blocks without lines
         root.addSubview_(self.divider)
-        self.zones_top = y - 2   # зони рахуються від кінця блоку метрик, а не від фіксованого 252
+        self.zones_top = y - 2   # zones are counted from the end of the metrics block, not from a fixed 252
         self.zones = []
         self.process_rows = []
         self.switches = {}
@@ -570,7 +570,7 @@ class _PopoverPanel:
         self.chip = hw.get("chip") or "—"
         self.gpu_cores = hw.get("gpuCores")
         self._blocks, self.details = {}, {}
-        self._block_zone = {"cpu": 0, "gpu": 1, "ram": 2}   # індекси зон ЦП, ГПУ, ОЗП у self.zones
+        self._block_zone = {"cpu": 0, "gpu": 1, "ram": 2}   # indices of the CPU, GPU and RAM zones in self.zones
         for title, fill in (("ЦП", self._fill_cpu), ("ГПУ", self._fill_gpu), ("ОЗП", self._fill_ram),
                             ("Вигляд", self._fill_appearance), ("Дії", self._fill_actions)):
             self._zone(title, fill)
@@ -578,11 +578,11 @@ class _PopoverPanel:
         self.footer_line = AppKit.NSBox.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, 0, INNER_W, 1))
         self.footer_line.setBoxType_(AppKit.NSBoxSeparator)
         root.addSubview_(self.footer_line)
-        self.footer_open = self._footer_button(T("Звіти"), "openWindow:", 110, AppKit.NSTextAlignmentLeft, "doc.text")
+        self.footer_open = self._footer_button(T("Відкрити додаток"), "openWindow:", 110, AppKit.NSTextAlignmentLeft, "doc.text")
         self.footer_quit = self._footer_button(T("Вийти"), "quit:", 80, AppKit.NSTextAlignmentLeft, "power")
         self.footer_side = self._footer_button("", "sideReport:", 22, AppKit.NSTextAlignmentLeft, "sidebar.left")
         self.footer_side.setToolTip_(T("Коротко: безпека і зміни від попереднього звіту"))
-        # Рядок статусу в один рядок: довгий текст обрізається, а не займає другий рядок внизу
+        # Status line in one row: long text is truncated instead of taking a second row at the bottom
         self.note = _label(root, "", PANEL_PAD, 0, INNER_W, 10, True, height=14)
         self.note.cell().setLineBreakMode_(AppKit.NSLineBreakByTruncatingTail)
         self.controller = AppKit.NSViewController.alloc().init()
@@ -591,17 +591,17 @@ class _PopoverPanel:
         self.popover.setContentViewController_(self.controller)
         self.popover.setBehavior_(AppKit.NSPopoverBehaviorTransient)
         self.popover.setDelegate_(owner._targets)
-        self.armed = None            # (індекс рядка, час) після першого кліку по «×»
-        self.kill_targets = {}       # індекс рядка → група процесу з останнього знімка
-        self.selected = None         # індекс рядка, вибраного кліком по назві (фіксує список)
-        self.pinned = None           # групи по рядках на момент фіксації; None — список живий
-        self.slot_names = [[], [], []]   # назви по рядках CPU, RAM і GPU: порядок стабільний між оновленнями
-        self._lit = None             # рядок із підсвіткою: фон міняємо лише при зміні вибору
-        self._icon_paths = {}        # який застосунок уже показано в іконці рядка: міняємо лише при зміні
+        self.armed = None            # (row index, time) after the first click on “×”
+        self.kill_targets = {}       # row index → process group from the latest snapshot
+        self.selected = None         # index of the row selected by clicking the name (pins the list)
+        self.pinned = None           # groups by row at the moment of pinning; None — the list is live
+        self.slot_names = [[], [], []]   # names by row of CPU, RAM and GPU: the order is stable between updates
+        self._lit = None             # the highlighted row: we change the background only when the selection changes
+        self._icon_paths = {}        # which app is already shown in the row icon: we change it only when it changes
         self._layout()
         self.sync()
 
-    # ---------- зони ----------
+    # ---------- zones ----------
     def _zone(self, title, fill):
         index = len(self.zones)
         head = _ZoneTitle.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, 0, INNER_W, ZONE_H))
@@ -640,7 +640,7 @@ class _PopoverPanel:
                 y += zone["height"] + 18
             else:
                 zone["content"].setHidden_(True)
-        # Нотатка над футером, а кнопки стоять у самого низу з однаковим відступом
+        # A note above the footer, and the buttons at the very bottom with the same margin
         self.note.setFrame_(NSMakeRect(PANEL_PAD, y, INNER_W, 14))
         y += 22
         self.footer_line.setFrame_(NSMakeRect(PANEL_PAD, y, INNER_W, 1))
@@ -653,21 +653,21 @@ class _PopoverPanel:
         self.footer_quit.setFrame_(NSMakeRect(PANEL_W - PANEL_PAD - quit_w, y + 8, quit_w, 22))
         y += 8 + 22 + 10
         self.root.setFrame_(NSMakeRect(0, 0, PANEL_W, y))
-        # Зміна розміру відкритого NSPopover зсуває вміст, тож викликаємо її лише коли висота справді змінилась
+        # Resizing an open NSPopover shifts its content, so we call it only when the height really changed
         if (PANEL_W, y) != getattr(self, "_size", None):
             self._size = (PANEL_W, y)
-            # Щосекундні зміни висоти від списків процесів — без анімації, інакше панель ходить ліво-право
+            # Per-second height changes from the process lists are without animation, otherwise the panel would sway side to side
             self.popover.setAnimates_(animate and not _reduce_motion())
             self.popover.setContentSize_(NSMakeSize(PANEL_W, y))
 
     def freeze(self):
-        """Фіксує рядки такими, якими їх видно зараз: позиції не міняються, поки немає вибору або «Так?»."""
+        """Pins the rows as they are visible now: positions do not change while there is no selection or “Sure?”."""
         if self.pinned is None:
             total = sum(len(rows) for rows in self.process_rows)
             self.pinned = [self.kill_targets.get(i) for i in range(total)]
 
     def toggle_select(self, index):
-        """Клік по назві: вибирає рядок, повторний клік по ньому знімає вибір."""
+        """A click on the name: selects the row, a second click on it clears the selection."""
         self.freeze()
         self.selected = None if self.selected == index else index
         self._release()
@@ -678,12 +678,12 @@ class _PopoverPanel:
         self.pinned = None
 
     def _release(self):
-        """Знімає фіксацію, коли немає ні вибору, ні відліку «Так?»."""
+        """Releases the pin when there is neither a selection nor a “Sure?” countdown."""
         if self.selected is None and (self.armed is None or time.monotonic() - self.armed[1] > 3):
             self.pinned = None
 
     def _fill_block(self, view, key, detail_rows):
-        """Зона: деталі (складена смуга і рядки) зверху, нижче топ процесів цього типу."""
+        """Zone: details (stacked bar and rows) on top, below the top processes of this type."""
         y = 0
         bar = _StackBar.alloc().initWithFrame_(NSMakeRect(0, y, INNER_W, BAR_H))
         view.addSubview_(bar)
@@ -703,7 +703,7 @@ class _PopoverPanel:
         self.heads[key] = heads
         rows = [self._proc_row(view, 0, BLOCK_BASE[key] + i) for i in range(BLOCK_COUNT[key])]
         self._blocks[key] = {"caption": caption, "rows": rows}
-        # Спочатку список сховано: рядки з'являються з даними
+        # At first the list is hidden: rows appear with the data
         for item in [caption] + heads + [it for row in rows for it in row]:
             item.setHidden_(True)
         return y + 6 + 16 + BLOCK_COUNT[key] * 18 + 8
@@ -730,7 +730,7 @@ class _PopoverPanel:
         ])
 
     def _set_details(self, key, segments, values):
-        """Смуга і значення деталей зони. Значення міняються разом, без проміжних цифр."""
+        """The bar and the detail values of the zone. Values change together, without intermediate digits."""
         detail = self.details[key]
         detail["bar"].setSegments_(segments)
         for (_, right), text in zip(detail["legend"], values):
@@ -762,17 +762,17 @@ class _PopoverPanel:
         ])
 
     def _set_icon(self, icon, idx, path):
-        """Системна іконка застосунку в рядку. Картинку ставимо лише коли застосунок змінився."""
-        key = path or ""   # без застосунку — типова іконка, ключ порожній
+        """The system app icon in the row. We set the image only when the app has changed."""
+        key = path or ""   # without an app — the default icon, the key is empty
         if self._icon_paths.get(idx) != key:
             icon.setImage_(_app_icon(path) if path else _generic_icon())
             self._icon_paths[idx] = key
         icon.setHidden_(False)
 
     def _place_processes(self, entries, sizes, ready, armed):
-        """Топ процесів цього типу під деталями кожної зони. Порожній список не займає місця.
+        """The top processes of this type under the details of each zone. An empty list takes no space.
 
-        Повертає висоту кожної зони: деталі плюс список.
+        Returns the height of each zone: details plus the list.
         """
         flat = 0
         heights = {}
@@ -811,7 +811,7 @@ class _PopoverPanel:
                 name.setTitle_(title)
                 name.setToolTip_(title)
                 if not ready:
-                    cpu_text, gpu_text = "…", "…"     # після праймінгу CPU і GPU ще не порахувані
+                    cpu_text, gpu_text = "…", "…"     # after priming, CPU and GPU are not yet counted
                 else:
                     cpu_text = "—" if stale else f"{group['cpu']:.1f}%"
                     gpu_value = group.get("gpu")
@@ -847,7 +847,7 @@ class _PopoverPanel:
         name.cell().setLineBreakMode_(AppKit.NSLineBreakByTruncatingTail)
         name.setTitle_("—")
         name.setTarget_(self.owner._targets)
-        name.setAction_("selectRow:")   # клік по назві вибирає і фіксує рядок
+        name.setAction_("selectRow:")   # a click on the name selects and pins the row
         name.setTag_(index)
         view.addSubview_(name)
         cpu = _label(view, "", 116, y, 52, 11, digits=True)
@@ -954,7 +954,7 @@ class _PopoverPanel:
         self.root.addSubview_(button)
         return button
 
-    # ---------- стан і оновлення ----------
+    # ---------- state and updates ----------
     def sync(self):
         for key, control in self.switches.items():
             control.setOn_(self.owner._settings[key])
@@ -1003,7 +1003,7 @@ class _PopoverPanel:
             zone = self.zones[self._block_zone[key]]
             if zone["height"] != height:
                 zone["height"] = height
-                resize = resize or zone["open"]   # згорнута зона не змінює розмір панелі
+                resize = resize or zone["open"]   # a collapsed zone does not change the panel size
         if resize:
             self._layout(animate=False)
         self._update_details(snap)
@@ -1026,7 +1026,7 @@ class _PopoverPanel:
         top.setTextColor_(AppKit.NSColor.systemRedColor() if flat else AppKit.NSColor.labelColor())
 
     def _draw_values(self):
-        """Значення і графік міняються одразу, разом. Проміжних цифр немає, число не «перекочує» до кінцевого."""
+        """The value and the graph change at once, together. No intermediate digits, the number does not “roll” to the final one."""
         for key, (label, _, graph) in self.meters.items():
             value = self.ends[key]
             graph.value = None if value is None else max(0, min(100, value))
@@ -1038,7 +1038,7 @@ def _font(size=12.0):
     return AppKit.NSFont.monospacedDigitSystemFontOfSize_weight_(size, 0.0)
 
 
-BAR_FONT = 10.5   # шрифт тексту в статус-барі: менший, щоб значок був вужчим
+BAR_FONT = 10.5   # text font in the menu bar: smaller, so the icon is narrower
 
 
 def _attr(text, size=12.0):
@@ -1047,9 +1047,9 @@ def _attr(text, size=12.0):
 
 
 def _stable_names(prev, top, n):
-    """Назви по рядках. Група, що вже в списку і досі в топі, лишається на своєму місці; нові займають лише вільні.
+    """Names by rows. A group already in the list and still in the top stays in its place; new ones take only free slots.
 
-    Так рядки не переставляються щосекунди: клік потрапляє туди, куди користувач дивився. Порожні місця — None.
+    This way rows do not reorder every second: a click lands where the user was looking. Empty slots — None.
     """
     top_names = [g["name"] for g in top[:n]]
     kept = [name if name in top_names else None for name in list(prev[:n]) + [None] * (n - len(prev[:n]))]
@@ -1058,7 +1058,7 @@ def _stable_names(prev, top, n):
 
 
 def _pinned_groups(pinned, live):
-    """Зафіксовані рядки: свіжі дані, якщо процес іще є; інакше останні відомі, зі позначкою stale."""
+    """Pinned rows: fresh data if the process still exists; otherwise the last known, marked stale."""
     out = []
     for g in pinned:
         if g is None:
@@ -1073,7 +1073,7 @@ _ICONS = {}
 
 
 def _app_icon(path):
-    """Системна іконка застосунку з кешу macOS: не малюємо її самі. None, якщо шляху немає."""
+    """The system app icon from the macOS cache: we do not draw it ourselves. None if there is no path."""
     if not path:
         return None
     if path not in _ICONS:
@@ -1082,14 +1082,14 @@ def _app_icon(path):
 
 
 def _generic_icon():
-    """Типова системна іконка виконуваного файлу для процесів без застосунку (з кешу macOS)."""
+    """The default system executable icon for processes without an app (from the macOS cache)."""
     if "generic" not in _ICONS:
         _ICONS["generic"] = AppKit.NSWorkspace.sharedWorkspace().iconForFileType_("public.unix-executable")
     return _ICONS["generic"]
 
 
 def _highlight_color():
-    """Фон вибраного рядка: акцентний колір системи, напівпрозорий."""
+    """Background of the selected row: the system accent colour, semi-transparent."""
     return AppKit.NSColor.controlAccentColor().colorWithAlphaComponent_(0.18).CGColor()
 
 
@@ -1099,18 +1099,18 @@ def _mem(rss):
     return T("{v:.0f} МБ", v=rss / MB)
 
 
-BAR_MAX_PX = 14   # найвища висота стовпчика значка, пікселів
+BAR_MAX_PX = 14   # the maximum column height of the icon, in pixels
 
 
 def _bar_px(value):
-    """Висота стовпчика в цілих пікселях; None — немає даних (сірий мінімум). Зміна менша за піксель значок не чіпає."""
+    """Column height in whole pixels; None — no data (grey minimum). A change smaller than a pixel does not touch the icon."""
     if value is None:
         return None
     return max(2, round(BAR_MAX_PX * min(value, 100) / 100.0))
 
 
 def _bars_icon(levels):
-    """Стовпчики обраних показників (висоти з _bar_px). Шаблонне зображення: macOS сам фарбує його під світлу і темну панель."""
+    """Columns of the selected metrics (heights from _bar_px). Template image: macOS tints it for the light and dark menu bar itself."""
     def draw(_rect):
         for i, px in enumerate(levels):
             x = 1.5 + i * 5.0
@@ -1130,7 +1130,7 @@ def _state(on):
 
 
 class _Targets(NSObject):
-    """Цілі дій меню і таймера (селектори AppKit). Логіка в StatusBar, через поле owner."""
+    """Action targets of the menu and the timer (AppKit selectors). The logic is in StatusBar, through the owner field."""
 
     def tick_(self, _timer):
         self.owner.on_tick()
@@ -1209,10 +1209,10 @@ class _Targets(NSObject):
 
 
 class StatusBar:
-    """Іконка в статус-барі і меню. Тримати посилання на екземпляр, інакше іконка зникне."""
+    """The icon in the menu bar and menu. Keep a reference to the instance, otherwise the icon disappears."""
 
-    _quick = None   # швидке очищення: (id кешів, час першого кліку)
-    _side = None    # друге меню «Коротко», створюється при першому відкритті
+    _quick = None   # quick clean: (cache ids, time of the first click)
+    _side = None    # the second “Summary” menu, created on first opening
 
     def __init__(self, monitor, actions, autostart_on, prefs):
         self._monitor = monitor
@@ -1227,11 +1227,11 @@ class StatusBar:
         self._history = deque(maxlen=61)
         self._panel = None
         self._note = ""
-        self._menu_open = False    # головне меню відкрите: тоді його пункти оновлюються щосекунди
-        self._bar_key = None       # останній стан статус-бару: оновлюємо лише при зміні
-        self._icon_key = None      # останні висоти стовпчиків значка (пікселі)
-        self._bar_text = None      # останній текст і рівень безпеки в статус-барі
-        self._security = None      # підсумок безпеки з останнього звіту, оновлюється раз на SECURITY_EVERY
+        self._menu_open = False    # the main menu is open: then its items update every second
+        self._bar_key = None       # the last menu bar state: we update only when it changes
+        self._icon_key = None      # the last column heights of the icon (pixels)
+        self._bar_text = None      # the last text and security level in the menu bar
+        self._security = None      # security summary from the latest report, updated once per SECURITY_EVERY
         self._security_at = 0.0
         self._last = None
         self._targets = _Targets.alloc().init()
@@ -1267,7 +1267,7 @@ class StatusBar:
         menu.addItem_(procs)
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
-        # Вигляд: перемикачі показників і стиль статус-бару
+        # Appearance: metric switches and the menu bar style
         view = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(T("Вигляд"), None, "")
         vsub = AppKit.NSMenu.alloc().initWithTitle_(T("Вигляд"))
         vsub.setAutoenablesItems_(False)
@@ -1302,7 +1302,7 @@ class StatusBar:
         menu.addItem_(quit_item)
 
         self._status.setMenu_(menu)
-        # Меню вже готове, якщо будь-який крок створення popover не вдався.
+        # The menu is already ready if any step of creating the popover failed.
         try:
             self._panel = _PopoverPanel(self)
             self._status.setMenu_(None)
@@ -1313,7 +1313,7 @@ class StatusBar:
             self._status.setMenu_(menu)
             self.set_note(T("Панель недоступна, використовуйте меню: {exc}", exc=exc))
 
-        # Таймер у common modes: спрацьовує і під час відкритого меню (NSEventTrackingRunLoopMode)
+        # The timer in common modes: fires also while the menu is open (NSEventTrackingRunLoopMode)
         self._timer = NSTimer.timerWithTimeInterval_target_selector_userInfo_repeats_(
             1.0, self._targets, "tick:", None, True)
         NSRunLoop.mainRunLoop().addTimer_forMode_(self._timer, NSRunLoopCommonModes)
@@ -1322,7 +1322,7 @@ class StatusBar:
         self.refresh()
 
     def close(self):
-        """Прибирає іконку і таймер. Викликати з головного потоку при виході."""
+        """Removes the icon and the timer. Call from the main thread on exit."""
         if self._closed:
             return
         self._closed = True
@@ -1336,7 +1336,7 @@ class StatusBar:
         AppKit.NSStatusBar.systemStatusBar().removeStatusItem_(self._status)
 
     def _work(self, action, completion=None):
-        """Файлові операції виконуються послідовно; AppKit лише в callAfter."""
+        """File operations run in sequence; AppKit only in callAfter."""
         if self._closed:
             return
         def finished(future):
@@ -1356,7 +1356,7 @@ class StatusBar:
         self._worker.submit(action).add_done_callback(finished)
 
     def toggle_side(self):
-        """Друге меню ліворуч від панелі. Показує поточний підсумок безпеки з файлів звітів."""
+        """A second menu to the left of the panel. Shows the current security summary from the report files."""
         if self._panel is None:
             return
         if self._side is None:
@@ -1378,7 +1378,7 @@ class StatusBar:
             self._side.popover.performClose_(None)
 
     def quick_clean(self):
-        """Швидке очищення безпечних кешів: перший клік рахує розмір, другий очищує (як «×» у процесах)."""
+        """Quick clean of safe caches: the first click counts the size, the second cleans (like “×” in processes)."""
         if self._quick is not None and time.monotonic() - self._quick[1] <= 10:
             ids = self._quick[0]
             self._quick = None
@@ -1386,7 +1386,7 @@ class StatusBar:
             self._work(lambda: self.actions["cache_clean"](ids), self._quick_done)
             return
         self._quick = None
-        self.set_note(T("Рахую розмір безпечних кешів…"))   # одразу видно реакцію, підрахунок іде у фоні
+        self.set_note(T("Рахую розмір безпечних кешів…"))   # the reaction is visible at once, the counting runs in the background
         self._work(self.actions["cache_scan"], self._quick_ready)
 
     def _quick_ready(self, items):
@@ -1429,8 +1429,8 @@ class StatusBar:
             self._sync_view_items()
             self._monitor.set_detail(True)
             self.refresh()
-            # Застосунок має стати активним до показу, інакше перший клік усередині панелі
-            # активує його і NSPopover сприймає це як клік поза панеллю та закриває її
+            # The app must become active before showing, otherwise the first click inside the panel
+            # activates it, and NSPopover treats this as a click outside the panel and closes it
             app = AppKit.NSApplication.sharedApplication()
             if hasattr(app, "activate"):
                 app.activate()
@@ -1441,7 +1441,7 @@ class StatusBar:
             if self._last is not None:
                 self._panel.update(self._last)
             window = self._panel.popover.contentViewController().view().window()
-            if window is not None:   # вікна немає, якщо значок сховано системою: тоді покажеться меню
+            if window is not None:   # there is no window if the icon is hidden by the system: then the menu is shown
                 window.makeKeyWindow()
         except Exception as exc:
             self._panel.popover.close()
@@ -1451,17 +1451,17 @@ class StatusBar:
             self._button.setAction_(None)
             self.set_note(T("Панель недоступна, використовуйте меню: {exc}", exc=exc))
 
-    # ---------- події ----------
+    # ---------- events ----------
     def on_tick(self):
         if self._closed:
             return
-        self.actions["tick"]()   # перевірка запиту на показ вікна від другого запуску
+        self.actions["tick"]()   # check for a request to show the window from a second launch
         self.refresh()
 
     def on_menu_open(self, menu):
         if menu is self._menu:
             self._menu_open = True
-            self._monitor.set_detail(True)   # список процесів щосекунди, поки меню відкрите
+            self._monitor.set_detail(True)   # the process list every second while the menu is open
         self._sync_view_items()
         self.refresh()
 
@@ -1471,7 +1471,7 @@ class StatusBar:
             self._monitor.set_detail(False)
 
     def toggle_metric(self, key):
-        # Не можна вимкнути всі три разом з видимим текстом: тоді в статус-барі буде порожньо
+        # The three cannot all be turned off together with visible text: the menu bar would be empty then
         now = self._settings[key]
         if now and sum(1 for k in ("cpu", "ram", "gpu") if self._settings[k]) == 1:
             self.set_note(T("Має лишитися увімкненим хоча б один показник"))
@@ -1483,12 +1483,12 @@ class StatusBar:
         self.refresh()
 
     def toggle_flag(self, key):
-        """Перемикачі «Сповіщення» і «Щоденна перевірка»."""
+        """The “Notifications” and “Daily check” switches."""
         self._save_setting(key, not self._settings[key])
         self._sync_view_items()
 
     def set_language(self, code):
-        # Мова застосовується під час запуску: агент перезапускається сам (без вікна)
+        # The language applies at launch: the agent restarts itself (without a window)
         if code in LANGUAGE_CODES:
             self.actions["set_language"](code)
 
@@ -1530,9 +1530,9 @@ class StatusBar:
                 self.refresh()
         self._work(save, finished)
 
-    # ---------- побудова ----------
+    # ---------- construction ----------
     def _info(self, menu, title=""):
-        """Пункт без дії (лише текст). Повертає NSMenuItem, у якого далі міняється заголовок."""
+        """An item without an action (text only). Returns an NSMenuItem whose title is changed later."""
         item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, None, "")
         item.setEnabled_(False)
         menu.addItem_(item)
@@ -1544,15 +1544,15 @@ class StatusBar:
         return item
 
     def _mark_kill(self, index):
-        """«Так?» на рядку index, на решті «×» одразу, а не на наступному оновленні панелі. None — скинути всі."""
-        flat = 0   # наскрізний індекс, як у update: спершу рядки CPU, потім RAM
+        """“Sure?” on row index, on the others “×” at once, not on the next panel update. None — reset all."""
+        flat = 0   # running index, as in update: CPU rows first, then RAM
         for rows in self._panel.process_rows:
             for _, _, _, _, kill, _, _ in rows:
                 kill.setTitle_(T("Так?") if index is not None and flat == index else "×")
                 flat += 1
 
     def select_row(self, index):
-        """Клік по назві процесу: рядок вибирається і фіксується, позиції не міняються. Повторний клік знімає вибір."""
+        """A click on a process name: the row is selected and pinned, positions do not change. A second click clears the selection."""
         panel = self._panel
         group = panel.kill_targets.get(index) if panel is not None else None
         if group is None:
@@ -1565,9 +1565,9 @@ class StatusBar:
             panel.update(snap)
 
     def kill_row(self, index):
-        """Хрестик у рядку процесу: перший клік просить підтвердження, другий завершує процес (SIGTERM).
+        """The cross in a process row: the first click asks for confirmation, the second quits the process (SIGTERM).
 
-        Завершуються процеси групи, які належать поточному користувачу. MacSafe себе не завершує.
+        Processes of the group that belong to the current user are quit. MacSafe does not quit itself.
         """
         panel = self._panel
         group = panel.kill_targets.get(index) if panel is not None else None
@@ -1576,14 +1576,14 @@ class StatusBar:
         now = time.monotonic()
         armed = panel.armed
         if armed is None or armed[0] != index or now - armed[1] > 3:
-            # Рядки фіксуються ще на першому кліку: «Так?» завершить саме ту групу, по якій клікнули
+            # Rows are pinned already on the first click: “Sure?” will quit exactly the group that was clicked
             panel.freeze()
             panel.armed = (index, now, group)
             self._mark_kill(index)
             self.set_note(T("Натисніть «Так?», щоб завершити {name}", name=group["name"]))
             return
         group = armed[2]
-        panel.clear_selection()   # після спроби вибір і фіксація знімаються
+        panel.clear_selection()   # after the attempt, the selection and pin are released
         self._mark_kill(None)
         sent, denied = 0, 0
         for pid in group.get("pids", []):
@@ -1602,7 +1602,7 @@ class StatusBar:
             self.set_note(T("{name} вже не працює", name=group["name"]))
 
     def set_note(self, text):
-        """Короткий рядок про останню дію (наприклад, результат очищення). Викликати з головного потоку."""
+        """A short line about the last action (for example, the cleaning result). Call from the main thread."""
         if not NSThread.isMainThread():
             AppHelper.callAfter(self.set_note, text)
             return
@@ -1614,7 +1614,7 @@ class StatusBar:
             self._panel.note.setStringValue_(self._note)
             self._panel.note.setToolTip_(self._note)
 
-    # ---------- оновлення ----------
+    # ---------- updates ----------
     def refresh(self):
         if self._closed:
             return
@@ -1626,7 +1626,7 @@ class StatusBar:
         ram_pct = ram["percent"]
         stamp = float(snap["time"])
         if not self._history or stamp > self._history[-1][0]:
-            # Розрив лінії лише при пропуску вибірок, а не при звичайному інтервалі з тремтінням таймера
+            # A gap in the line only when samples are skipped, not at the normal interval with timer jitter
             gap = max(2.0, 2.5 * self._monitor.interval)
             if self._history and stamp - self._history[-1][0] > gap:
                 self._history.append((stamp - 0.001, {"cpu": None, "ram": None, "gpu": None}))
@@ -1639,7 +1639,7 @@ class StatusBar:
         self._update_security()
         if self._settings["alerts"]:
             self.actions["alerts"](snap, self._security)
-        # Статус-бар перемальовуємо лише коли змінилось округлене значення: фон майже без роботи AppKit
+        # We redraw the menu bar only when the rounded value changed: the background needs almost no AppKit work
         key = (round(cpu), round(ram_pct), None if gpu is None else round(gpu), self._settings["style"],
                self._settings["cpu"], self._settings["ram"], self._settings["gpu"],
                (self._security or {}).get("level"))
@@ -1647,7 +1647,7 @@ class StatusBar:
             self._bar_key = key
             self._update_bar(cpu, ram_pct, gpu)
 
-        # Пункти меню і панель оновлюємо лише коли вони відкриті: закриті не витрачають AppKit
+        # We update the menu items and the panel only when they are open: closed ones do not spend AppKit time
         if self._menu_open:
             self._cpu_item.setAttributedTitle_(_attr(f"CPU   {cpu:5.1f}%   " + T("{cores} ядер", cores=snap["cores"])))
             self._ram_item.setAttributedTitle_(_attr(
@@ -1661,7 +1661,7 @@ class StatusBar:
                 self._panel.note.setStringValue_("")
 
     def _update_bar(self, cpu, ram_pct, gpu):
-        """Статус-бар: лише обрані показники, у обраному стилі. Фіксована ширина цифр (моноширинні)."""
+        """Menu bar: only the selected metrics, in the selected style. Fixed digit width (monospaced)."""
         shown = []
         if self._settings["cpu"]:
             shown.append(("cpu", cpu))
@@ -1683,24 +1683,24 @@ class StatusBar:
         if style == "icon" or not shown:
             text = ""
         else:
-            # Кожне значення — рівно дві позиції (0–99), однакові пробіли з боків крапки: відстані рівні,
-            # ширина не змінюється. Цифровий пробіл (U+2007) зліва для однієї цифри.
+            # Each value is exactly two positions (0–99), equal spaces on both sides of the dot: distances are equal,
+            # the width does not change. A figure space (U+2007) on the left for a single digit.
             parts = []
             for key, value in shown:
                 text = "–" if value is None else str(min(99, int(round(value))))
                 parts.append(text.rjust(2, "\u2007"))
             text = " " + " · ".join(parts)
-        title_key = (text, (self._security or {}).get("level"))   # рівень безпеки міняє колір крапки
+        title_key = (text, (self._security or {}).get("level"))   # the security level changes the dot colour
         if title_key != self._bar_text:
             self._bar_text = title_key
             self._button.setAttributedTitle_(self._bar_title(text))
 
     def refresh_security(self):
-        """Наступне оновлення індикатора безпеки прочитає звіт одразу (після перевірки)."""
+        """The next update of the security indicator reads the report at once (after a check)."""
         self._security_at = 0.0
 
     def _update_security(self):
-        """Читає підсумок безпеки не частіше ніж раз на SECURITY_EVERY секунд і оновлює панель."""
+        """Reads the security summary no more often than once every SECURITY_EVERY seconds and updates the panel."""
         now = time.monotonic()
         if self._security is None or now - self._security_at >= SECURITY_EVERY:
             self._security_at = now
@@ -1719,7 +1719,7 @@ class StatusBar:
                 self._panel.security.setToolTip_(tip)
 
     def _bar_title(self, text):
-        """Текст статус-бару з крапкою перед ним, якщо є проблеми безпеки (orange — увага, red — критично)."""
+        """Menu bar text with a dot in front of it if there are security issues (orange — warning, red — critical)."""
         title = AppKit.NSMutableAttributedString.alloc().initWithAttributedString_(_attr(text, BAR_FONT))
         _, color = _security_line(self._security)
         if color is not None:
@@ -1742,5 +1742,5 @@ class StatusBar:
 
 
 def install(monitor, actions, autostart_on, prefs):
-    """Створює іконку в статус-барі. Викликати з головного потоку. Повертає StatusBar (тримати посилання)."""
+    """Creates the icon in the menu bar. Call from the main thread. Returns StatusBar (keep a reference)."""
     return StatusBar(monitor, actions, autostart_on, prefs)

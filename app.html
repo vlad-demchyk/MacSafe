@@ -17,9 +17,9 @@
     <p data-en="Click “Run check” in the top bar. The first report appears when it finishes.">Натисніть «Запустити перевірку» у верхній панелі. Перший звіт з'явиться після завершення.</p>
   </main>
   <script>
-    // Мова за параметром ?lang (його передає застосунок) або за мовою браузера
+    // Language from the ?lang parameter (the app passes it) or from the browser language
     (() => {
-      const lang = new URLSearchParams(location.search).get('lang') || ((navigator.language || '').toLowerCase().startsWith('uk') ? 'uk' : 'en');
+      const lang = new URLSearchParams(location.search).get('lang') || 'en';
       if (lang !== 'en') return;
       document.documentElement.lang = 'en';
       document.querySelectorAll('[data-en]').forEach(el => { el.textContent = el.dataset.en; });

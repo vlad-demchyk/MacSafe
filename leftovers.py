@@ -1,7 +1,7 @@
-"""Залишки видалених застосунків: папки з іменем bundle id в ~/Library, для яких застосунка вже немає.
+"""Leftovers of removed apps: folders named by bundle id in ~/Library whose app no longer exists.
 
-Тільки пошук. Кандидати показуються з розміром і датою, переміщення в кошик (відновлюване) робить trash.py
-після підтвердження. Не чіпає com.apple.*, застосунки з будь-якого кошика і папки, змінені менш ніж 30 днів тому.
+Search only. Candidates are shown with size and date; moving to the Trash (restorable) is done by trash.py
+after confirmation. Does not touch com.apple.*, apps from any Trash, or folders changed less than 30 days ago.
 """
 import os
 import plistlib
@@ -15,13 +15,13 @@ SCAN_DIRS = (
     os.path.join(HOME, "Library", "Containers"),
     os.path.join(HOME, "Library", "Saved Application State"),
 )
-BUNDLE_ID = re.compile(r"^[A-Za-z0-9-]+(\.[A-Za-z0-9_-]+){2,}$")   # com.vendor.app: не менше трьох частин
+BUNDLE_ID = re.compile(r"^[A-Za-z0-9-]+(\.[A-Za-z0-9_-]+){2,}$")   # com.vendor.app: at least three parts
 MIN_AGE_DAYS = 30
 MAX_ITEMS = 40
 
 
 def installed_ids(app_dirs=APP_DIRS):
-    """Множина bundle id усіх знайдених застосунків (на глибині до двох рівнів у папках застосунків)."""
+    """The set of bundle ids of all found apps (up to two levels deep in the app folders)."""
     ids = set()
     stack = [(d, 0) for d in app_dirs]
     while stack:
@@ -37,7 +37,7 @@ def installed_ids(app_dirs=APP_DIRS):
                         bid = plistlib.load(fh).get("CFBundleIdentifier")
                     if isinstance(bid, str):
                         ids.add(bid.lower())
-                except Exception:   # битий Info.plist (ExpatError тощо) не повинен ламати скан
+                except Exception:   # a broken Info.plist (ExpatError and similar) must not break the scan
                     pass
             elif depth < 1 and e.is_dir(follow_symlinks=False):
                 stack.append((e.path, depth + 1))
@@ -56,7 +56,7 @@ def _size_mb(path):
 
 
 def scan(scan_dirs=SCAN_DIRS, app_dirs=APP_DIRS, min_age_days=MIN_AGE_DAYS):
-    """Кандидати: [{path, id, sizeMb, days}] за спаданням розміру."""
+    """Candidates: [{path, id, sizeMb, days}] in descending size order."""
     known = installed_ids(app_dirs)
     cutoff = time.time() - min_age_days * 86400
     out = []

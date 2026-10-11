@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""MacSafe: вікно звітів. Запускається агентом (agent.py) за потреби і завершується разом з вікном.
+"""MacSafe: report window. Started by the agent (agent.py) on demand and exits with its window.
 
-Дані, перевірки і очищення живуть у engine.py. Тут лише вікно pywebview з мостом для сторінки.
-Після закриття вікна процес завершується, тож у фоні від нього нічого не лишається.
+Data, checks and cleaning live in engine.py. Here is only the pywebview window with the bridge for the page.
+After the window closes the process exits, so nothing from it stays in the background.
 
-Використання: app.py --window [--section cleanup]
+Usage: app.py --window [--section cleanup]
 """
 import os
 import pathlib
@@ -45,16 +45,16 @@ def main():
     api._window = window
 
     def on_loaded():
-        # Панель запуску додаємо після кожного завантаження сторінки
+        # We add the run bar after each page load
         try:
             window.evaluate_js(bar_js)
         except Exception:
             pass
-        # Процес запущено з фонового агента: без цього вікно може лишитися позаду інших застосунків
+        # The process is started from the background agent: without this the window may stay behind other apps
         AppHelper.callAfter(lambda: AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True))
 
     def on_closing(*_):
-        # Закриття вікна зупиняє перевірку, якщо вона запущена з вікна; None дозволяє закриття
+        # Closing the window stops the check if it was started from the window; None allows closing
         api.shutdown()
         return None
 

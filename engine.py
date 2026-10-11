@@ -1,7 +1,7 @@
-"""MacSafe: дані, звіти, очищення і перевірки без інтерфейсу.
+"""MacSafe: data, reports, cleaning and checks without an interface.
 
-Спільний код для агента статус-бару (agent.py) і вікна звітів (app.py). Імпорту AppKit і WebKit тут немає,
-тож агент працює без важкого вікна. Усі шляхи і формати даних тут, у одному місці.
+Shared code for the menu bar agent (agent.py) and the report window (app.py). There is no AppKit or WebKit import here,
+so the agent runs without a heavy window. All paths and data formats are here, in one place.
 """
 from i18n import T
 import json
@@ -23,32 +23,33 @@ import trash
 from diff import security_changes
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-APP_PY = os.path.join(HERE, "app.py")      # вікно звітів (запускається за потреби)
-AGENT_PY = os.path.join(HERE, "agent.py")  # статус-бар і фон: те, що працює завжди
-# Дані застосунку: ~/Library/Application Support/MacSafe. Старої папки «звіт» на Desktop більше немає.
+APP_PY = os.path.join(HERE, "app.py")      # the report window (started on demand)
+AGENT_PY = os.path.join(HERE, "agent.py")  # the menu bar and the background: what always runs
+# App data: ~/Library/Application Support/MacSafe. The old “report” folder on the Desktop no longer exists.
 DATA_DIR = os.path.expanduser("~/Library/Application Support/MacSafe")
-REPORT_DIR = DATA_DIR                                      # робоча папка генератора
+REPORT_DIR = DATA_DIR                                      # the generator's working folder
 GENERATOR = os.path.join(HERE, "core", "generate-report.sh")
-DATA_REPORTS = DATA_DIR                                    # звіти, знімки, історія
+DATA_REPORTS = DATA_DIR                                    # reports, snapshots, history
 MARKER = os.path.join(DATA_DIR, "дані", ".first-run-done")
 GEN_ENV = dict(os.environ, AUDIT_DATA_DIR=DATA_DIR)
-DAY_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")   # один звіт на день: ідентифікатор — дата
+DAY_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")   # one report per day: the ID is the date
 DASHBOARD = os.path.join(DATA_DIR, "dashboard.html")
 LOCK_DIR = os.path.join(DATA_DIR, "дані", ".lock")
-# Як запускати себе з автозапуску: у .app це його запускач, інакше системний Python з app.py
+# How to launch itself from login items: inside .app it is its launcher, otherwise the system Python with app.py
 LAUNCH_ARGS = [os.environ["MACSAFE_LAUNCHER"]] if os.environ.get("MACSAFE_LAUNCHER") else [autostart.PYTHON, AGENT_PY]
-APP_LOCK = os.path.join(DATA_REPORTS, "дані", ".app.lock")          # один екземпляр застосунку
-SHOW_REQUEST = os.path.join(DATA_REPORTS, "дані", ".show-request")  # запит другого запуску: показати вікно
+APP_LOCK = os.path.join(DATA_REPORTS, "дані", ".app.lock")          # one instance of the app
+SHOW_REQUEST = os.path.join(DATA_REPORTS, "дані", ".show-request")  # a second launch's request: show the window
+LANG_REQUEST = os.path.join(DATA_REPORTS, "дані", ".lang-request")   # the window's language choice, applied by the agent
 AGENT_LOG = os.path.join(DATA_REPORTS, "дані", "автозапуск.log")
-PERSIST_FILE = os.path.join(DATA_REPORTS, "дані", "автозапуск-знімок.json")   # базовий список автозапуску системи
-PREFS_FILE = os.path.join(DATA_REPORTS, "дані", "налаштування.json")   # перемикачі статус-бару
-APP_HTML = os.path.join(HERE, "app.html")   # показується, поки звіту ще немає
-BAR_JS = os.path.join(HERE, "bar.js")       # панель запуску, додається на сторінку звітів
+PERSIST_FILE = os.path.join(DATA_REPORTS, "дані", "автозапуск-знімок.json")   # the baseline list of system login items
+PREFS_FILE = os.path.join(DATA_REPORTS, "дані", "налаштування.json")   # menu bar switches
+APP_HTML = os.path.join(HERE, "app.html")   # shown while there is no report yet
+BAR_JS = os.path.join(HERE, "bar.js")       # the run bar, added to the report page
 LOG_LINES = 300
 
 
 def _free_pct():
-    """Вільна памʼять за memory_pressure, у відсотках. None, якщо не вдалося прочитати."""
+    """Free memory by memory_pressure, in percent. None if it could not be read."""
     try:
         out = subprocess.run(["memory_pressure"], capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.TimeoutExpired):
@@ -58,9 +59,9 @@ def _free_pct():
 
 
 def security_summary():
-    """Підсумок безпеки з останнього звіту: скільки перевірок у стані «увага» або «критично».
+    """Security summary from the latest report: how many checks are in the “warning” or “critical” state.
 
-    Читає лише JSON останнього звіту, нічого не запускає. Якщо звіту ще немає, рівень «none».
+    Reads only the JSON of the latest report, runs nothing. If there is no report yet, the level is “none”.
     """
     empty = {"level": "none", "issues": 0, "critical": 0, "checkedAt": None, "changes": [], "changeCount": 0}
     folder = os.path.join(DATA_DIR, "дані")
@@ -89,7 +90,7 @@ def security_summary():
     m = re.match(r"^report-(\d{4}-\d{2}-\d{2})\.json$", last)
     checked = m.group(1) if m else None
     level = "critical" if crit else ("warning" if warn else "ok")
-    # Зміни відносно попереднього звіту: що з'явилось, зникло або стало інакшим
+    # Changes relative to the previous report: what appeared, disappeared or changed
     changes = []
     if len(names) > 1:
         previous = _security_items(names[-2])
@@ -100,7 +101,7 @@ def security_summary():
 
 
 def dashboard_stale():
-    """True, якщо центральної сторінки немає або вона старіша за шаблон застосунку (після оновлення програми)."""
+    """True if the central page is missing or older than the app template (after an app update)."""
     template = os.path.join(HERE, "core", "template.html")
     try:
         return os.path.getmtime(DASHBOARD) < os.path.getmtime(template)
@@ -109,13 +110,13 @@ def dashboard_stale():
 
 
 def _lock_holder_alive():
-    """Чи живий процес, що тримає замок перевірки. Замок без PID або з мертвим PID — застарілий."""
+    """Whether the process holding the check lock is alive. A lock without a PID or with a dead PID is stale."""
     try:
         with open(os.path.join(LOCK_DIR, "pid"), encoding="utf-8") as fh:
             pid = int(fh.read().strip() or 0)
     except (OSError, ValueError):
         return False
-    if pid <= 0 or pid == os.getpid():   # свій замок без активної перевірки теж застарілий
+    if pid <= 0 or pid == os.getpid():   # its own lock without an active check is also stale
         return False
     try:
         os.kill(pid, 0)
@@ -127,27 +128,27 @@ def _lock_holder_alive():
 
 
 class Api:
-    """Методи для сторінки через pywebview.api. Жоден параметр не стає командою.
+    """Methods for the page through pywebview.api. No parameter becomes a command.
 
-    Атрибути з підкресленням (наприклад _window) pywebview не відкриває сторінці.
+    Attributes with an underscore (for example _window) are not exposed to the page by pywebview.
     """
 
     def __init__(self):
-        self._guard = threading.Lock()   # захищає стан, журнал і _proc
+        self._guard = threading.Lock()   # protects the state, the log and _proc
         self._proc = None
         self._stop_requested = False
         self._log = deque(maxlen=LOG_LINES)
-        self._window = None              # задається в main()
-        self._keep_in_menubar = False    # True, коли іконка в статус-барі встановлена
-        self._quitting = False           # True після «Вийти»: закриття вікна більше не ховає його
+        self._window = None              # set in main()
+        self._keep_in_menubar = False    # True when the menu bar icon is installed
+        self._quitting = False           # True after “Quit”: closing the window no longer hides it
         self._state = {"status": "idle", "started": None, "finished": None, "exit": None, "message": ""}
 
     def dashboard_url(self):
         return pathlib.Path(DASHBOARD).as_uri()
 
-    # ---------- Дозволи ----------
-    # Що можна зробити без ручного налаштування, а що ні. Повний доступ до диска не потрібен:
-    # жодна функція не читає захищені папки на кшталт ~/Library/Mail. Тому такого кроку немає.
+    # ---------- Permissions ----------
+    # What can be done without manual setup and what cannot. Full Disk Access is not needed:
+    # no function reads protected folders such as ~/Library/Mail. So there is no such step.
     def _finder_allowed(self):
         try:
             r = subprocess.run(
@@ -159,7 +160,7 @@ class Api:
             return False
 
     def permissions(self):
-        """Стан дозволів. Ніяких запитів тут не робиться: лише читання."""
+        """Permission state. No requests are made here: read-only."""
         return {
             "firstRunDone": os.path.exists(MARKER),
             "items": [
@@ -171,11 +172,11 @@ class Api:
         }
 
     def request_finder(self):
-        """Викликає запит macOS на керування Finder. Блокує, поки користувач не відповість."""
+        """Triggers the macOS request to control Finder. Blocks until the user answers."""
         return {"ok": self._finder_allowed()}
 
     def finish_setup(self):
-        """Позначає перший запуск завершеним, щоб панель налаштувань більше не з'являлась."""
+        """Marks the first run as done so the settings panel no longer appears."""
         try:
             os.makedirs(os.path.dirname(MARKER), exist_ok=True)
             open(MARKER, "w", encoding="utf-8").close()
@@ -183,7 +184,7 @@ class Api:
         except OSError as exc:
             return {"ok": False, "error": str(exc)}
 
-    # ---------- Календар: регенерація дня з збереженого знімка ----------
+    # ---------- Calendar: regenerating a day from a saved snapshot ----------
     def regen_day(self, day_id):
         if not isinstance(day_id, str) or not DAY_RE.match(day_id):
             return {"ok": False, "error": T("Неправильний ідентифікатор знімка")}
@@ -199,9 +200,9 @@ class Api:
             return {"ok": False, "error": last[-1] if last else T("Помилка регенерації")}
         return {"ok": True, "file": os.path.join(DATA_REPORTS, f"report-{day_id}.html")}
 
-    # ---------- Памʼять ----------
+    # ---------- Memory ----------
     def purge_memory(self):
-        """Очищає неактивну памʼять. macOS показує вікно з паролем адміністратора при кожному виклику."""
+        """Frees inactive memory. macOS shows a window asking for the administrator password on each call."""
         before = _free_pct()
         mem_before = cleanup.memory_snapshot()
         try:
@@ -218,27 +219,27 @@ class Api:
                 "memory": {"before": mem_before, "after": mem_after,
                            "delta": cleanup.memory_delta(mem_before, mem_after)}}
 
-    # ---------- Кеші ----------
+    # ---------- Caches ----------
     def cache_scan(self, days=cleanup.OLD_DAYS):
-        """Кандидати на очищення з розміром, категоріями і знімком памʼяті. Нічого не видаляє."""
+        """Cleaning candidates with size, categories and a memory snapshot. Deletes nothing."""
         return cleanup.scan(days)
 
     def cache_clean(self, ids, confirm, days=cleanup.OLD_DAYS, categories=None):
-        """Очищує вибрані кеші. Без confirm=True з інтерфейсу нічого не видаляється.
+        """Cleans the selected caches. Without confirm=True from the interface nothing is deleted.
 
-        days — поріг віку файлів (7, 30 або 90), categories — дозволені категорії; решта відхиляється.
+        days — file age threshold (7, 30 or 90), categories — allowed categories; the rest is rejected.
         """
         if confirm is not True:
             return {"ok": False, "error": T("Потрібне підтвердження")}
         return cleanup.clean(ids, days, categories)
 
-    # ---------- Великі файли ----------
+    # ---------- Large files ----------
     def big_files(self, min_mb=100):
-        """Найбільші файли в домашній папці. Тільки читання."""
+        """The largest files in the home folder. Read-only."""
         return bigfiles.find_big(min_mb)
 
     def reveal_file(self, path):
-        """Показує файл у Finder. Шлях має бути існуючим файлом усередині домашньої папки."""
+        """Shows a file in Finder. The path must be an existing file inside the home folder."""
         real = bigfiles.safe_path(path)
         if real is None:
             return {"ok": False, "error": T("Недозволений шлях")}
@@ -249,19 +250,19 @@ class Api:
         return {"ok": True}
 
     def trash_big(self, path, confirm):
-        """Переміщує великий файл у кошик (відновлюється). Лише з підтвердженням і для шляху всередині домашньої папки."""
+        """Moves a large file to the Trash (restorable). Only with confirmation and for a path inside the home folder."""
         if confirm is not True:
             return {"ok": False, "error": T("Потрібне підтвердження")}
         ok, error = trash.move_to_trash(path)
         return {"ok": ok, "error": error}
 
-    # ---------- Залишки видалених застосунків ----------
+    # ---------- Leftovers of removed apps ----------
     def leftovers_scan(self):
-        """Папки в ~/Library від застосунків, яких уже немає. Нічого не змінює."""
+        """Folders in ~/Library from apps that no longer exist. Changes nothing."""
         return {"items": leftovers.scan(), "olderThanDays": leftovers.MIN_AGE_DAYS}
 
     def leftovers_trash(self, paths, confirm):
-        """Переміщує вибрані залишки в кошик. Дозволено лише шляхи, які щойно знайшов пошук."""
+        """Moves the selected leftovers to the Trash. Only paths just found by the search are allowed."""
         if confirm is not True:
             return {"ok": False, "error": T("Потрібне підтвердження")}
         if not isinstance(paths, list) or not paths or len(paths) > leftovers.MAX_ITEMS:
@@ -278,6 +279,18 @@ class Api:
             if ok:
                 freed += item["sizeMb"]
         return {"ok": True, "results": results, "freedMb": round(freed, 1)}
+
+    def set_language(self, code):
+        """Language choice from the report window's Settings. The agent saves it and restarts: this only leaves a request."""
+        if code not in ("uk", "en"):
+            return {"ok": False, "error": T("Невідома мова")}
+        try:
+            os.makedirs(os.path.dirname(LANG_REQUEST), exist_ok=True)
+            with open(LANG_REQUEST, "w", encoding="utf-8") as fh:
+                fh.write(code)
+        except OSError as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True}
 
     def status(self):
         with self._guard:
@@ -298,7 +311,7 @@ class Api:
             except FileExistsError:
                 if _lock_holder_alive():
                     return {"ok": False, "error": T("MacSafe уже виконує перевірку в іншому вікні")}
-                # Замок лишився від процесу, який зупинився під час перевірки: прибираємо і запускаємо
+                # The lock was left by a process that stopped during a check: we remove it and start
                 shutil.rmtree(LOCK_DIR, ignore_errors=True)
                 os.mkdir(LOCK_DIR)
             with open(os.path.join(LOCK_DIR, "pid"), "w", encoding="utf-8") as fh:
@@ -309,7 +322,7 @@ class Api:
         try:
             threading.Thread(target=self._run, daemon=True).start()
         except RuntimeError as exc:
-            # Потік не стартував: знімаємо блокування, інакше наступні перевірки не запустяться
+            # The thread did not start: we release the lock, otherwise the next checks will not run
             try:
                 shutil.rmtree(LOCK_DIR, ignore_errors=True)
             except OSError:
@@ -331,7 +344,7 @@ class Api:
                 encoding="utf-8",
                 errors="replace",
                 bufsize=1,
-                start_new_session=True,   # окрема група: зупинка зачіпає і дочірні процеси
+                start_new_session=True,   # a separate group: stopping also affects child processes
             )
             with self._guard:
                 self._proc = proc
@@ -367,7 +380,7 @@ class Api:
                 msg = T("Готово") if code == 0 else T("Перевірка завершилась помилкою")
             self._state.update(status=status, finished=time.time(), exit=code, message=msg)
             window = self._window
-        # Після успішної перевірки показуємо свіжий звіт; панель запуску додасть обробник завантаження
+        # After a successful check we show the fresh report; the run bar will add the load handler
         if window is not None and code == 0 and not self._stop_requested:
             try:
                 window.load_url(self.dashboard_url())
@@ -376,10 +389,10 @@ class Api:
 
     @staticmethod
     def _kill_group(proc):
-        """Зупиняє всю групу процесів: спершу ввічливо, потім примусово.
+        """Stops the whole process group: first politely, then forcibly.
 
-        Дочірній процес може ігнорувати SIGTERM або пережити bash, тому SIGKILL надсилається
-        групі незалежно від того, чи ще жив головний процес.
+        A child process may ignore SIGTERM or outlive bash, so SIGKILL is sent
+        the group, regardless of whether the main process is still alive.
         """
         try:
             os.killpg(proc.pid, signal.SIGTERM)
@@ -395,7 +408,7 @@ class Api:
         proc.wait()
 
     def shutdown(self):
-        """Зупиняє перевірку разом з дочірніми процесами. Викликається при виході з застосунку."""
+        """Stops the check together with its child processes. Called when the app quits."""
         with self._guard:
             self._stop_requested = True
             proc = self._proc
@@ -403,10 +416,10 @@ class Api:
             self._kill_group(proc)
 
     def _on_close(self, *_):
-        """Закриття вікна. Не публічний метод: сторінка його не бачить.
+        """Window closing. Not a public method: the page does not see it.
 
-        Якщо іконка в статус-барі активна, вікно лише ховається. Повернення False скасовує закриття
-        (так працює pywebview). Інакше закриття завершує перевірку.
+        If the menu bar icon is active, the window only hides. Returning False cancels the closing
+        (this is how pywebview works). Otherwise closing ends the check.
         """
         if self._keep_in_menubar and not self._quitting:
             self._window.hide()

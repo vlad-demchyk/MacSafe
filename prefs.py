@@ -1,16 +1,16 @@
-"""Налаштування статус-бару: які цифри показувати і в якому стилі.
+"""Menu bar settings: which numbers to show and in which style.
 
-Зберігаються в JSON у папці даних застосунку. Запис атомарний (тимчасовий файл + replace).
-Некоректний або пошкоджений файл не ламає запуск: беруться значення за замовчуванням.
+Stored as JSON in the app data folder. Writes are atomic (a temporary file + replace).
+An invalid or damaged file does not break the launch: default values are used.
 """
 import json
 import os
 
 DEFAULTS = {"cpu": True, "ram": True, "gpu": True, "style": "both", "interval": 2,
-            "alerts": True, "dailyCheck": True, "language": "auto"}
-STYLES = ("both", "icon", "text")   # іконка і цифри / лише іконка / лише цифри
-INTERVALS = (1, 2, 5)              # секунд між вибірками показників
-LANGUAGES = ("auto", "uk", "en")   # auto — за мовою системи
+            "alerts": True, "dailyCheck": True, "language": "en"}
+STYLES = ("both", "icon", "text")   # icon and numbers / icon only / numbers only
+INTERVALS = (1, 2, 5)              # seconds between metric samples
+LANGUAGES = ("uk", "en")   # English is the default
 
 
 class Prefs:
@@ -45,13 +45,13 @@ class Prefs:
             value = bool(value)
         elif key == "style":
             if value not in STYLES:
-                raise ValueError(f"Невідомий стиль: {value}")
+                raise ValueError(f"Unknown style: {value}")
         elif key == "interval":
             if value not in INTERVALS:
-                raise ValueError(f"Недопустимий інтервал: {value}")
+                raise ValueError(f"Invalid interval: {value}")
         elif key == "language":
             if value not in LANGUAGES:
-                raise ValueError(f"Невідома мова: {value}")
+                raise ValueError(f"Unknown language: {value}")
         else:
             raise KeyError(key)
         self._data[key] = value

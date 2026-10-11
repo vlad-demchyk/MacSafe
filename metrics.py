@@ -1,9 +1,9 @@
-"""Живі метрики для статус-бару: CPU, RAM, GPU і процеси, згруповані за застосунком.
+"""Live metrics for the menu bar: CPU, RAM, GPU and processes, grouped by app.
 
-Без root. Усе, що недоступно без прав, пропускається або позначається як None (показується «н/д»).
-Швидкі показники (CPU, RAM, GPU) оновлюються щосекунди і коштують десятки мікросекунд. Список процесів
-(дорогий, близько 30 мс) скануємо лише коли меню або панель відкриті (detail=True): у закритому стані
-агент не торкається процесів системи взагалі.
+No root. Anything unavailable without rights is skipped or marked None (shown as “n/a”).
+Quick metrics (CPU, RAM, GPU) update every second and cost tens of microseconds. The process list
+(expensive, about 30 ms) we scan only when the menu or panel is open (detail=True): in the closed state
+the agent does not touch system processes at all.
 """
 import ctypes
 import os
@@ -18,18 +18,18 @@ import psutil
 from gpu_iokit import _ok as _IOKIT_OK, gpu_detail_iokit, gpu_percent_iokit, gpu_time_by_pid
 
 APP_RE = re.compile(r"/([^/]+)\.app/")
-VERSION_RE = re.compile(r"^\d+(\.\d+)+$")   # бінарники з назвою-версією, наприклад claude у …/claude/versions/2.1.296
+VERSION_RE = re.compile(r"^\d+(\.\d+)+$")   # binaries named by version, for example claude in …/claude/versions/2.1.296
 SELF_NAME = "MacSafe"
 SELF_PID = os.getpid()
 GB = 1024 ** 3
 MB = 1024 ** 2
-GPU_KEYS = ("Device Utilization %", "GPU Activity(%)")   # основний ключ і фолбек (Stats/eul)
+GPU_KEYS = ("Device Utilization %", "GPU Activity(%)")   # the main key and the fallback (Stats/eul)
 
 
 def gpu_percent():
-    """Завантаження GPU, 0–100. Основний шлях — IOKit напряму (gpu_iokit), ioreg лише як запасний.
+    """GPU load, 0–100. The main path is IOKit directly (gpu_iokit), ioreg only as a fallback.
 
-    None, якщо ключа немає. Для кількох GPU береться максимум.
+    None if the key is missing. For several GPUs the maximum is taken.
     """
     if _IOKIT_OK:
         return gpu_percent_iokit()
@@ -37,9 +37,9 @@ def gpu_percent():
 
 
 def _gpu_percent_ioreg():
-    """Запасний шлях: ioreg (IOAccelerator), XML-вивід. None, якщо ключа немає.
+    """Fallback path: ioreg (IOAccelerator), XML output. None if the key is missing.
 
-    Для кількох GPU береться максимум, а не сума. Драйвер може не віддавати ключ: тоді None («н/д»).
+    For several GPUs the maximum is taken, not the sum. The driver may not return the key: then None (“n/a”).
     """
     try:
         raw = subprocess.run(
@@ -52,7 +52,7 @@ def _gpu_percent_ioreg():
 
 
 def parse_gpu(raw):
-    """Розбір XML-виводу ioreg: максимум серед GPU, або None. Окремо від запуску, щоб тестувати."""
+    """Parsing the XML output of ioreg: the maximum among GPUs, or None. Separate from the run so it can be tested."""
     try:
         devices = plistlib.loads(raw) if raw else []
     except (plistlib.InvalidFileException, ValueError, TypeError):
@@ -71,36 +71,36 @@ def parse_gpu(raw):
 
 
 def bundle_path(exe):
-    """Шлях до .app, якщо процес із застосунку; інакше None. Звідси береться системна іконка застосунку."""
+    """Path to the .app if the process belongs to an app; otherwise None. The system app icon is taken from here."""
     m = APP_RE.search(exe or "")
     return exe[: m.end() - 1] if m else None
 
 
 def _group_name(name, exe):
-    """Ім'я для групування: назва .app, якщо процес із застосунку; інакше назва процесу."""
+    """Name for grouping: the .app name if the process belongs to an app; otherwise the process name."""
     if exe:
         m = APP_RE.search(exe)
         if m:
             return m.group(1)
         base = os.path.basename(exe)
         if VERSION_RE.match(base):
-            # Бінарник названий версією: беремо назву папки продукту (…/claude/versions/2.1.296)
+            # The binary is named by its version: we take the product folder name (…/claude/versions/2.1.296)
             return os.path.basename(os.path.dirname(os.path.dirname(exe))) or name or "?"
     return name or "?"
 
 
 def killable(name, pids):
-    """Чи можна завершити групу процесів кнопкою «×»: є власні процеси користувача, і це не сам MacSafe."""
+    """Whether the process group can be quit with the “×” button: it has the user's own processes, and it is not MacSafe itself."""
     return bool(pids) and name != SELF_NAME
 
 
-_GPU_PREV = {"at": None, "ns": None}   # попередній знімок накопиченого часу GPU по PID
+_GPU_PREV = {"at": None, "ns": None}   # the previous snapshot of accumulated GPU time per PID
 
 
 def _gpu_percent_by_pid(now):
-    """GPU % по PID: приріст накопиченого часу GPU за інтервал, у % від реального часу. None, якщо невідомо.
+    """GPU % per PID: the increase of accumulated GPU time over the interval, as a % of real time. None if unknown.
 
-    Перший виклик лише запам'ятовує базу. Значення процесу — сума по його клієнтах GPU, не більше 100.
+    The first call only stores the baseline. A process value is the sum over its GPU clients, at most 100.
     """
     ns = gpu_time_by_pid()
     prev_at, prev_ns = _GPU_PREV["at"], _GPU_PREV["ns"]
@@ -113,11 +113,11 @@ def _gpu_percent_by_pid(now):
 
 
 def take_processes():
-    """Групи процесів: CPU (% одного ядра, як у Activity Monitor), RSS і PID власних процесів.
+    """Process groups: CPU (% of one core, as in Activity Monitor), RSS and PIDs of their own processes.
 
-    killable — True, якщо в групі є хоча б один процес поточного користувача (його можна завершити
-    без root). Сам MacSafe не пропонує завершити себе. Повертає (topCpu, topRam, усі групи): усі групи
-    потрібні, щоб зафіксований рядок показував значення, навіть коли процес випав з топ-списку.
+    killable — True if the group has at least one process of the current user (it can be quit
+    without root). MacSafe itself does not offer to quit itself. Returns (topCpu, topRam, all groups): all groups
+    needed so that a pinned row shows values even when the process has dropped out of the top list.
     """
     uid = os.getuid()
     groups = {}
@@ -165,14 +165,14 @@ _GPU_CORES_RE = re.compile(r'"gpu-core-count" = (\d+)')
 
 
 def parse_core_types(text):
-    """Тип кожного логічного ядра з виводу ioreg: «P» — продуктивне, «E» — економне. Порожній список, якщо даних немає.
+    """The type of each logical core from the ioreg output: “P” — performance, “E” — efficiency. An empty list if there is no data.
 
-    Кожен вузол ioreg має свій cluster-type і logical-cpu-id, тому пара беремо в межах одного вузла.
+    Each ioreg node has its own cluster-type and logical-cpu-id, so we take the pair within one node.
     """
     types = {}
     node_type, node_cpu = None, None
     for line in text.splitlines():
-        if "+-o " in line:   # початок нового вузла дерева
+        if "+-o " in line:   # the start of a new tree node
             if node_cpu is not None and node_type is not None:
                 types[node_cpu] = node_type
             node_type, node_cpu = None, None
@@ -191,15 +191,15 @@ _HW = {}
 
 
 def parse_gpu_cores(text):
-    """Кількість ядер GPU з виводу ioreg (ключ gpu-core-count). None, якщо немає."""
+    """GPU core count from the ioreg output (key gpu-core-count). None if missing."""
     match = _GPU_CORES_RE.search(text)
     return int(match.group(1)) if match else None
 
 
 def hardware_info():
-    """Незмінні дані про залізо, читаються раз: типи ядер P/E, ядра GPU, назва чіпа.
+    """Unchanging hardware data, read once: P/E core types, GPU cores, chip name.
 
-    ioreg важкий, тому з його виводу беремо лише потрібні значення, а сирий текст не зберігаємо.
+    ioreg is heavy, so we take only the needed values from its output and do not keep the raw text.
     """
     if not _HW:
         types, gpu_cores, chip = [], None, ""
@@ -220,7 +220,7 @@ def hardware_info():
 
 
 def core_types():
-    """Типи ядер P/E. Порожній список, якщо macOS не віддала тип; тоді всі ядра однаково блакитні."""
+    """P/E core types. An empty list if macOS did not return the type; then all cores are the same blue."""
     return hardware_info()["coreTypes"]
 
 
@@ -228,7 +228,7 @@ _LIBC = {"lib": None}
 
 
 def _sysctl_u64(name):
-    """Значення sysctl у 64 біти (наприклад, розмір стиснутої пам'яті). None, якщо немає."""
+    """sysctl value as 64-bit (for example, the size of compressed memory). None if missing."""
     try:
         if _LIBC["lib"] is None:
             _LIBC["lib"] = ctypes.CDLL(None)
@@ -242,13 +242,13 @@ def _sysctl_u64(name):
 
 
 def _kind_avg(loads, kinds, kind):
-    """Середнє навантаження ядер заданого типу (P або E). None, якщо типів немає."""
+    """Average load of cores of the given type (P or E). None if there are no types."""
     values = [v for v, k in zip(loads, kinds) if k == kind]
     return sum(values) / len(values) if values else None
 
 
 def gpu_detail():
-    """GPU: device, renderer, tiler (0–100 або None). None, якщо немає даних узагалі."""
+    """GPU: device, renderer, tiler (0–100 or None). None if there is no data at all."""
     if _IOKIT_OK:
         return gpu_detail_iokit()
     value = _gpu_percent_ioreg()
@@ -259,7 +259,7 @@ _NET = {"at": None, "rx": None, "tx": None}
 
 
 def net_rates(now=None):
-    """Швидкість мережі, байт/с: (вхідна, вихідна). None, поки немає попереднього знімка або лічильників."""
+    """Network speed, bytes/s: (incoming, outgoing). None until there is a previous snapshot or counters."""
     now = time.monotonic() if now is None else now
     try:
         c = psutil.net_io_counters()
@@ -274,7 +274,7 @@ def net_rates(now=None):
 
 
 def disk_info():
-    """Диск користувача: вільно і всього, ГБ, відсоток зайнятого. None, якщо не вдалося."""
+    """User disk: free and total, GB, percent in use. None if it failed."""
     try:
         d = psutil.disk_usage(os.path.expanduser("~"))
     except Exception:
@@ -283,7 +283,7 @@ def disk_info():
 
 
 def battery_info():
-    """Батарея: відсоток і чи живиться від мережі. None на Mac без батареї."""
+    """Battery: percentage and whether it is on power. None on a Mac without a battery."""
     try:
         b = psutil.sensors_battery()
     except Exception:
@@ -294,7 +294,7 @@ def battery_info():
 
 
 def take_quick():
-    """Швидкі показники для головної панелі і зон: CPU, RAM, swap, GPU і деталі. Кілька мілісекунд плюс IOKit."""
+    """Quick metrics for the main panel and zones: CPU, RAM, swap, GPU and details. A few milliseconds plus IOKit."""
     vm = psutil.virtual_memory()
     sw = psutil.swap_memory()
     times = psutil.cpu_times_percent(interval=None)
@@ -335,12 +335,12 @@ def take_quick():
 
 
 class Monitor:
-    """Фоновий потік: швидкі показники щосекунди; список процесів лише коли detail=True.
+    """Background thread: quick metrics every second; the process list only when detail=True.
 
-    Коли detail вмикається, перший прохід по процесах лише задає базу для CPU (psutil рахує % від попереднього
-    виклику), його результат відкидаємо. Наступний цикл уже дає справжні значення. Коли detail вимкнено,
-    сканування зупиняється, а старий список очищується.
-    Зміна detail з головного потоку безпечна: читання і запис під замком, пробудження через подію.
+    When detail is switched on, the first pass over processes only sets the CPU baseline (psutil counts % from the previous
+    call), its result is discarded. The next cycle already gives real values. When detail is turned off,
+    the scan stops, and the old list is cleared.
+    Changing detail from the main thread is safe: reads and writes under a lock, waking through an event.
     """
 
     def __init__(self, interval=1.0):
@@ -354,13 +354,13 @@ class Monitor:
         self._top_gpu = []
         self._groups = []
         self._stop = threading.Event()
-        self._wake = threading.Event()   # будить цикл одразу, коли відкрили список процесів
+        self._wake = threading.Event()   # wakes the cycle at once when the process list is opened
         self._thread = None
 
     def start(self):
-        # Прайм системного CPU: перший cpu_percent завжди 0, тому робимо виклик до першого циклу
+        # Priming the system CPU: the first cpu_percent is always 0, so we make a call before the first cycle
         psutil.cpu_percent(interval=None)
-        core_types()   # типи ядер читаємо до показу панелі, а не в момент відкриття
+        core_types()   # core types are read before the panel is shown, not at the moment of opening
         self._thread = threading.Thread(target=self._loop, name="audit-monitor", daemon=True)
         self._thread.start()
 
@@ -370,18 +370,18 @@ class Monitor:
 
     @property
     def interval(self):
-        """Інтервал вибірок: відкрита панель — 1 с, закрита — як у налаштуваннях."""
+        """Sampling interval: open panel — 1 s, closed — as in the settings."""
         with self._guard:
             detail = self._detail
         return min(self._interval, 1.0) if detail else self._interval
 
     def set_interval(self, seconds):
-        """Інтервал між вибірками, секунд. Діє з наступного циклу."""
+        """Interval between samples, in seconds. Takes effect from the next cycle."""
         if seconds and seconds > 0:
             self._interval = float(seconds)
 
     def set_detail(self, on):
-        # Останній список лишається при закритті: після повторного відкриття він одразу видно
+        # The last list stays on close: after reopening it is visible at once
         with self._guard:
             self._detail = bool(on)
             self._primed = False
@@ -402,7 +402,7 @@ class Monitor:
                 with self._guard:
                     detail, primed = self._detail, self._primed
                 if detail and not primed:
-                    # База для CPU і GPU: RAM і список оновлюються одразу, CPU і GPU — з наступного проходу
+                    # Baseline for CPU and GPU: RAM and the list update at once, CPU and GPU from the next pass
                     _, top_ram, _, groups = take_processes()
                     prime = True
                     ready = False
@@ -422,5 +422,5 @@ class Monitor:
                     self._latest = snap
             except Exception:
                 pass
-            # Після праймінгу чекаємо повний інтервал, без пробудження: інакше справжній замір піде через мілісекунди
+            # After priming we wait the full interval, without waking up: otherwise the real measurement would come after milliseconds
             (self._stop if prime else self._wake).wait(min(self._interval, 1.0) if prime else self.interval)

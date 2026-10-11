@@ -1,22 +1,22 @@
 #!/bin/bash
-# Пакує build/MacSafe.app у DMG і, якщо задано NOTARY_PROFILE, віддає на notarization.
+# Packs build/MacSafe.app into a DMG and, if NOTARY_PROFILE is set, submits it for notarization.
 #
 #   SIGN_IDENTITY="Developer ID Application: ..." ./build_app.sh
 #   NOTARY_PROFILE=macsafe ./packaging/make_dmg.sh
 #
-# Профіль створюється один раз: xcrun notarytool store-credentials macsafe --apple-id ... --team-id ...
-# Потрібен платний Apple Developer акаунт. Без нього застосунок працює лише з ad-hoc підписом на цьому Mac.
+# The profile is created once: xcrun notarytool store-credentials macsafe --apple-id ... --team-id ...
+# A paid Apple Developer account is needed. Without it the app works only with an ad-hoc signature on this Mac.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$HERE/build/MacSafe.app"
 DMG="$HERE/build/MacSafe.dmg"
-fail() { echo "ПОМИЛКА: $*" >&2; exit 1; }
-[ -d "$APP" ] || fail "спершу ./build_app.sh"
-codesign --verify --deep "$APP" 2>/dev/null || fail "підпис бандла недійсний"
+fail() { echo "ERROR: $*" >&2; exit 1; }
+[ -d "$APP" ] || fail "run ./build_app.sh first"
+codesign --verify --deep "$APP" 2>/dev/null || fail "bundle signature is invalid"
 if [ -n "${NOTARY_PROFILE:-}" ]; then
-  # Notarization вимагає строгої перевірки. venv бандла має символічні посилання на Python із Command Line Tools
-  # поза бандлом, тому вона не пройде, доки Python не вбудований у бандл (див. README, «Розповсюдження»).
-  codesign --verify --deep --strict "$APP" 2>/dev/null || fail "строгий підпис не проходить: venv посилається на Python поза бандлом"
+  # Notarization requires a strict check. The bundle's venv has symbolic links to Python from the Command Line Tools
+  # outside the bundle, so it will not pass until Python is embedded in the bundle (see README, “Distribution”).
+  codesign --verify --deep --strict "$APP" 2>/dev/null || fail "strict signature check fails: the venv points to Python outside the bundle"
 fi
 rm -f "$DMG"
 STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT

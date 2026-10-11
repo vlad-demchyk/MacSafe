@@ -1,11 +1,11 @@
 #!/bin/bash
-# Локальний аудитор macOS. Не передає дані в мережу (окрім --check-updates).
-# Крок 1 (цей файл): збирає факти, оцінює ризики, формує JSON.
-# Крок 2 (template.html): JavaScript малює розділи, дропдауни, графіки і зони.
+# A local macOS auditor. Does not send data to the network (except --check-updates).
+# Step 1 (this file): collects facts, assesses risks, builds the JSON.
+# Step 2 (template.html): JavaScript draws the sections, dropdowns, graphs and zones.
 #
-#   bash generate-report.sh                   швидкий знімок
-#   bash generate-report.sh --deep            + кеші по папках, великі файли, Homebrew
-#   bash generate-report.sh --check-updates   + оновлення macOS (потрібен інтернет)
+#   bash generate-report.sh                   quick snapshot
+#   bash generate-report.sh --deep            + caches by folder, large files, Homebrew
+#   bash generate-report.sh --check-updates   + macOS updates (needs internet)
 
 set -uo pipefail
 PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -18,29 +18,29 @@ for arg in "$@"; do
     --deep) DEEP=1 ;;
     --check-updates) CHECK_UPDATES=1 ;;
     --regen) break ;;   # обробляється нижче, разом з ідентифікатором знімка
-    *) echo "Невідомий параметр: $arg" >&2; exit 2 ;;
+    *) echo "Unknown parameter: $arg" >&2; exit 2 ;;
   esac
 done
 
-# ---------- Налаштування ----------
+# ---------- Settings ----------
 MAX_REPORTS=60                  # скільки HTML-звітів зберігати (один на день)
 MAX_SNAPSHOTS=60                # скільки JSON-знімків зберігати (календар показує ці дні)
 MAX_HISTORY=52                  # скільки записів історії тримати (рік щотижня)
 REPORT_PERIOD_DAYS=7            # вікно для аварійних звітів
-# Фонові процеси, які потрібні для роботи. Їхній середній CPU-час не вважається проблемою:
-# перевіряються лише поточні сплески, цикл перезапусків і помилки в логах.
+# Background processes needed for work. Their average CPU time is not considered a problem:
+# only current spikes, restart loops and errors in the logs are checked.
 EXPECTED_PROCESS_RE='^(brain-daemon|codebase-memory-mcp)$'
 XBRAIN_LOG="$HOME/.xbrain/daemon.log"
 XBRAIN_DB="$HOME/brain/.brain/index.db"
 
-# ---------- Шляхи ----------
+# ---------- Paths ----------
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
-# Дані звітів лежать поза репозиторієм. Шлях можна задати змінною AUDIT_DATA_DIR.
+# Report data lives outside the repository. The path can be set with the AUDIT_DATA_DIR variable.
 REPORTS_DIR="${AUDIT_DATA_DIR:-$HOME/Library/Application Support/MacSafe}"
 DATA_DIR="$REPORTS_DIR/дані"
 SYSTEMS_DIR="$REPORTS_DIR/системи"
 TEMPLATE="$SCRIPT_DIR/template.html"
-# Один звіт на день: ідентифікатор — дата. Повторний запуск того самого дня замінює звіт цього дня.
+# One report per day: the ID is the date. Running again on the same day replaces that day's report.
 TS="$(date '+%Y-%m-%d')"
 REPORT_NAME="report-${TS}.html"
 REPORT_FILE="$REPORTS_DIR/$REPORT_NAME"
@@ -50,15 +50,15 @@ HISTORY_FILE="$DATA_DIR/history.json"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/sysreport.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$REPORTS_DIR" "$DATA_DIR" "$SYSTEMS_DIR"
-[ -f "$TEMPLATE" ] || { echo "Помилка: шаблон не знайдено: $TEMPLATE" >&2; exit 1; }
+[ -f "$TEMPLATE" ] || { echo "Error: template not found: $TEMPLATE" >&2; exit 1; }
 
-# Режим --regen <id>: перегенерувати HTML-звіт за збереженим знімком, без нової перевірки.
-# Так старий день відображається поточним шаблоном. Нові дані не збираються.
+# Mode --regen <id>: regenerate the HTML report from a saved snapshot, without a new check.
+# This way an old day is shown with the current template. No new data is collected.
 if [ "${1:-}" = "--regen" ]; then
   RID="${2:-}"
-  [[ "$RID" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{2}-[0-9]{2}-[0-9]{2})?$ ]] || { echo "Помилка: неправильний ідентифікатор знімка: $RID" >&2; exit 2; }
+  [[ "$RID" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{2}-[0-9]{2}-[0-9]{2})?$ ]] || { echo "Error: invalid snapshot identifier: $RID" >&2; exit 2; }
   SRC="$DATA_DIR/report-$RID.json"
-  [ -f "$SRC" ] || { echo "Помилка: знімка за цей день немає: $SRC" >&2; exit 1; }
+  [ -f "$SRC" ] || { echo "Error: there is no snapshot for this day: $SRC" >&2; exit 1; }
   OUT="$REPORTS_DIR/report-$RID.html"
   cat > "$WORK/render.pl" <<'PERL'
 use strict;
@@ -83,7 +83,7 @@ my $hist = defined $hist_text ? eval { $json->decode($hist_text) } : undef;
 $core->{history} = ref $hist eq 'ARRAY' ? $hist : [];
 
 my @systems;
-opendir(my $sh, $sys_dir) or die "Немає папки $sys_dir: $!\n";
+opendir(my $sh, $sys_dir) or die "No folder $sys_dir: $!\n";
 for my $name (sort readdir($sh)) {
   next unless $name =~ /\.json$/i;
   my $d = eval { $json->decode(slurp("$sys_dir/$name")) };
@@ -95,22 +95,22 @@ $core->{systems} = \@systems;
 my $data = $json->encode($core);
 $data =~ s/</\\u003c/g;
 my $html = slurp($tpl_path);
-$html =~ s/__REPORT_JSON__/$data/ or die "У шаблоні немає місця для даних\n";
+$html =~ s/__REPORT_JSON__/$data/ or die "The template has no place for data\n";
 my $tmp = "$out_path.tmp.$$";
-open my $ofh, '>:raw', $tmp or die "Не записано $tmp: $!\n";
-print $ofh $html or die "Помилка запису $tmp: $!\n";
-close $ofh or die "Помилка закриття $tmp: $!\n";
-rename $tmp, $out_path or die "Не замінено $out_path: $!\n";
+open my $ofh, '>:raw', $tmp or die "Could not write $tmp: $!\n";
+print $ofh $html or die "Write error for $tmp: $!\n";
+close $ofh or die "Close error for $tmp: $!\n";
+rename $tmp, $out_path or die "Could not replace $out_path: $!\n";
 PERL
   if ! perl "$WORK/render.pl" "$SRC" "$HISTORY_FILE" "$SYSTEMS_DIR" "$TEMPLATE" "$OUT"; then
-    echo "Помилка: не вдалося перегенерувати звіт за $RID" >&2
+    echo "Error: could not regenerate the report for $RID" >&2
     exit 1
   fi
-  echo "Перегенеровано: $OUT"
+  echo "Regenerated: $OUT"
   exit 0
 fi
 
-# ---------- Допоміжні функції ----------
+# ---------- Helper functions ----------
 note() { printf '%s\n' "$*"; }
 is_number() { [[ "${1:-}" =~ ^[0-9]+([.][0-9]+)?$ ]]; }
 num() { if [[ "${1:-}" =~ ^(0|[1-9][0-9]*)([.][0-9]+)?$ ]]; then printf '%s' "$1"; else printf 'null'; fi; }
@@ -121,7 +121,7 @@ sp_field() { printf '%s\n' "$1" | awk -F': ' -v f="$2" '$1 ~ f { print $2; exit 
 ioreg_value() { printf '%s\n' "$IOREG_BATT" | awk -v key="$1" '$0 ~ "\"" key "\" = " { sub(/^.*= /, ""); gsub(/[[:space:]"]/, ""); print; exit }'; }
 size_mb() { [ -e "$1" ] || return 0; du -s -k -x "$1" 2>/dev/null | awk '{ printf "%d", $1 / 1024 }'; }
 
-# JSON-хелпери. Рядок екранується perl-ом; порожній рядок дає "".
+# JSON helpers. The string is escaped by perl; an empty string gives “”.
 jstr() {
   if [ -z "${1:-}" ]; then printf '""'; return; fi
   printf '%s' "$1" | perl -CS -0777 -pe 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r/\\r/g; s/\n/\\n/g; s/([\x00-\x08\x0b\x0c\x0e-\x1f])/sprintf("\\u%04x", ord($1))/ge; $_ = "\"$_\""'
@@ -133,7 +133,7 @@ kb() { printf '"%s":%s' "$1" "${2:-false}"; }
 arr() { local IFS=,; printf '[%s]' "$*"; }
 obj() { local IFS=,; printf '{%s}' "$*"; }
 
-# Безпекові команди: приймаємо лише успішний виклик без діагностики в stderr.
+# Security commands: we accept only a successful call with no diagnostics in stderr.
 read_security() {
   local out
   command -v "$1" >/dev/null 2>&1 || return 1
@@ -153,8 +153,8 @@ add_security() { # назва kind значення команда порада
   SECURITY_ARR+=("$(obj "$(kv label "$1")" "$(kv kind "$kind")" "$(kv status "$status")" "$(kv value "$value")" "$(kv command "$4")" "$(kv advice "$advice")")")
 }
 
-# ---------- Збір: обладнання і система ----------
-note "Збір: обладнання і система"
+# ---------- Collecting: hardware and system ----------
+note "Collecting: hardware and system"
 HW_DATA="$(system_profiler SPHardwareDataType 2>/dev/null || true)"
 MODEL_NAME="$(sp_field "$HW_DATA" 'Model Name')"
 CHIP="$(sp_field "$HW_DATA" '^ *Chip')"
@@ -178,7 +178,7 @@ if is_number "$BOOT_EPOCH"; then
 fi
 DATE_TEXT="$(date '+%d.%m.%Y о %H:%M')"
 
-# ---------- Збір: батарея ----------
+# ---------- Collecting: battery ----------
 BATTERY_RAW="$(pmset -g batt 2>/dev/null || true)"
 BATT_PCT="$(printf '%s\n' "$BATTERY_RAW" | sed -nE 's/.*\t([0-9]+)%;.*/\1/p' | head -1)"
 BATT_STATE_RAW="$(printf '%s\n' "$BATTERY_RAW" | sed -nE 's/.*;[[:space:]]*([^;]+);.*/\1/p' | head -1)"
@@ -192,7 +192,7 @@ esac
 BATT_REMAIN="$(printf '%s\n' "$BATTERY_RAW" | sed -nE 's/.*;[[:space:]]*([0-9]+:[0-9]+) remaining.*/\1/p' | head -1)"
 IOREG_BATT="$(ioreg -r -c AppleSmartBattery 2>/dev/null || true)"
 CYCLE_COUNT="$(ioreg_value CycleCount)"
-# Ємність на сучасних Mac лежить усередині рядка BatteryData: FullChargeCapacity і DesignCapacity у мАг
+# On modern Macs the capacity is inside the BatteryData string: FullChargeCapacity and DesignCapacity in mAh
 BATT_DATA_LINE="$(printf '%s\n' "$IOREG_BATT" | grep -m1 '"BatteryData"' || true)"
 batt_data_value() { printf '%s' "$BATT_DATA_LINE" | sed -nE "s/.*\"$1\"=([0-9]+).*/\1/p" | head -1; }
 MAX_CAP="$(batt_data_value FullChargeCapacity)"
@@ -212,7 +212,7 @@ is_number "$BATT_VOLT_RAW" && BATT_VOLT_V="$(div "$BATT_VOLT_RAW" 1000 '%.2f')"
 BATT_PRESENT=false
 [ -n "$BATT_PCT" ] && BATT_PRESENT=true
 
-# ---------- Збір: сховище ----------
+# ---------- Collecting: storage ----------
 DISK_INFO="$(df -k /System/Volumes/Data 2>/dev/null | tail -1)"
 [ -n "$DISK_INFO" ] || DISK_INFO="$(df -k / 2>/dev/null | tail -1)"
 DISK_TOTAL_KB="$(printf '%s\n' "$DISK_INFO" | awk '{print $2}')"
@@ -228,8 +228,8 @@ STORAGE_DEVICE="$(sp_field "$STORAGE_DATA" 'Device Name')"
 SMART_STATUS="$(sp_field "$STORAGE_DATA" 'S.M.A.R.T.')"
 LOCAL_SNAPS="$(tmutil listlocalsnapshots / 2>/dev/null | grep -c 'com.apple.TimeMachine' || true)"
 
-# ---------- Збір: навантаження і памʼять ----------
-note "Збір: навантаження, памʼять, процеси"
+# ---------- Collecting: load and memory ----------
+note "Collecting: load, memory, processes"
 TOP_OUTPUT="$(top -l 2 -s 1 -n 0 2>/dev/null || true)"
 CPU_LINE="$(printf '%s\n' "$TOP_OUTPUT" | awk '/CPU usage:/ { l = $0 } END { print l }')"
 CPU_USER="$(printf '%s\n' "$CPU_LINE" | sed -nE 's/.*: *([0-9.]+)% user.*/\1/p')"
@@ -240,7 +240,7 @@ if is_number "$CPU_USER" && is_number "$CPU_SYS"; then
 fi
 PHYS_LINE="$(printf '%s\n' "$TOP_OUTPUT" | awk '/PhysMem:/ { l = $0 } END { print l }')"
 MEM_USED_TEXT="$(printf '%s\n' "$PHYS_LINE" | sed -nE 's/^PhysMem: *([^,]+) used.*/\1/p')"
-# Сира неактивна памʼять (PhysMem: ... unused). Відрізняється від memory_pressure, який враховує те, що можна звільнити.
+# Raw inactive memory (PhysMem: ... unused). Different from memory_pressure, which accounts for what can be freed.
 UNUSED_RAW="$(printf '%s\n' "$PHYS_LINE" | sed -nE 's/.*,[[:space:]]*([0-9]+([.][0-9]+)?)([MGK])[[:space:]]+unused.*/\1\3/p')"
 UNUSED_MB=""
 case "$UNUSED_RAW" in
@@ -248,7 +248,7 @@ case "$UNUSED_RAW" in
   *M) UNUSED_MB="${UNUSED_RAW%M}"; UNUSED_MB="${UNUSED_MB%%.*}" ;;
   *K) UNUSED_MB=0 ;;
 esac
-# Активний обмін з swap: дві вибірки vm_stat з інтервалом 5 с. Кумулятивні лічильники від завантаження не показують поточного стану.
+# Active swap traffic: two vm_stat samples 5 s apart. Cumulative counters since boot do not show the current state.
 VM_A="$(vm_stat 2>/dev/null || true)"
 [ -n "$VM_A" ] && sleep 5
 VM_B="$(vm_stat 2>/dev/null || true)"
@@ -280,7 +280,7 @@ if is_number "$MEM_FREE_PCT"; then
   elif [ "$MEM_FREE_PCT" -lt 10 ]; then MEM_PRESSURE_LEVEL="warning"; fi
 fi
 
-# Таблиця процесів: pid, секунди життя, CPU-секунди, %CPU, RSS KB, назва (останній компонент шляху)
+# Process table: pid, lifetime in seconds, CPU seconds, %CPU, RSS KB, name (the last path component)
 PS_TABLE="$WORK/ps.tsv"
 ps -Ao pid=,etime=,time=,%cpu=,rss=,comm= 2>/dev/null | awk '
   function secs(s,   parts, n, i, r, d, a) {
@@ -350,7 +350,7 @@ while IFS=$'\t' read -r gname grss gcount; do
 done < <(awk -F'\t' '{ g = $6; sub(/ Helper.*$/, "", g); sub(/ \(.*\)$/, "", g); rss[g] += $5; cnt[g]++ }
   END { for (k in rss) printf "%s\t%d\t%d\n", k, rss[k] / 1024, cnt[k] }' "$PS_TABLE" | sort -t$'\t' -k2,2nr | head -15)
 
-# Суми для окремих правил
+# Sums for individual rules
 FINDER_RSS_MB="$(awk -F'\t' '$6 == "Finder" { if ($5 > m) m = $5 } END { if (m > 0) printf "%.0f", m / 1024 }' "$PS_TABLE")"
 PANEL_RSS_MB="$(awk -F'\t' '$6 ~ /openAndSavePanel/ { s += $5 } END { if (s > 0) printf "%.0f", s / 1024 }' "$PS_TABLE")"
 PANEL_CPU="$(awk -F'\t' '$6 ~ /openAndSavePanel/ { s += $4 } END { if (s > 0) printf "%.1f", s }' "$PS_TABLE")"
@@ -358,10 +358,10 @@ ELECTRON_MB="$(awk -F'\t' '$6 ~ /^(Claude|Codex|codex|ChatGPT|Code|Cursor|Slack|
 XB_RSS_MB="$(awk -F'\t' '$6 == "brain-daemon" { if ($5 > m) m = $5 } END { if (m > 0) printf "%.0f", m / 1024 }' "$PS_TABLE")"
 FINDERSYNC_LIST="$(pluginkit -m -p com.apple.FinderSync 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[a-zA-Z][a-zA-Z0-9_-]*(\.[a-zA-Z0-9_-]+)+/) { sub(/\(.*/, "", $i); print $i; break } }' | sort -u | tr '\n' ' ' | sed 's/ *$//')"
 
-# Сплески прямо зараз (знімок CPU; 100% = одне ядро)
+# Spikes right now (CPU snapshot; 100% = one core)
 SPIKE_ROWS="$(awk -F'\t' '$4 >= 100 { print }' "$PS_TABLE" | sort -t$'\t' -k4,4gr | head -3)"
 
-# ---------- Збір: температури і графіка ----------
+# ---------- Collecting: temperatures and graphs ----------
 IOREG_ALL="$(ioreg -l 2>/dev/null || true)"
 CPU_TEMP_RAW="$(printf '%s\n' "$IOREG_ALL" | awk '/"sensor.*cpu.*temp|"cpu.*temp.*"|"TC[0-9][PCEF]"/ && /Temperature/ { gsub(/.*= /,""); gsub(/[^0-9]/,""); if ($1+0 > 0 && $1+0 < 20000) { print; exit } }')"
 GPU_TEMP_RAW="$(printf '%s\n' "$IOREG_ALL" | awk '/"sensor.*gpu.*temp|"gpu.*temp.*"|"TG[0-9][PCEF]"/ && /Temperature/ { gsub(/.*= /,""); gsub(/[^0-9]/,""); if ($1+0 > 0 && $1+0 < 20000) { print; exit } }')"
@@ -393,8 +393,8 @@ GPU_METAL="$(sp_field "$GPU_DATA" 'Metal Support')"
 GPU_RESOLUTION="$(sp_field "$GPU_DATA" 'Resolution')"
 GPU_DISPLAY_TYPE="$(sp_field "$GPU_DATA" 'Display Type')"
 
-# ---------- Збір: безпека і резервні копії ----------
-note "Збір: безпека і мережа"
+# ---------- Collecting: security and backups ----------
+note "Collecting: security and network"
 FILEVAULT_RAW="$(read_security fdesetup status || true)"
 case "$FILEVAULT_RAW" in
   "FileVault is On.") FILEVAULT_KIND="good"; FILEVAULT_TEXT="Увімкнено" ;;
@@ -426,7 +426,7 @@ case "$GK_RAW" in
   "assessments disabled") GK_KIND="critical"; GK_TEXT="Вимкнено" ;;
   *) GK_KIND="info"; GK_TEXT="" ;;
 esac
-# Інвентаризація не є антивірусним скануванням. Префікс com.apple не доводить підпис.
+# The inventory is not an antivirus scan. The com.apple prefix does not prove a signature.
 EXT_COUNT=""; EXT_THIRD_JSON=(); EXT_KIND="unknown"; EXT_TEXT=""
 EXT_RAW="$(read_security systemextensionsctl list || true)"
 if printf '%s\n' "$EXT_RAW" | awk '
@@ -451,7 +451,7 @@ if [ -r "$XPROTECT_PLIST" ]; then
 fi
 PROFILES_INCLUDED=true; PROFILES_KIND="unknown"; PROFILES_TEXT=""
 PROFILES_RAW="$(profiles status -type enrollment 2>&1)"; PROFILES_RC=$?
-# Не включаємо перевірку, якщо ця macOS прямо вимагає привілеїв.
+# We do not include the check if this macOS version directly requires privileges.
 if printf '%s\n' "$PROFILES_RAW" | grep -qiE 'requires? root|must be (run as )?root|root privileges|must be run as (an? )?admin'; then
   PROFILES_INCLUDED=false
 elif [ "$PROFILES_RC" -eq 0 ] && printf '%s\n' "$PROFILES_RAW" | awk '
@@ -486,7 +486,7 @@ if [ "$CHECK_UPDATES" -eq 1 ]; then
   fi
 fi
 
-# Один виклик lsof для всіх видимих TCP-слухачів. Без root список може бути неповним.
+# One lsof call for all visible TCP listeners. Without root the list may be incomplete.
 EXPOSED_FILE="$WORK/exposed.tsv"
 LISTEN_FILE="$WORK/listening.tsv"
 : > "$EXPOSED_FILE"; : > "$LISTEN_FILE"
@@ -501,7 +501,7 @@ if [ -n "$LISTEN_RAW" ] && printf '%s\n' "$LISTEN_RAW" | awk '
     printf "%s\t%s\t%s\t%s\n", proc,pid,port,addr; rows++; next }
   { bad=1 } END { exit (bad || !rows) }
 ' > "$LISTEN_FILE"; then
-  # lsof екранує не-ASCII байти як \xNN: повертаємо справжні символи в назвах процесів
+  # lsof escapes non-ASCII bytes as \xNN: we restore the real characters in process names
   perl -pe 's/\\x([0-9a-fA-F]{2})/pack("C", hex($1))/ge' "$LISTEN_FILE" > "$LISTEN_FILE.dec" && mv "$LISTEN_FILE.dec" "$LISTEN_FILE"
   sort -u "$LISTEN_FILE" -o "$LISTEN_FILE"
   awk -F'\t' '$4 !~ /^127[.]/ && $4 != "[::1]" && $4 != "localhost" { print $1 "\t" $3 "\t" $4 }' "$LISTEN_FILE" | sort -u > "$EXPOSED_FILE"
@@ -521,7 +521,7 @@ while IFS=$'\t' read -r ep eport eaddr; do
   EXPOSED_JSON+=("$(obj "$(kv proc "$ep")" "$(kv port "$eport")" "$(kv addr "$eaddr")")")
 done < "$EXPOSED_FILE"
 
-# Аварійні звіти (лише за REPORT_PERIOD_DAYS) і паніки ядра
+# Crash reports (only for REPORT_PERIOD_DAYS) and kernel panics
 CRASH_DIR="$HOME/Library/Logs/DiagnosticReports"
 CRASH_IPS="$(find "$CRASH_DIR" -maxdepth 1 -type f -name '*.ips' -mtime "-$REPORT_PERIOD_DAYS" 2>/dev/null | wc -l | tr -d ' ')"
 CRASH_DIAG="$(find /Library/Logs/DiagnosticReports -maxdepth 1 -type f -name '*.diag' -mtime "-$REPORT_PERIOD_DAYS" 2>/dev/null | wc -l | tr -d ' ')"
@@ -540,7 +540,7 @@ while IFS='|' read -r cepoch cfile; do
   CRASH_RECENT_JSON+=("$(obj "$(kv app "$capp")" "$(kv date "$(date -r "$cepoch" '+%d.%m.%Y %H:%M')")")")
 done < <(find "$CRASH_DIR" -maxdepth 1 -type f -name '*.ips' -mtime "-$REPORT_PERIOD_DAYS" -exec stat -f '%m|%N' {} \; 2>/dev/null | sort -rn | head -12)
 
-# Автозапуск: битий шлях, секрет у plist з доступом для всіх, кількість сторонніх агентів
+# Login items: broken path, a secret in a plist readable by everyone, number of third-party agents
 LAUNCH_THIRD=0
 LAUNCH_TOTAL=0; LAUNCH_COMPLETE=true; LAUNCH_COUNTS_COMPLETE=true
 LAUNCH_ITEMS=(); LAUNCH_DIRS=()
@@ -562,7 +562,7 @@ for ldir in "$HOME/Library/LaunchAgents" "/Library/LaunchAgents" "/Library/Launc
     if [ -r "$plist" ]; then
       label="$(read_security /usr/libexec/PlistBuddy -c 'Print :Label' "$plist" || true)"
     fi
-    # Частина plist (наприклад, Google Keystone) не має ключа Label: тоді міткою вважаємо назву файлу
+    # Some plists (for example, Google Keystone) have no Label key: then we take the file name as the label
     if [ -z "$label" ] && [ -r "$plist" ] && plutil -lint "$plist" >/dev/null 2>&1; then
       label="$(basename "$plist" .plist)"
     fi
@@ -598,7 +598,7 @@ LAUNCH_THIRD_KNOWN="$LAUNCH_THIRD"
 [ "$LAUNCH_COMPLETE" = true ] || LAUNCH_THIRD_KNOWN=""
 [ "$LAUNCH_COUNTS_COMPLETE" = true ] || LAUNCH_TOTAL=""
 
-# Стан XBrain daemon: лише фактичні сигнали з логу і бази, значення токена не читаються
+# XBrain daemon state: only actual signals from the log and database; token values are not read
 XB_ADDR_IN_USE=0; XB_BANNERS=0; XB_DB_ERRORS=0; XB_LOG_KB=""; XB_DB_CHECK="none"
 if [ -f "$XBRAIN_LOG" ]; then
   XB_ADDR_IN_USE="$(grep -c 'Address already in use' "$XBRAIN_LOG" 2>/dev/null || true)"
@@ -615,14 +615,14 @@ if [ -f "$XBRAIN_DB" ] && command -v sqlite3 >/dev/null 2>&1; then
 fi
 XB_ADDR_IN_USE="${XB_ADDR_IN_USE:-0}"; XB_BANNERS="${XB_BANNERS:-0}"; XB_DB_ERRORS="${XB_DB_ERRORS:-0}"
 
-# ---------- Очищення: кандидати (лише показ, нічого не видаляється) ----------
-note "Збір: кеші і кандидати на очищення"
+# ---------- Cleaning: candidates (display only, nothing is deleted) ----------
+note "Collecting: caches and cleaning candidates"
 CLEANUP=(); SAFE_TOTAL_MB=0
 add_cleanup() { # назва шлях ризик пояснення команда
   [ -n "$2" ] || return 0
   local mb
   mb="$(size_mb "$2")"
-  # Шлях є, а розмір не прочитався (наприклад, немає доступу): показуємо пункт з невідомим розміром
+  # The path exists, but the size could not be read (for example, no access): we show the item with an unknown size
   if [ -z "$mb" ]; then [ -e "$2" ] || return 0; mb="null"; fi
   CLEANUP+=("$(obj "$(kv label "$1")" "$(kv path "$2")" "$(kn sizeMb "$mb")" "$(kv risk "$3")" "$(kv note "$4")" "$(kv cmd "$5")")")
   if [ "$3" = "safe" ] && is_number "$mb"; then SAFE_TOTAL_MB=$((SAFE_TOTAL_MB + mb)); fi
@@ -649,7 +649,7 @@ if [ "${LOCAL_SNAPS:-0}" -ge 1 ]; then
 fi
 
 if [ "$DEEP" -eq 1 ]; then
-  note "Глибокий режим: кеші по папках, великі файли, Homebrew"
+  note "Deep mode: caches by folder, large files, Homebrew"
   while IFS=$'\t' read -r ckb cpath; do
     [ -n "$cpath" ] || continue
     if [ "$cpath" -ef "$HOME/Library/Caches/pip" ] || { [ -n "$BREW_CACHE" ] && [ "$cpath" -ef "$BREW_CACHE" ]; }; then
@@ -673,8 +673,8 @@ else
   BREW_OUTDATED="null"
 fi
 
-# ---------- Проблеми і рекомендації ----------
-# add_issue <critical|warning|info> <категорія> <заголовок> <деталі> <докази> <чому важливо> <перевірка> <ризик дії> [кроки...]
+# ---------- Issues and recommendations ----------
+# add_issue <critical|warning|info> <category> <title> <details> <evidence> <why it matters> <check> <action risk> [steps...]
 ISSUES=()
 N_CRIT=0; N_WARN=0; N_INFO=0; PENALTY=0
 add_issue() {
@@ -689,7 +689,7 @@ add_issue() {
   esac
 }
 
-# Безпека
+# Security
 if [ "$FILEVAULT_KIND" = critical ]; then
   add_issue critical "Безпека" "FileVault вимкнено" "Дані на диску не зашифровані на рівні macOS." \
     "fdesetup status: FileVault is Off" \
@@ -750,7 +750,7 @@ if [ "$BACKUP_KIND" = warning ]; then
     "Додайте другу копію у хмару або на інший диск (правило 3-2-1)."
 fi
 
-# Стабільність
+# Stability
 if is_number "$PANIC_30" && [ "$PANIC_30" -ge 1 ]; then
   add_issue critical "Стабільність" "Kernel panic за 30 днів: ${PANIC_30}" "Система аварійно перезавантажувалась через збій ядра." \
     "Файлів .panic: ${PANIC_30}" \
@@ -847,7 +847,7 @@ if is_number "${ELECTRON_MB:-}" && [ "$ELECTRON_MB" -ge 2500 ]; then
     "Перезапускайте застосунки, коли вони роздуваються."
 fi
 
-# Процесор
+# Processor
 if is_number "${LOAD_5_PER_CORE:-}"; then
   LOAD_INT="$(integer_part "$LOAD_5_PER_CORE")"
   if [ "$LOAD_INT" -ge 1 ] && [ "$(awk -v x="$LOAD_5_PER_CORE" 'BEGIN { print (x >= 1.5) ? 1 : 0 }')" -eq 1 ]; then
@@ -900,7 +900,7 @@ while IFS=$'\t' read -r lpid let lct lcpu lrss lname; do
     "Стежте за показником у наступних звітах."
 done < <(awk -F'\t' '$2 >= 3600 && $3 / $2 >= 0.25 { print }' "$PS_TABLE" | sort -t$'\t' -k3,3gr | head -3)
 
-# Температури і графіка
+# Temperatures and graphs
 if is_number "${CPU_TEMP_C:-}"; then
   CPU_TEMP_INT="$(integer_part "$CPU_TEMP_C")"
   if [ "$CPU_TEMP_INT" -ge 95 ]; then
@@ -917,7 +917,7 @@ if is_number "${CPU_TEMP_C:-}"; then
       "Стежте за трендом у наступних звітах."
   fi
 fi
-# Тепловий тиск macOS через pmset -g therm (без root). Поріг: текст без фрази «No thermal warning level has been recorded».
+# macOS thermal pressure through pmset -g therm (no root). Threshold: text without the phrase “No thermal warning level has been recorded”.
 THERM_RAW="$(pmset -g therm 2>&1 || true)"
 THERM_LEVEL="Немає даних"
 if printf '%s\n' "$THERM_RAW" | grep -qiE '^[[:space:]]*(Note: )?No thermal warning level has been recorded[.]?[[:space:]]*$'; then
@@ -941,7 +941,7 @@ elif [ "$THROTTLE_KIND" = warning ]; then
     "Дайте Mac охолонути і не заряджайте його на спеці."
 fi
 
-# Батарея
+# Battery
 if is_number "${BATT_HEALTH_PCT:-}"; then
   BH="$(integer_part "$BATT_HEALTH_PCT")"
   if [ "$BH" -lt 80 ]; then
@@ -970,7 +970,7 @@ if is_number "${CYCLE_COUNT:-}"; then
   fi
 fi
 
-# Сховище
+# Storage
 if is_number "${DISK_PCT:-}"; then
   if [ "$DISK_PCT" -ge 90 ]; then
     add_issue critical "Сховище" "Системний диск майже заповнений: ${DISK_PCT}%" "Вільно близько ${DISK_AVAIL_GB:-?} ГБ." \
@@ -1000,7 +1000,7 @@ if [ "$SAFE_TOTAL_MB" -ge 1024 ]; then
     "Очистіть кеші по одному, як у команді в таблиці."
 fi
 
-# Автозапуск і оновлення
+# Login items and updates
 if [ "${#BROKEN_JSON[@]}" -gt 0 ]; then
   add_issue warning "Автозапуск" "Битий автозапуск: ${#BROKEN_JSON[@]} агент(и)" "Plist вказує на файл, якого немає." \
     "Агенти з відсутніми програмами, див. розділ «Автозапуск»" \
@@ -1026,7 +1026,7 @@ if is_number "${BREW_OUTDATED:-}" && [ "$BREW_OUTDATED" -ge 10 ]; then
     "brew upgrade і brew cleanup -s."
 fi
 
-# XBrain daemon: лише фактичні сигнали з логу і бази
+# XBrain daemon: only actual signals from the log and database
 if [ "$XB_ADDR_IN_USE" -ge 5 ]; then
   add_issue warning "XBrain daemon" "Конфлікт порту 7717: ${XB_ADDR_IN_USE} помилок" \
     "У лозі ${XB_ADDR_IN_USE} разів «Address already in use» при ${XB_BANNERS} банерах запуску." \
@@ -1071,11 +1071,11 @@ SCORE=$((100 - PENALTY)); [ "$SCORE" -lt 0 ] && SCORE=0
 if [ "$SCORE" -ge 85 ]; then HEALTH_KIND="good"; HEALTH_TEXT="Добрий"; HEALTH_SUMMARY="Добрий загальний стан за доступними сигналами."
 elif [ "$SCORE" -ge 65 ]; then HEALTH_KIND="warning"; HEALTH_TEXT="Потребує уваги"; HEALTH_SUMMARY="Є сигнали, які варто виправити або відстежити."
 else HEALTH_KIND="warning"; HEALTH_TEXT="Потребує уваги"; HEALTH_SUMMARY="Багато попереджень знижують бал. Почніть з розділу «Проблеми»."; fi
-# Статус «Потребує дій» лише за наявності критичної проблеми, незалежно від балу
+# The status “Needs action” only when there is a critical issue, regardless of the score
 if [ "$N_CRIT" -gt 0 ]; then HEALTH_KIND="critical"; HEALTH_TEXT="Потребує дій"; HEALTH_SUMMARY="Є критичні проблеми. Почніть з розділу «Проблеми»."; fi
 
-# ---------- Складання JSON ----------
-note "Складання JSON і HTML"
+# ---------- Assembling JSON ----------
+note "Building JSON and HTML"
 SYSTEM_OBJ="$(obj "$(kv computerName "$COMPUTER_NAME")" "$(kv model "$MODEL_NAME")" "$(kv chip "$CHIP")" \
   "$(kv cores "$CORES")" "$(kv memory "$MEMORY_TOTAL")" "$(kv os "$OS_NAME $OS_VERSION")" "$(kv build "$OS_BUILD")" \
   "$(kv kernel "$KERNEL")" "$(kv uptime "$UPTIME_TEXT")" "$(kv bootDate "$BOOT_DATE")" "$(kn uptimeDays "$UPTIME_DAYS")")"
@@ -1145,7 +1145,7 @@ my $json = JSON::PP->new->utf8->canonical;
 
 sub slurp {
   my ($file) = @_;
-  open my $fh, '<:raw', $file or die "Не відкрито $file: $!\n";
+  open my $fh, '<:raw', $file or die "Could not open $file: $!\n";
   local $/;
   my $text = <$fh>;
   close $fh;
@@ -1155,7 +1155,7 @@ sub slurp {
 my $core  = $json->decode(slurp($core_path));
 my $entry = $json->decode(slurp($entry_path));
 
-# Історія: новий запис угорі, старі обрізаються.
+# History: the new entry is on top, old ones are trimmed.
 my $history = [];
 if (-s $hist_path) {
   my $old = eval { $json->decode(slurp($hist_path)) };
@@ -1163,18 +1163,18 @@ if (-s $hist_path) {
 }
 unshift @$history, $entry;
 splice(@$history, $max_hist) if @$history > $max_hist;
-open my $hfh, '>:raw', $hist_path or die "Не записано історію: $!\n";
+open my $hfh, '>:raw', $hist_path or die "Could not write history: $!\n";
 print $hfh $json->encode($history);
 close $hfh;
 
-# Знімок поточної системи без історії (його можна перенести на інший Mac).
-open my $sfh, '>:raw', $snap_path or die "Не записано знімок: $!\n";
+# A snapshot of the current system without history (it can be moved to another Mac).
+open my $sfh, '>:raw', $snap_path or die "Could not write snapshot: $!\n";
 print $sfh $json->encode($core);
 close $sfh;
 
-# Інші системи з папки «системи»: кожен валідний JSON-знімок стає карткою.
+# Other systems from the “systems” folder: each valid JSON snapshot becomes a card.
 my @systems;
-opendir(my $dh, $sys_dir) or die "Немає папки $sys_dir: $!\n";
+opendir(my $dh, $sys_dir) or die "No folder $sys_dir: $!\n";
 for my $name (sort readdir($dh)) {
   next unless $name =~ /\.json$/i;
   my $data = eval { $json->decode(slurp("$sys_dir/$name")) };
@@ -1188,18 +1188,18 @@ $core->{systems} = \@systems;
 my $data = $json->encode($core);
 $data =~ s/</\\u003c/g;   # "<" у JSON є лише всередині рядків, тож < безпечний для <script>
 my $html = slurp($tpl_path);
-$html =~ s/__REPORT_JSON__/$data/ or die "У шаблоні немає місця для даних (__REPORT_JSON__)\n";
-open my $ofh, '>:raw', $out_path or die "Не записано звіт: $!\n";
+$html =~ s/__REPORT_JSON__/$data/ or die "The template has no place for data (__REPORT_JSON__)\n";
+open my $ofh, '>:raw', $out_path or die "Could not write the report: $!\n";
 print $ofh $html;
 close $ofh;
 PERL
 
 if ! perl "$WORK/assemble.pl" "$CORE_FILE" "$HISTORY_FILE" "$SYSTEMS_DIR" "$SNAPSHOT_FILE" "$ENTRY_FILE" "$MAX_HISTORY" "$TEMPLATE" "$REPORT_FILE"; then
-  echo "Помилка: не вдалося зібрати звіт" >&2
+  echo "Error: could not build the report" >&2
   exit 1
 fi
 
-# Центральна сторінка: один HTML з усіма знімками (до 12) і перемиканням дат. Файли в браузер не підвантажуються.
+# Central page: one HTML with all snapshots (up to 12) and date switching. Files are not loaded into the browser.
 DASHBOARD_FILE="$REPORTS_DIR/dashboard.html"
 cat > "$WORK/dashboard.pl" <<'PERL'
 use strict;
@@ -1218,7 +1218,7 @@ sub slurp {
   return $text;
 }
 
-opendir(my $dh, $data_dir) or die "Немає папки $data_dir: $!\n";
+opendir(my $dh, $data_dir) or die "No folder $data_dir: $!\n";
 my @names = grep { /^report-\d{4}-\d{2}-\d{2}\.json$/ } readdir($dh);
 closedir $dh;
 
@@ -1234,7 +1234,7 @@ for my $name (@names) {
 }
 @snaps = sort { $b->[0] cmp $a->[0] } @snaps;
 splice(@snaps, $max) if @snaps > $max;
-die "Немає жодного знімка для центральної сторінки\n" unless @snaps;
+die "No snapshot for the central page\n" unless @snaps;
 
 my %by = map { $_->[0] => $_->[1] } @snaps;
 my $hist_text = slurp($hist_path);
@@ -1242,7 +1242,7 @@ my $hist = defined $hist_text ? eval { $json->decode($hist_text) } : undef;
 $hist = [] unless ref $hist eq 'ARRAY';
 
 my @systems;
-opendir(my $sh, $sys_dir) or die "Немає папки $sys_dir: $!\n";
+opendir(my $sh, $sys_dir) or die "No folder $sys_dir: $!\n";
 for my $name (sort readdir($sh)) {
   next unless $name =~ /\.json$/i;
   my $d = eval { $json->decode(slurp("$sys_dir/$name")) };
@@ -1261,15 +1261,15 @@ my $bundle = {
 my $data = $json->encode($bundle);
 $data =~ s/</\\u003c/g;
 my $html = slurp($tpl_path);
-$html =~ s/__REPORT_JSON__/$data/ or die "У шаблоні немає місця для даних\n";
+$html =~ s/__REPORT_JSON__/$data/ or die "The template has no place for data\n";
 my $tmp = "$out_path.tmp.$$";
-open my $ofh, '>:raw', $tmp or die "Не записано $tmp: $!\n";
-print $ofh $html or die "Помилка запису $tmp: $!\n";
-close $ofh or die "Помилка закриття $tmp: $!\n";
-rename $tmp, $out_path or die "Не замінено $out_path: $!\n";
+open my $ofh, '>:raw', $tmp or die "Could not write $tmp: $!\n";
+print $ofh $html or die "Write error for $tmp: $!\n";
+close $ofh or die "Close error for $tmp: $!\n";
+rename $tmp, $out_path or die "Could not replace $out_path: $!\n";
 PERL
 if ! perl "$WORK/dashboard.pl" "$DATA_DIR" "$HISTORY_FILE" "$SYSTEMS_DIR" "$TEMPLATE" "$DASHBOARD_FILE" "$MAX_SNAPSHOTS" >/dev/null; then
-  echo "Помилка: не вдалося зібрати центральну сторінку" >&2
+  echo "Error: could not build the central page" >&2
   exit 1
 fi
 
@@ -1277,7 +1277,7 @@ ln -sfn "$REPORT_NAME" "$LATEST_LINK"
 find "$REPORTS_DIR" -maxdepth 1 -type f -name 'report-*.html' 2>/dev/null | sort -r | tail -n +$((MAX_REPORTS + 1)) | while IFS= read -r old; do rm -f "$old"; done
 find "$DATA_DIR" -maxdepth 1 -type f -name 'report-*.json' 2>/dev/null | sort -r | tail -n +$((MAX_SNAPSHOTS + 1)) | while IFS= read -r old; do rm -f "$old"; done
 
-note "Звіт створено: $REPORT_FILE"
-note "Останній звіт: $LATEST_LINK"
-note "Центральна сторінка: $DASHBOARD_FILE"
-note "Оцінка: $SCORE (критичних: $N_CRIT, уваги: $N_WARN, до відома: $N_INFO)"
+note "Report created: $REPORT_FILE"
+note "Latest report: $LATEST_LINK"
+note "Central page: $DASHBOARD_FILE"
+note "Score: $SCORE (critical: $N_CRIT, warnings: $N_WARN, info: $N_INFO)"

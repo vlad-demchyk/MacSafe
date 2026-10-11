@@ -1,7 +1,7 @@
-"""Порівняння двох звітів безпеки: що змінилось з попереднього знімка.
+"""Comparison of two security reports: what changed since the previous snapshot.
 
-Перевірки співставляються за назвою (label). Зміна: значення або статус різні, або перевірка
-з'явилась чи зникла. Модуль нічого не читає з диска: на вхід подаються списки елементів «security».
+Checks are matched by name (label). A change: the value or status differs, or the check
+appeared or disappeared. The module reads nothing from disk: lists of “security” items are passed in.
 """
 
 
@@ -11,7 +11,7 @@ KIND_UA = {"good": "ок", "info": "до відома", "warning": "увага",
 
 
 def _shown(item):
-    """Значення разом зі статусом, щоб зміна статусу без зміни тексту була видна."""
+    """Value together with the status, so a status change without a text change is visible."""
     value = item.get("value")
     kind = item.get("kind")
     return f"{value} · {T(KIND_UA.get(kind, kind))}" if kind else value
@@ -26,7 +26,7 @@ def _by_label(items):
 
 
 def security_changes(old_items, new_items):
-    """Список змін: {label, from, to}. from None — перевірка з'явилась, to None — зникла."""
+    """List of changes: {label, from, to}. from None — the check appeared, to None — it disappeared."""
     old = _by_label(old_items)
     new = _by_label(new_items)
     changes = []

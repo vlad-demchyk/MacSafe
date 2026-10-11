@@ -1,11 +1,11 @@
-"""Автозапуск при вході в систему: LaunchAgent, який відкриває застосунок з --background.
+"""Login start: a LaunchAgent that opens the app with --background.
 
-Фонова копія не відкриває вікно, лише іконку в статус-барі. Одна копія вже працює: фоновий запуск
-виходить тихо через блокування екземпляра (app.py), тож реєструвати сервіс можна без ризику дубля.
+A background copy does not open a window, only the menu bar icon. If one copy is already running: a background launch
+exits quietly through the instance lock (app.py), so registering the service carries no risk of a duplicate.
 
-Вимкнення і перереєстрація викликають launchctl bootout, але не тоді, коли застосунок сам запущений
-як job launchd: launchd позначає такий процес змінною XPC_SERVICE_NAME, що дорівнює мітці. Bootout
-свого job вбив би процес, який виконує дію. У цьому випадку plist змінюється, і зміна діє з наступного входу.
+Disabling and re-registering call launchctl bootout, but not when the app is running itself
+as a launchd job: launchd marks such a process with the XPC_SERVICE_NAME variable equal to the label. Bootout
+its job would kill the process that is performing the action. In this case the plist changes, and the change takes effect at the next login.
 """
 from i18n import T
 import os
@@ -15,7 +15,7 @@ import subprocess
 LABEL = "com.user.macsafe"
 AGENT_DIR = os.path.expanduser("~/Library/LaunchAgents")
 AGENT = os.path.join(AGENT_DIR, f"{LABEL}.plist")
-PYTHON = "/usr/bin/python3"       # той самий інтерпретатор, що й у запускачі
+PYTHON = "/usr/bin/python3"       # the same interpreter as in the launcher
 
 
 def _domain():
@@ -23,7 +23,7 @@ def _domain():
 
 
 def _is_self_job():
-    """True, якщо цей процес запущений самим launchd як job з нашою міткою."""
+    """True if this process was started by launchd itself as a job with our label."""
     return os.environ.get("XPC_SERVICE_NAME") == LABEL
 
 
@@ -65,9 +65,9 @@ def _build(launch_args, workdir, log_path):
 
 
 def enable(launch_args, workdir, log_path):
-    """Записує plist атомарно і реєструє сервіс у launchd. Повертає (ok, пояснення).
+    """Writes the plist atomically and registers the service with launchd. Returns (ok, explanation).
 
-    launch_args: команда запуску без --background (запускач .app або python app.py).
+    launch_args: the launch command without --background (the .app launcher or python app.py).
     """
     os.makedirs(AGENT_DIR, exist_ok=True)
     plist = _build(launch_args, workdir, log_path)
@@ -80,7 +80,7 @@ def enable(launch_args, workdir, log_path):
     if _is_loaded():
         if not changed or _is_self_job():
             return True, ""
-        # Новий plist діє лише після перереєстрації; старий сервіс спершу знімаємо
+        # A new plist takes effect only after re-registration; the old service is removed first
         ok, err = _launchctl("bootout", f"{_domain()}/{LABEL}")
         if not ok:
             return False, err
@@ -88,7 +88,7 @@ def enable(launch_args, workdir, log_path):
 
 
 def disable():
-    """Прибирає plist і знімає сервіс з launchd, якщо він не є поточним процесом. Повертає (ok, пояснення)."""
+    """Removes the plist and unloads the service from launchd if it is not the current process. Returns (ok, explanation)."""
     try:
         os.remove(AGENT)
     except FileNotFoundError:

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Фінальна macOS-іконка: squircle, тонкий градієнт і три стовпчики без тексту.
+"""Final macOS icon: a squircle, a thin gradient and three columns without text.
 
-Запуск: /usr/bin/python3 packaging/make_icon.py <шлях-до-png>. Потрібен PyObjC (AppKit).
-Ті самі три стовпчики, що в статус-барі, тож іконка застосунку і піктограма в меню схожі.
+Run: /usr/bin/python3 packaging/make_icon.py <path-to-png>. Needs PyObjC (AppKit).
+The same three columns as in the menu bar, so the app icon and the menu glyph look alike.
 """
 import math
 import os
@@ -24,7 +24,7 @@ def _srgb(r, g, b, a=1.0):
 
 
 def _squircle(inset=64):
-    """Супереліпс із безперервною зміною кривизни, без прямих кутових стиків."""
+    """A superellipse with continuously changing curvature, without straight corner joints."""
     path = AppKit.NSBezierPath.bezierPath()
     radius = SIZE / 2 - inset
     for i in range(513):
@@ -41,7 +41,7 @@ def _squircle(inset=64):
 
 
 def render(out_path):
-    # Bitmap context фіксує фізичні пікселі незалежно від Retina та екрана.
+    # The bitmap context fixes physical pixels regardless of Retina and the screen.
     rep = AppKit.NSBitmapImageRep.alloc().initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel_(
         None, SIZE, SIZE, 8, 4, True, False, AppKit.NSCalibratedRGBColorSpace, 0, 0)
     rep.setSize_(NSMakeSize(SIZE, SIZE))
@@ -84,11 +84,11 @@ def render(out_path):
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     data = rep.representationUsingType_properties_(AppKit.NSBitmapImageFileTypePNG, {})
     if not data.writeToFile_atomically_(out_path, True):
-        raise SystemExit(f"Не вдалося записати {out_path}")
+        raise SystemExit(f"Could not write {out_path}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        raise SystemExit("Використання: make_icon.py <шлях-до-png>")
+        raise SystemExit("Usage: make_icon.py <path-to-png>")
     render(sys.argv[1])
     print("ICON_OK", sys.argv[1])

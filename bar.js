@@ -1,5 +1,5 @@
-// Панель запуску: додається на сторінку звітів після завантаження (через pywebview.evaluate_js).
-// Нічого не виконує сама. Лише викликає Api.run_check і опитує Api.status.
+// The run bar: added to the report page after loading (through pywebview.evaluate_js).
+// Runs nothing itself. It only calls Api.run_check and polls Api.status.
 (() => {
   if (document.getElementById('audit-bar')) return;
 
@@ -75,7 +75,7 @@
     poll();
   });
 
-  // Очищення памʼяті: macOS сам покаже вікно з паролем адміністратора
+  // Memory cleaning: macOS itself shows the administrator password window
   const purgeBtn = document.getElementById('audit-purge');
   purgeBtn.addEventListener('click', async () => {
     purgeBtn.disabled = true;
@@ -92,7 +92,7 @@
     purgeBtn.disabled = false;
   });
 
-  // Картка першого запуску: пояснює, що macOS попросить, і зникає після «Готово»
+  // First-run card: explains what macOS will ask, and disappears after “Done”
   const setupCard = async () => {
     let perm;
     try { perm = await window.pywebview.api.permissions(); } catch (e) { return; }
@@ -117,7 +117,7 @@
     });
   };
 
-  // Опитування починаємо, коли міст pywebview готовий
+  // We start polling when the pywebview bridge is ready
   const bridgeReady = () => window.pywebview && window.pywebview.api
     && typeof window.pywebview.api.status === 'function'
     && typeof window.pywebview.api.run_check === 'function';

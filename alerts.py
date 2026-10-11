@@ -1,25 +1,25 @@
-"""Сповіщення MacSafe: правила без AppKit, щоб їх можна було тестувати.
+"""MacSafe notifications: rules without AppKit, so they can be tested.
 
-Кожне правило спрацьовує, коли значення тримається вище порогу HOLD секунд, і не повторюється раніше
-ніж через COOLDOWN секунд. Нове правило безпеки спрацьовує, коли кількість проблем зросла відносно
-попереднього перегляду.
+Each rule fires when the value stays above the threshold for HOLD seconds, and does not repeat earlier
+than after COOLDOWN seconds. A new security rule fires when the number of issues grew relative to
+the previous check.
 """
 from i18n import T
 import time
 
-RAM_PERCENT = 92        # відсоток зайнятої памʼяті
-DISK_FREE_GB = 10       # вільне місце на диску, ГБ
-BATTERY_LOW = 15        # відсоток заряду без живлення від мережі
-HOLD = 60.0             # скільки секунд умова має тривати
-COOLDOWN = 3600.0       # пауза між повторами одного сповіщення
+RAM_PERCENT = 92        # percent of memory in use
+DISK_FREE_GB = 10       # free disk space, GB
+BATTERY_LOW = 15        # charge percentage when not on power
+HOLD = 60.0             # how many seconds the condition must last
+COOLDOWN = 3600.0       # the pause between repeats of the same notification
 
 
 class Alerts:
     def __init__(self, clock=time.monotonic):
         self._clock = clock
-        self._since = {}     # id → з якого моменту умова триває
-        self._last = {}      # id → коли востаннє показували
-        self._issues = None  # кількість проблем безпеки при попередньому перегляді
+        self._since = {}     # id → since when the condition holds
+        self._last = {}      # id → when it was last shown
+        self._issues = None  # number of security issues at the previous check
 
     def _fire(self, key, active, now, out, title, text, hold=HOLD):
         if not active:
@@ -34,7 +34,7 @@ class Alerts:
         out.append((title, text))
 
     def check(self, snap, security=None):
-        """Список сповіщень (заголовок, текст), які треба показати зараз."""
+        """List of notifications (title, text) to show now."""
         now = self._clock()
         out = []
         ram = (snap.get("ram") or {}).get("percent")

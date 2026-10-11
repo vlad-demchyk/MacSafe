@@ -1,8 +1,8 @@
-"""Завантаження GPU через IOKit напряму (ctypes), без запуску ioreg щосекунди.
+"""GPU load through IOKit directly (ctypes), without running ioreg every second.
 
-Читає властивість PerformanceStatistics → «Device Utilization %» (або «GPU Activity(%)») у сервісів
-IOAccelerator. Root не потрібен. Якщо бібліотеки чи ключа немає, повертає None (показується «н/д»).
-Один виклик займає мікросекунди, а не кілька десятків мілісекунд на fork+exec ioreg.
+Reads the PerformanceStatistics property → “Device Utilization %” (or “GPU Activity(%)”) of the services
+IOAccelerator. No root needed. If the library or key is missing, returns None (shown as “n/a”).
+One call takes microseconds, not tens of milliseconds for a fork+exec of ioreg.
 """
 import ctypes
 import ctypes.util
@@ -73,9 +73,9 @@ def _number(value_ref):
 
 
 def _max_stats(groups):
-    """Максимум по GPU для кожної групи ключів: перший наявний ключ групи в PerformanceStatistics.
+    """Maximum across GPUs for each key group: the first existing key of the group in PerformanceStatistics.
 
-    groups — {назва: (ключі…)}. Повертає {назва: значення 0–100 або None}. Один обхід сервісів на всі групи.
+    groups — {name: (keys…)}. Returns {name: value 0–100 or None}. One pass over the services for all groups.
     """
     if not _ok:
         return None
@@ -120,13 +120,13 @@ def _max_stats(groups):
 
 
 def gpu_percent_iokit():
-    """Максимальне завантаження серед GPU, 0–100, або None, якщо IOKit недоступний чи ключа немає."""
+    """Maximum GPU load across GPUs, 0–100, or None if IOKit is unavailable or the key is missing."""
     stats = _max_stats({"device": GPU_KEYS})
     return stats["device"] if stats else None
 
 
 def gpu_detail_iokit():
-    """Завантаження GPU: device (основне), renderer і tiler. Кожне — 0–100 або None."""
+    """GPU load: device (main), renderer and tiler. Each is 0–100 or None."""
     return _max_stats({
         "device": GPU_KEYS,
         "renderer": ("Renderer Utilization %",),
@@ -146,7 +146,7 @@ def _string(ref):
 
 
 def _add_client(service, keys, totals):
-    """Додає AppUsage клієнта GPU до totals[pid]. Клієнти без PID у творця пропускаються."""
+    """Adds the GPU client's AppUsage to totals[pid]. Clients without a PID in the creator are skipped."""
     key_creator, key_usage, key_time = keys
     creator = _iokit.IORegistryEntryCreateCFProperty(service, key_creator, None, 0)
     try:
@@ -176,11 +176,11 @@ def _add_client(service, keys, totals):
 
 
 def gpu_time_by_pid():
-    """Накопичений час GPU у наносекундах по PID процесів, або None, якщо IOKit недоступний.
+    """Accumulated GPU time in nanoseconds per process PID, or None if IOKit is unavailable.
 
-    macOS веде лічильник AppUsage (accumulatedGPUTime) на кожного клієнта GPU; клієнти — дочірні вузли
-    акселератора, а PID є у IOUserClientCreator («pid 172, WindowServer»). Сума по клієнтах процесу —
-    його використання GPU. Root не потрібен.
+    macOS keeps an AppUsage counter (accumulatedGPUTime) for each GPU client; clients are child nodes
+    accelerator, and the PID is in IOUserClientCreator (“pid 172, WindowServer”). The sum over the process's clients —
+    its GPU use. No root is needed.
     """
     if not _ok:
         return None

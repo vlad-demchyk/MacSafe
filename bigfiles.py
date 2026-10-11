@@ -1,30 +1,30 @@
-"""Пошук найбільших файлів у домашній папці. Тільки читання: нічого не видаляє і не рухає.
+"""Search for the largest files in the home folder. Read-only: deletes and moves nothing.
 
-Обхід без символічних посилань, з обмеженням часу. Службові папки (~/Library, кошик, приховані) пропускаються.
-Downloads, Documents і Desktop захищені macOS: при першому скануванні система може попросити дозвіл.
+A walk without symbolic links, with a time limit. Service folders (~/Library, the Trash, hidden) are skipped.
+Downloads, Documents and Desktop are protected by macOS: on the first scan the system may ask for permission.
 """
 import heapq
 import os
 import time
 
 HOME = os.path.expanduser("~")
-SKIP_TOP = {"Library", ".Trash"}      # у корені домашньої папки
-TIME_LIMIT = 25.0                      # секунд на обхід
+SKIP_TOP = {"Library", ".Trash"}      # in the root of the home folder
+TIME_LIMIT = 25.0                      # seconds per walk
 MAX_RESULTS = 30
 MIN_MB_CHOICES = (50, 100, 500, 1000)
 
 
 def find_big(min_mb=100, limit=MAX_RESULTS, root=None, time_limit=TIME_LIMIT):
-    """Найбільші файли від min_mb МБ: {files: [{path, sizeMb, days}], truncated, scanned}.
+    """The largest files from min_mb MB: {files: [{path, sizeMb, days}], truncated, scanned}.
 
-    truncated — True, якщо обхід зупинено за часом. Файли відсортовано за розміром, найбільші першими.
+    truncated — True if the walk was stopped by time. Files are sorted by size, largest first.
     """
     min_mb = min_mb if min_mb in MIN_MB_CHOICES else 100
     limit = max(1, min(int(limit), MAX_RESULTS))
     root = root or HOME
     threshold = min_mb * 1024 * 1024
     deadline = time.monotonic() + time_limit
-    heap = []   # (розмір, шлях, mtime): мінімальна купа на limit елементів
+    heap = []   # (size, path, mtime): a min-heap of limit items
     scanned = 0
     truncated = False
     stack = [root]
@@ -64,7 +64,7 @@ def find_big(min_mb=100, limit=MAX_RESULTS, root=None, time_limit=TIME_LIMIT):
 
 
 def safe_path(path):
-    """Шлях, який можна показати у Finder: існуючий файл усередині домашньої папки без посилань. Інакше None."""
+    """A path that can be shown in Finder: an existing file inside the home folder with no links. Otherwise None."""
     if not isinstance(path, str) or not os.path.isabs(path) or "\0" in path:
         return None
     if os.path.islink(path) or not os.path.exists(path):

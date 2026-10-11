@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <title>MacSafe</title>
   <style>
-    /* Поверхні macOS: білий, сірий, графіт; синій лише для взаємодії. */
+    /* macOS surfaces: white, grey, graphite; blue only for interaction. */
     :root { color-scheme:light dark; --ink:#242426; --muted:#64646a; --canvas:#f5f5f7; --card:#ffffff; --card2:#ededf0; --line:#d6d6dc; --blue:#0069c7; --good:#267447; --warn:#8a5900; --critical:#b32635; --shadow:none; --ease:cubic-bezier(.2,.8,.2,1); --side:248px; }
     @media (prefers-color-scheme:dark) {
       :root { --ink:#ededf0; --muted:#a5a5ad; --canvas:#202022; --card:#29292c; --card2:#333337; --line:#45454b; --blue:#78b7ff; --good:#87c296; --warn:#e2bb72; --critical:#f3949d; }
@@ -27,7 +27,7 @@
     .skip { position:absolute; left:-999px; top:8px; background:var(--blue); color:var(--card); padding:8px 12px; border-radius:8px; z-index:99; }
     .skip:focus { left:12px; }
 
-    /* Макет: сайдбар + основна частина */
+    /* Layout: sidebar + main area */
     .layout { display:grid; grid-template-columns:var(--side) minmax(0,1fr); min-height:100vh; }
     .side { position:sticky; top:0; height:100vh; overflow:auto; border-right:1px solid var(--line); background:var(--card2); padding:18px 12px 24px; display:flex; flex-direction:column; gap:14px; }
     .side__brand { padding:4px 8px 0; }
@@ -46,7 +46,7 @@
     .copy { font:inherit; font-size:12px; color:var(--blue); background:none; border:1px solid var(--line); border-radius:8px; padding:3px 9px; cursor:pointer; margin-left:6px; }
     :focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
 
-    /* Одна секція за раз */
+    /* One section at a time */
     .view { display:none; }
     .view.is-active { display:block; animation:reveal 180ms var(--ease) both; }
     .view.is-active :is(.card,.metric,.score,.issue) { animation:rise 240ms var(--ease) both; }
@@ -63,7 +63,7 @@
     .card { padding:18px; }
     .card h3 { margin-top:0; }
 
-    /* Інтерактивне очищення кешів */
+    /* Interactive cache cleaning */
     .cache-panel { margin-bottom:14px; }
     .cache-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:14px; }
     .cache-list { display:grid; gap:8px; margin:14px 0; }
@@ -96,7 +96,7 @@
       .cache-size { margin-inline-start:24px; }
     }
 
-    /* Бейджі і смуги */
+    /* Badges and bars */
     .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:650; white-space:nowrap; vertical-align:middle; }
     .badge--good { color:var(--good); background:var(--card2); }
     .badge--warning { color:var(--warn); background:var(--card2); }
@@ -127,7 +127,7 @@
     .metric__value { font-size:22px; font-weight:650; letter-spacing:-.03em; line-height:1.15; }
     .metric__label { color:var(--muted); font-size:12px; margin-top:2px; }
 
-    /* Таблиці, пари, акордеони */
+    /* Tables, pairs, accordions */
     .kvs { margin:0; display:grid; gap:0; }
     .kvs > div { display:flex; justify-content:space-between; gap:16px; padding:8px 0; border-top:1px solid var(--line); }
     .kvs > div:first-child { border-top:0; padding-top:0; }
@@ -168,7 +168,7 @@
     .sys__head { display:flex; justify-content:space-between; align-items:center; gap:10px; }
     .sys__head h3 { margin:0; }
 
-    /* Чіпи, пошук, дропзона, нотатки, історія */
+    /* Chips, search, drop zone, notes, history */
     .chips { display:flex; gap:6px; flex-wrap:wrap; }
     .chip { font:inherit; font-size:13px; color:var(--muted); background:var(--card2); border:1px solid var(--line); border-radius:999px; padding:5px 12px; cursor:pointer; transition:all .2s; }
     .chip[aria-pressed="true"] { color:var(--ink); border-color:var(--blue); background:var(--card2); }
@@ -187,7 +187,7 @@
     .toast.show { transform:translate(-50%,0); }
     .footer { color:var(--muted); text-align:center; font-size:12px; margin:40px 0 0; }
 
-    /* Типографіка і відступи: правки після перегляду знімків */
+    /* Typography and spacing: fixes after reviewing snapshots */
     h1 { font-size:clamp(24px,3vw,30px); line-height:1.2; letter-spacing:-.025em; }
     h2 { font-size:22px; line-height:1.3; }
     .hint, .score__copy { font-size:14px; }
@@ -216,7 +216,7 @@
     .cal__day i { position:absolute; right:7px; bottom:6px; font-style:normal; font-size:11px; font-weight:650; color:var(--good); }
     .cal__panel { margin-top:14px; padding:16px 18px; border:1px solid var(--line); border-radius:10px; background:var(--card); display:grid; gap:10px; }
     .cal__actions { display:flex; gap:8px; flex-wrap:wrap; }
-    /* Редизайн: каталог розділів, м'які картки, один акцент */
+    /* Redesign: a catalogue of sections, soft cards, one accent */
     :root { --accent:#0a64d6; --on-accent:#fff; --soft:rgba(10,100,214,.09); --radius:16px; --line:#e2e2e8;
       --shadow:0 1px 2px rgba(20,20,30,.04),0 8px 24px rgba(20,20,30,.06); }
     @media (prefers-color-scheme:dark) {
@@ -257,6 +257,8 @@
     .block__head h2::before { content:""; width:4px; height:20px; border-radius:2px; background:var(--accent); }
     .cache-item, .cache-memory, .sec-link, .check, .drop, .chart, pre.cmd, textarea { border-radius:12px; }
     .chip[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+    .lang__btn { font:inherit; font-size:14px; color:var(--ink); background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:7px 16px; cursor:pointer; }
+    .lang__btn[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
     .cache-flag { background:var(--card); }
     :focus-visible { outline-color:var(--accent); }
     @media (max-width:860px) {
@@ -522,6 +524,21 @@
         </div>
       </section>
 
+      <!-- Налаштування застосунку: мова. Меню-бар теж має перемикач у розділі «Вигляд» -->
+      <section class="view" data-view="settings" aria-label="Налаштування">
+        <div class="block">
+          <div class="block__head"><h2>Налаштування</h2><p class="hint">Мова застосунку. Меню-бар перезапускається сам і показує вибрану мову.</p></div>
+          <article class="card">
+            <h3>Мова інтерфейсу</h3>
+            <div class="chips" id="lang-choice" role="group" aria-label="Мова інтерфейсу">
+              <button class="lang__btn" type="button" data-lang="en" aria-pressed="false">English</button>
+              <button class="lang__btn" type="button" data-lang="uk" aria-pressed="false">Українська</button>
+            </div>
+            <p class="hint">Англійська за замовчуванням. Те саме перемикання є в меню-барі: Вигляд → Мова.</p>
+          </article>
+        </div>
+      </section>
+
       <section class="view" data-view="notes" aria-label="Нотатки">
         <div class="block" id="notes">
           <div class="block__head"><h2>Нотатки</h2><p class="hint">Вільні записи: що зроблено, що перевірено, що чекає. Зберігаються автоматично.</p></div>
@@ -537,8 +554,8 @@
 
   <script id="report-data" type="application/json">__REPORT_JSON__</script>
   <script>
-  // Мова сторінки: uk (за замовчуванням) або en. Українські фрази перекладаються за словником I18N_EN.
-  // Числа в ключах замінені на #: «Порт 7717: 26 помилок» шукається як «Порт #: # помилок».
+  // Page language: uk (default) or en. Ukrainian phrases are translated with the I18N_EN dictionary.
+  // Numbers in keys are replaced with #: “Port 7717: 26 errors” is looked up as “Port #: # errors”.
   const I18N_EN = {
  "# % · Підключено до живлення": "# % · Connected to power",
  "# / # мАг": "# / # mAh",
@@ -673,6 +690,7 @@
  "Адреса": "Address",
  "Активний обмін з swap: # сторінок за # секунд": "Active swap traffic: # pages in # seconds",
  "Активний обмін сповільнює всі застосунки. Одиничний пік не страшний, стійкий обмін означає нестачу памʼяті.": "Active swap slows all apps down. A single peak is not a problem; sustained swap means a shortage of memory.",
+ "Англійська за замовчуванням. Те саме перемикання є в меню-барі: Вигляд → Мова.": "English by default. The same switch is in the menu bar: Appearance → Language.",
  "Архів": "Archive",
  "Архіви для публікації застосунків. Видаляйте лише старі, які вам не потрібні.": "Archives for app publishing. Delete only old ones you do not need.",
  "Багато аварійних звітів застосунків за тиждень": "Many app crash reports this week",
@@ -942,6 +960,10 @@
  "МБ, неактивна": "MB, inactive",
  "МБ<\/b>. Звіт нічого не видаляє. Кожну команду потрібно запустити вручну.": "MB<\/b>. The report deletes nothing. Each command must be run manually.",
  "Мало вільної системної памʼяті": "Little free system memory",
+ "Мова": "Language",
+ "Мова застосунку": "App language",
+ "Мова застосунку. Меню-бар перезапускається сам і показує вибрану мову.": "App language. The menu bar restarts itself and shows the chosen language.",
+ "Мова інтерфейсу": "Interface language",
  "Модель": "Model",
  "Модель, батарея, сховище і навантаження на момент звіту.": "Model, battery, storage and load at the time of the report.",
  "Місця стає замало для оновлень і кешів.": "There is less and less space for updates and caches.",
@@ -952,6 +974,7 @@
  "Навігація": "Navigation",
  "Найбільші споживачі": "Top consumers",
  "Налаштовано, але копій немає": "Set up, but there are no copies",
+ "Налаштування": "Settings",
  "Наприклад: # вимкнув Gemini FinderSync, перевірити CPU наступного тижня": "For example: # turned off Gemini FinderSync, check the CPU next week",
  "Напруга": "Voltage",
  "Наступний місяць": "Next month",
@@ -1429,7 +1452,7 @@
     const pick = value => (value === 'uk' || value === 'en' ? value : null);
     let lang = null;
     try { lang = pick(new URLSearchParams(location.search).get('lang')) || pick(localStorage.getItem('macsafe-lang')); } catch (e) { lang = null; }
-    if (!lang) lang = (navigator.language || '').toLowerCase().startsWith('uk') ? 'uk' : 'en';
+    if (!lang) lang = 'en';
     document.documentElement.lang = lang;
 
     function lookup(text) {
@@ -1442,17 +1465,17 @@
       }
       return null;
     }
-    // Для рядків, які збирає скрипт (заголовок вкладки): повертає переклад або вихідний текст
+    // For strings the script builds (the tab title): returns the translation or the original text
     function tr(text) {
       if (lang !== 'en' || !UA.test(text)) return text;
       const out = lookup(text.trim());
       return out === null ? text : out;
     }
-    // Фраза з частин: «Заголовок: текст» або «Речення. Речення». Перша межа, де ліва частина має переклад, ділить рядок
+    // A phrase from parts: “Heading: text” or “Sentence. Sentence”. The first boundary where the left part has a translation splits the line
     function phrase(text) {
       const direct = lookup(text);
       if (direct !== null) return direct;
-      // Беремо найдовшу ліву частину, яка має переклад: «Помилки запису в базу: 14» краще за «Помилки запису в базу»
+      // We take the longest left part that has a translation: “Database write errors: 14” is better than “Database write errors”
       const re = /: |\. /g;
       let best = null;
       let m;
@@ -1464,14 +1487,14 @@
       const rest = text.slice(best.index + 2);
       return best.left + text.slice(best.index, best.index + 2) + (phrase(rest) ?? rest);
     }
-    // Плейсхолдери, які стоять усередині команд (не окремою фразою)
+    // Placeholders that sit inside commands (not as a separate phrase)
     const INLINE = [['<текст вибраної проблеми>', '<selected issue text>'], ['(права ', '(permissions ']];
     function translateText(node) {
       const parent = node.parentElement;
       if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE')) return;
       const raw = node.nodeValue;
       if (!UA.test(raw)) return;
-      // Кожен рядок окремо: генератор розділяє частини переносами рядків
+      // Each line separately: the generator separates parts with line breaks
       const result = raw.split('\n').map(line => {
         const core = line.trim().replace(/\s+/g, ' ');
         if (!core || !UA.test(core)) return line;
@@ -1505,6 +1528,18 @@
     window.MacSafeI18n = { lang, tr, translateTree };
     document.addEventListener('DOMContentLoaded', () => {
       translateTree(document.body);
+      document.querySelectorAll('#lang-choice [data-lang]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.lang === lang));
+        button.addEventListener('click', async () => {
+          // Застосунок зберігає мову і перезапускає меню-бар; у браузері мова лише запам'ятовується
+          const window_ = window.pywebview && window.pywebview.api;
+          if (window_ && typeof window_.set_language === 'function') await window_.set_language(button.dataset.lang);
+          try { localStorage.setItem('macsafe-lang', button.dataset.lang); } catch (e) { /* без збереження */ }
+          const next = new URL(location.href);
+          next.searchParams.set('lang', button.dataset.lang);
+          location.replace(next.href);
+        });
+      });
       new MutationObserver(records => {
         for (const record of records) record.addedNodes.forEach(translateTree);
       }).observe(document.body, { childList: true, subtree: true });
@@ -1514,7 +1549,7 @@
   <script>
   (() => {
     'use strict';
-    // Один знімок (звіт) або набір знімків (центральна сторінка dashboard.html) з перемиканням дат
+    // One snapshot (report) or a set of snapshots (the central dashboard.html page) with date switching
     const RAW = JSON.parse(document.getElementById('report-data').textContent);
     const MULTI = !!RAW.snapshotsById;
     const selectData = id => (MULTI ? { ...RAW.snapshotsById[id], history: RAW.history, systems: RAW.systems } : RAW);
@@ -1525,10 +1560,10 @@
     const RISK_KIND = { safe: 'good', review: 'warning', keep: 'info' };
     const SEV_ORDER = { critical: 0, warning: 1, info: 2, good: 3 };
     const LS_SYS = 'report.systems.v1';
-    // План і нотатки прив'язані до комп'ютера, а не до дати: записи однієї машини не змішуються з іншою
+    // Plan and notes are tied to the computer, not the date: one machine's entries are not mixed with another's
     const planKey = () => `report.plan.v1:${(DATA.meta && DATA.meta.computer) || 'mac'}`;
     const notesKey = () => `report.notes.v1:${(DATA.meta && DATA.meta.computer) || 'mac'}`;
-    // Доступ до localStorage може бути заборонений браузером: тоді просто без збереження
+    // Access to localStorage may be blocked by the browser: then simply without saving
     const store = {
       get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
       set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* без збереження */ } },
@@ -1536,7 +1571,7 @@
     const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const state = { sev: 'all', q: '' };
 
-    // Режими і розділи: порядок тут визначає сайдбар і клавіші 1–9
+    // Modes and sections: the order here defines the sidebar and the keys 1–9
     const MODES = [
       { id: 'state', title: 'Огляд', sections: [['overview', 'Стан'], ['issues', 'Проблеми'], ['plan', 'План дій']] },
       { id: 'system', title: 'Система', sections: [['system', 'Mac'], ['memory', 'Памʼять'], ['processes', 'Процеси'], ['thermal', 'Температури']] },
@@ -1544,6 +1579,7 @@
       { id: 'cleanup', title: 'Обслуговування', sections: [['cleanup', 'Очищення'], ['actions', 'Кнопки дій']] },
       { id: 'help', title: 'Довідка', sections: [['advice', 'Поради'], ['agents', 'Агенти']] },
       { id: 'archive', title: 'Архів', sections: [['history', 'Історія'], ['systems', 'Інші Mac'], ['notes', 'Нотатки']] },
+      { id: 'app', title: 'Застосунок', sections: [['settings', 'Налаштування']] },
     ];
     const ICONS = {
       overview: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
@@ -1599,7 +1635,7 @@
       return el;
     }
 
-    // Смуги: скидаємо до 0 і рахуємо від нуля, щоб анімація відбувалась і коли секція тільки відкрилась
+    // Bars: reset to 0 and count from zero, so the animation runs also when the section has just opened
     function animateBars(root = document) {
       $$('.bar__fill', root).forEach(f => {
         const w = f.dataset.w + '%';
@@ -1636,7 +1672,7 @@
       navigator.clipboard.writeText(text).then(() => flash('Скопійовано'), () => flash('Не вдалося'));
     }
 
-    // ---------- Огляд ----------
+    // ---------- Overview ----------
     function renderHero() {
       const h = DATA.health || {}, m = DATA.memory || {}, s = DATA.storage || {};
       const b = DATA.battery || {}, l = DATA.load || {}, t = DATA.thermal || {};
@@ -1677,8 +1713,8 @@
       requestAnimationFrame(() => { ring.style.strokeDashoffset = ring.dataset.off; });
     }
 
-    // ---------- Огляд: з чого почати, знімок і контекст ----------
-    // Зміни безпеки відносно попереднього дня (звіти: один на день, тож це попередній звіт)
+    // ---------- Overview: where to start, snapshot and context ----------
+    // Security changes relative to the previous day (reports: one per day, so this is the previous report)
     const SEC_KIND_TEXT = { good: 'ок', info: 'до відома', warning: 'увага', critical: 'критично' };
     function securityChangesVs(id, ids, byId) {
       const idx = ids.indexOf(id);
@@ -1731,8 +1767,8 @@
       </div>`;
     }
 
-    // ---------- Перемикання дат (лише для dashboard.html) ----------
-    // Календар вибору дня: один звіт на день, тож ідентифікатор звіту — дата
+    // ---------- Date switching (dashboard.html only) ----------
+    // Day selection calendar: one report per day, so the report ID is the date
     function bindDate() {
       if (!MULTI) return;
       const wrap = $('#day-pick-wrap'), btn = $('#day-pick'), menu = $('#day-menu');
@@ -1800,7 +1836,7 @@
       document.title = `MacSafe: ${m.computer || ''}`;
     }
 
-    // ---------- Проблеми ----------
+    // ---------- Issues ----------
     function sortedIssues() {
       return list(DATA.issues).slice().sort((a, b) => (SEV_ORDER[a.sev] ?? 9) - (SEV_ORDER[b.sev] ?? 9));
     }
@@ -1842,7 +1878,7 @@
       animateBars(box);
     }
 
-    // ---------- План ----------
+    // ---------- Plan ----------
     function hash(s) {
       let h = 5381;
       for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
@@ -1902,7 +1938,7 @@
       updatePlanCount(all, done);
     }
 
-    // ---------- Розділи з даними ----------
+    // ---------- Sections with data ----------
     function renderSystem() {
       const s = DATA.system || {}, b = DATA.battery || {}, st = DATA.storage || {}, l = DATA.load || {};
       const batteryBody = b.present === false ? '<p class="muted">Батареї немає.</p>' : rows([
@@ -2025,7 +2061,7 @@
           <td>${esc(r.advice || 'Порада відсутня в цьому знімку.')}</td></tr>`;
       }).join('');
       const net = DATA.network || {}, ext = DATA.extensions || {}, launch = DATA.launch || {};
-      // Старі знімки мають лише exposed: не приписуємо їм повний список слухачів.
+      // Old snapshots have only exposed: we do not attribute the full list of listeners to them.
       const listeners = Array.isArray(net.listening) ? net.listening : list(net.exposed);
       const ports = listeners.map(e => `<tr><td>${esc(e.proc)}</td><td>${fmt(e.pid)}</td><td>${esc(e.port)}</td><td><code>${esc(e.addr)}</code></td></tr>`).join('');
       const dirs = list(launch.directories).map(d => `<tr><td><code>${esc(d.path)}</code></td><td>${fmt(d.count)}</td></tr>`).join('');
@@ -2106,7 +2142,7 @@
       <p class="muted" style="margin-top:12px">Лог без дат, тому помилки показано сумою за весь час. Щоб бачити, коли саме вони були, додайте часові мітки в лог.</p>`;
     }
 
-    // ---------- Дії: команди для Terminal. Сторінка нічого не запускає сама ----------
+    // ---------- Actions: commands for Terminal. The page runs nothing itself ----------
     const ACTION_CMDS = [
       { level: 'read', title: 'Хто блокує сон', cmd: 'pmset -g assertions' },
       { level: 'read', title: 'Тепловий стан', cmd: 'pmset -g therm' },
@@ -2136,7 +2172,7 @@
         <div class="stack">${rowsHtml}</div>`;
     }
 
-    // ---------- Агенти: попередній перегляд тексту і команди для Terminal ----------
+    // ---------- Agents: text preview and Terminal commands ----------
     const AGENT_CMDS = {
       haiku: 'claude -p --model haiku --safe-mode --tools "" --strict-mcp-config --disable-slash-commands --no-chrome --no-session-persistence --permission-mode dontAsk',
       opus_max: 'claude -p --model opus --effort max --safe-mode --tools "" --strict-mcp-config --disable-slash-commands --no-chrome --no-session-persistence --permission-mode dontAsk',
@@ -2173,7 +2209,7 @@
       show();
     }
 
-    // ---------- Поради ----------
+    // ---------- Tips ----------
     const ADVICE = [
       { cat: 'Памʼять', items: [
         { t: 'Електрон-застосунки споживають найбільше памʼяті', b: 'Claude, ChatGPT і Codex, VS Code, Gemini і Chrome мають власний рушій браузера. Кожне вікно і вкладка додають памʼять.', tips: ['Закривайте вікна і вкладки, які не використовуєте', 'Перезапускайте важкі застосунки раз на день, якщо їх багато'] },
@@ -2239,7 +2275,7 @@
       if (!box.children.length) box.innerHTML = '<p class="empty">Нічого не знайдено.</p>';
     }
 
-    // ---------- Історія ----------
+    // ---------- History ----------
     function renderHistory() {
       const box = $('#history-body');
       const hist = list(DATA.history).slice().reverse();
@@ -2257,7 +2293,7 @@
         + tableOf(['Дата', 'Оцінка', 'Критичних', 'Уваги', 'Звіт'], trs);
     }
 
-    // ---------- Системи (зона) ----------
+    // ---------- Other Macs (area) ----------
     const loadDropped = () => { try { const v = JSON.parse(store.get(LS_SYS) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
     const saveDropped = arr => store.set(LS_SYS, JSON.stringify(arr.slice(-20)));
 
@@ -2339,7 +2375,7 @@
       });
     }
 
-    // ---------- Нотатки ----------
+    // ---------- Notes ----------
     function bindNotes() {
       const ta = $('#notes-input'), st = $('#notes-state');
       ta.value = store.get(notesKey()) || '';
@@ -2352,7 +2388,7 @@
       });
     }
 
-    // ---------- Календар: дні від сьогодні назад ----------
+    // ---------- Calendar: days back from today ----------
 
     const dayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const idToDay = id => id.slice(0, 10);
@@ -2361,7 +2397,7 @@
     const allIds = () => (MULTI ? list(RAW.snapshotIds) : [currentId()]).filter(Boolean);
     const scoreOf = id => (MULTI && RAW.snapshotsById[id] ? RAW.snapshotsById[id] : DATA).health?.score;
 
-    // Виклики застосунку (pywebview). У браузері без застосунку кнопки лише пояснюють, що потрібно.
+    // App calls (pywebview). In a browser without the app the buttons only explain what is needed.
     async function callApp(name, ...args) {
       const a = window.pywebview && window.pywebview.api;
       if (!a || typeof a[name] !== 'function') {
@@ -2372,7 +2408,7 @@
     }
 
 
-    // ---------- Сайдбар: режими, розділи, маршрут ----------
+    // ---------- Sidebar: modes, sections, routing ----------
     const sectionIndex = () => MODES.flatMap(m => m.sections.map(s => ({ mode: m.id, id: s[0], title: s[1] })));
 
     function sectionCount(id) {
@@ -2382,7 +2418,7 @@
       return null;
     }
 
-    // Сайдбар-каталог: групи із заголовками, усі розділи завжди видно
+    // Sidebar catalogue: groups with headings, all sections always visible
     function buildSide() {
       $('#modes').innerHTML = MODES.map(m => `
         <div class="sgrp" data-grp="${m.id}" role="group" aria-label="${esc(m.title)}">
@@ -2391,7 +2427,7 @@
         </div>`).join('');
     }
 
-    // Лічильники розділів: один прохід, без перебудови дерева
+    // Section counters: one pass, without rebuilding the tree
     function refreshSideCounts() {
       MODES.forEach(m => m.sections.forEach(([id]) => {
         const el = $(`.sec[data-section="${id}"] .sec__n`);
@@ -2443,7 +2479,7 @@
       });
     }
 
-    // ---------- Дії (вбудовані): маркування пошуку ----------
+    // ---------- Actions (built-in): search marking ----------
     function bindToolbar() {
       $('#q').addEventListener('input', e => {
         state.q = e.target.value;
@@ -2457,7 +2493,7 @@
         if (act === 'collapse') $$('.acc').forEach(a => { a.classList.remove('open'); $('.acc__btn', a).setAttribute('aria-expanded', 'false'); });
         if (act === 'print') window.print();
         if (act === 'export') {
-          // Експорт лише вибраного знімка: історія й дані інших систем не потрапляють у файл
+          // Export only the selected snapshot: history and other systems' data do not go into the file
           const { history, systems, ...snap } = DATA;
           const blob = new Blob([JSON.stringify(snap, null, 2)], { type: 'application/json' });
           const a = document.createElement('a');
@@ -2506,7 +2542,7 @@
   <script>
   (() => {
     'use strict';
-    // Ця панель не залежить від статичного знімка звіту.
+    // This bar does not depend on a static report snapshot.
     const panel = document.getElementById('cache-panel');
     const scanButton = document.getElementById('cache-scan');
     const cleanButton = document.getElementById('cache-clean');
@@ -2617,7 +2653,7 @@
     }
 
     async function refreshCacheItems(api) {
-      // Старий вибір і підтвердження не переносяться на новий список.
+      // The old selection and confirmation are not carried over to the new list.
       selected.clear();
       confirmation.checked = false;
       items = [];
@@ -2726,7 +2762,7 @@
       updateCacheControls();
     }
 
-    // Великі файли: лише перегляд і показ у Finder
+    // Large files: view only and show in Finder
     (() => {
       const btn = document.getElementById('big-scan');
       const minSel = document.getElementById('big-min');
@@ -2792,7 +2828,7 @@
       sync();
     })();
 
-    // Залишки видалених застосунків: пошук і переміщення в кошик
+    // Leftovers of removed apps: search and move to the Trash
     (() => {
       const scanBtn = document.getElementById('left-scan');
       const trashBtn = document.getElementById('left-trash');

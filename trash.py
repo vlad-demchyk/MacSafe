@@ -1,7 +1,7 @@
-"""Переміщення в кошик macOS (відновлюване). Нічого не видаляє назавжди.
+"""Moving to the macOS Trash (restorable). Never deletes permanently.
 
-Шлях має бути існуючим файлом або папкою всередині домашньої папки, не символічним посиланням.
-Використовується NSFileManager.trashItemAtURL: без запиту дозволу на керування Finder.
+The path must be an existing file or folder inside the home folder, not a symbolic link.
+Uses NSFileManager.trashItemAtURL: no request for permission to control Finder.
 """
 from i18n import T
 import os
@@ -10,7 +10,7 @@ HOME = os.path.expanduser("~")
 
 
 def safe_target(path):
-    """Реальний шлях для переміщення в кошик або None. Корінь домашньої папки і сам кошик не дозволені."""
+    """The real path for moving to the Trash, or None. The home folder root and the Trash itself are not allowed."""
     if not isinstance(path, str) or not os.path.isabs(path) or "\0" in path:
         return None
     if os.path.islink(path) or not os.path.exists(path):
@@ -25,7 +25,7 @@ def safe_target(path):
 
 
 def move_to_trash(path):
-    """(ok, пояснення). Файл потрапляє в кошик і його можна повернути звідти."""
+    """(ok, explanation). The file goes to the Trash and can be restored from there."""
     real = safe_target(path)
     if real is None:
         return False, T("Недозволений шлях")

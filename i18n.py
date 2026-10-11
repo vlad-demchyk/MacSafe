@@ -1,68 +1,50 @@
-"""Мова інтерфейсу: українська або англійська.
+"""Interface language: Ukrainian or English.
 
-Ключ словника EN — українська фраза з коду. T("Текст") повертає переклад для поточної мови,
-а без перекладу лишає оригінал, тож пропущений рядок не ламає інтерфейс.
-Плейсхолдери форматуються після перекладу: T("Вільно: {n} МБ", n=5) → "Free: 5 MB".
+The EN dictionary key is the Ukrainian phrase from the code. T(“Text”) returns the translation for the current language,
+and without a translation it keeps the original, so a missing line does not break the interface.
+Placeholders are formatted after translation: T(“Free: {n} MB”, n=5) → “Free: 5 MB”.
 
-Мова зберігається в налаштуваннях: "auto" (за мовою системи), "uk" або "en".
+The language is stored in the settings: “uk” or “en”. English is the default.
 """
 import json
 import os
 
 LANGS = ("uk", "en")
-AUTO = "auto"
-_current = "uk"
+DEFAULT = "en"   # English by default; the switch is in Appearance (menu bar) and in the report window's Settings
+_current = DEFAULT
 
 
 def set_language(code):
     global _current
-    _current = code if code in LANGS else "uk"
+    _current = code if code in LANGS else DEFAULT
 
 
 def language():
     return _current
 
 
-def system_language():
-    """Мова системи: uk, якщо перша у списку мов macOS українська; інакше en."""
-    try:
-        import AppKit
-        langs = AppKit.NSLocale.preferredLanguages()
-        first = str(langs[0]) if len(langs) else ""
-    except Exception:
-        first = ""
-    return "uk" if first.startswith("uk") else "en"
-
-
-def resolve(pref):
-    """Перетворює налаштування на конкретну мову: auto → мова системи."""
-    if pref in LANGS:
-        return pref
-    return system_language()
-
-
 def load(prefs_path):
-    """Читає мову з файлу налаштувань і встановлює її. Помилка читання дає мову системи."""
-    pref = AUTO
+    """Reads the language from the settings file and sets it. Missing or invalid values give English."""
+    pref = DEFAULT
     try:
         with open(prefs_path, encoding="utf-8") as fh:
             raw = json.load(fh)
-        if isinstance(raw, dict) and raw.get("language") in (AUTO,) + LANGS:
+        if isinstance(raw, dict) and raw.get("language") in LANGS:
             pref = raw["language"]
     except (OSError, ValueError):
         pass
-    set_language(resolve(pref))
+    set_language(pref)
     return _current
 
 
 def T(text, **kw):
-    """Переклад фрази для поточної мови. kw підставляються в плейсхолдери {name}."""
+    """Translation of a phrase for the current language. kw values are substituted into the {name} placeholders."""
     out = EN.get(text, text) if _current == "en" else text
     return out.format(**kw) if kw else out
 
 
 def plural_problem(n):
-    """Слово «проблема» у множині, як у звіті: 1 проблема, 2 проблеми, 5 проблем."""
+    """The word “problem” in the plural, as in the report: 1 problem, 2 problems, 5 problems."""
     if _current == "en":
         return "problem" if n == 1 else "problems"
     if n % 10 == 1 and n % 100 != 11:
@@ -73,7 +55,7 @@ def plural_problem(n):
 
 
 EN = {
-    # ---- панель статус-бару (menubar.py)
+    # ---- menu bar panel (menubar.py)
     "Іконка і цифри": "Icon and numbers",
     "Лише іконка": "Icon only",
     "Лише цифри": "Numbers only",
@@ -116,6 +98,8 @@ EN = {
     "МЕРЕЖА": "NETWORK",
     "БАТАРЕЯ": "BATTERY",
     "Звіти": "Reports",
+    "Відкрити додаток": "Open app",
+    "Невідома мова": "Unknown language",
     "Вийти": "Quit",
     "Коротко: безпека і зміни від попереднього звіту": "Summary: security and changes since the previous report",
     "ТОП ПРОЦЕСІВ": "TOP PROCESSES",
@@ -184,7 +168,7 @@ EN = {
     "Перевірити зараз": "Check now",
     "Вийти з MacSafe": "Quit MacSafe",
     "MacSafe: CPU · RAM · GPU, відсотки зайнятості": "MacSafe: CPU · RAM · GPU, percent in use",
-    # ---- агент, сповіщення, очищення, пошук файлів, кошик (agent.py, alerts.py, cleanup.py, engine.py, trash.py)
+    # ---- agent, notifications, cleaning, file search, Trash (agent.py, alerts.py, cleanup.py, engine.py, trash.py)
     ", доступно {avail:+d} МБ": ", available {avail:+d} MB",
     "Вимкнено з наступного входу, launchd не зняв зараз: {err}": "Turned off from the next login, launchd did not unload it now: {err}",
     "Вільна памʼять: {before}% → {after}%{extra}": "Free memory: {before}% → {after}%{extra}",

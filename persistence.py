@@ -1,7 +1,7 @@
-"""Стеження за автозапуском: список LaunchAgents і LaunchDaemons, різниця з попереднім знімком.
+"""Login item monitoring: the list of LaunchAgents and LaunchDaemons, the difference from the previous snapshot.
 
-Читаються лише plist-файли в трьох системних папках, без root і Full Disk Access. Перший знімок
-зберігається мовчки як базовий. Нічого не змінює в системі.
+Only plist files in three system folders are read, without root and Full Disk Access. The first snapshot
+is saved silently as the baseline. Changes nothing in the system.
 """
 import json
 import os
@@ -16,7 +16,7 @@ DIRS = (
 
 
 def scan(dirs=DIRS):
-    """{шлях до plist: {label, program}}. Пошкоджені файли беруться з назвою файлу як міткою."""
+    """{plist path: {label, program}}. Damaged files take the file name as the label."""
     found = {}
     for folder in dirs:
         try:
@@ -40,7 +40,7 @@ def scan(dirs=DIRS):
 
 
 def added(old, new):
-    """Нові елементи: [{path, label, program}] у new, яких не було в old."""
+    """New items: [{path, label, program}] in new that were not in old."""
     return [dict(path=p, **v) for p, v in new.items() if p not in old]
 
 
@@ -62,7 +62,7 @@ def save(path, state):
 
 
 def check(state_path, dirs=DIRS):
-    """Порівнює з базовим знімком і оновлює його. Повертає список нових елементів (порожній при першому запуску)."""
+    """Compares with the baseline snapshot and updates it. Returns the list of new items (empty on the first run)."""
     current = scan(dirs)
     previous = load(state_path)
     save(state_path, current)

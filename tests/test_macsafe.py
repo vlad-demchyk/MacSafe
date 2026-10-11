@@ -1,7 +1,7 @@
-"""Тести логіки MacSafe. Запуск: /usr/bin/python3 -m unittest discover -s tests -v
+"""MacSafe logic tests. Run: /usr/bin/python3 -m unittest discover -s tests -v
 
-Тести не чіпають реальні дані користувача: шляхи підміняються на тимчасові папки,
-launchctl і ioreg не викликаються.
+The tests do not touch the user's real data: paths are replaced with temporary folders,
+launchctl and ioreg are not called.
 """
 import importlib
 import json
@@ -16,6 +16,12 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+
+
+def setUpModule():
+    # Старі тести перевіряють українські тексти; мова за замовчуванням тепер англійська
+    import i18n
+    i18n.set_language("uk")
 
 
 class PrefsTests(unittest.TestCase):
@@ -183,10 +189,10 @@ class AutostartTests(unittest.TestCase):
 
 
 class CleanupTests(unittest.TestCase):
-    """cleanup читає HOME при імпорті, тому перезавантажуємо модуль з тимчасовим домом."""
+    """cleanup reads HOME on import, so the module is reloaded with a temporary home."""
 
     def setUp(self):
-        # realpath: на macOS /var — симлінк на /private/var; очищення відмовляє шляхам через посилання
+        # realpath: on macOS /var is a symlink to /private/var; cleaning refuses paths that go through a link
         self.home = os.path.realpath(tempfile.mkdtemp(prefix="macsafe-home-"))
         self.saved_home = os.environ.get("HOME")
         os.environ["HOME"] = self.home
@@ -198,7 +204,7 @@ class CleanupTests(unittest.TestCase):
             fh.write(b"x" * 300_000)
         with open(os.path.join(caches, "testapp", "sub", "b.bin"), "wb") as fh:
             fh.write(b"x" * 200_000)
-        # Очищення чіпає лише файли старші за поріг: старі a.bin і b.bin, свіжий fresh.bin лишається
+        # Cleaning touches only files older than the threshold: old a.bin and b.bin, the fresh fresh.bin stays
         for rel in (("testapp", "a.bin"), ("testapp", "sub", "b.bin")):
             stamp = time.time() - 90 * 86400
             os.utime(os.path.join(caches, *rel), (stamp, stamp))
@@ -360,6 +366,37 @@ class PluralTests(unittest.TestCase):
         self.assertEqual(i18n.plural_problem(2), "problems")
 
 
+class UndefinedNamesTests(unittest.TestCase):
+    """Перевіряє, що кожне ім'я, яке модуль використовує, визначене або імпортоване в ньому (ловить забутий імпорт T)."""
+
+    def test_no_undefined_names(self):
+        import ast
+        import builtins
+        import glob
+        root = os.path.join(os.path.dirname(__file__), "..")
+        problems = []
+        for path in glob.glob(os.path.join(root, "*.py")) + glob.glob(os.path.join(root, "packaging", "*.py")):
+            with open(path, encoding="utf-8") as fh:
+                tree = ast.parse(fh.read())
+            defined = set(dir(builtins)) | {"__file__", "__name__"}
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    defined |= {(a.asname or a.name).split(".")[0] for a in node.names}
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    defined.add(node.name)
+                elif isinstance(node, ast.arg):
+                    defined.add(node.arg)
+                elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+                    defined.add(node.id)
+                elif isinstance(node, ast.ExceptHandler) and node.name:
+                    defined.add(node.name)
+            used = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+            missing = sorted(used - defined)
+            if missing:
+                problems.append((os.path.basename(path), missing))
+        self.assertEqual(problems, [])
+
+
 class I18nTests(unittest.TestCase):
     def tearDown(self):
         import i18n
@@ -382,20 +419,21 @@ class I18nTests(unittest.TestCase):
         i18n.set_language("en")
         self.assertEqual(i18n.T("Текст, якого немає у словнику"), "Текст, якого немає у словнику")
 
-    def test_resolve_and_load(self):
+    def test_load_defaults_to_english(self):
         import i18n
-        self.assertEqual(i18n.resolve("uk"), "uk")
-        self.assertEqual(i18n.resolve("en"), "en")
-        self.assertIn(i18n.resolve("auto"), i18n.LANGS)
         with tempfile.TemporaryDirectory() as tmp:
+            missing = os.path.join(tmp, "немає.json")
+            self.assertEqual(i18n.load(missing), "en")
             path = os.path.join(tmp, "налаштування.json")
             with open(path, "w", encoding="utf-8") as fh:
-                json.dump({"language": "en"}, fh)
+                json.dump({"language": "uk"}, fh)
+            self.assertEqual(i18n.load(path), "uk")
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump({"language": "de"}, fh)
             self.assertEqual(i18n.load(path), "en")
-            self.assertEqual(i18n.language(), "en")
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write("не json")
-            self.assertIn(i18n.load(path), i18n.LANGS)
+            self.assertEqual(i18n.load(path), "en")
 
     def test_every_translation_keeps_placeholders(self):
         import i18n
@@ -419,10 +457,24 @@ class I18nTests(unittest.TestCase):
                         missing.append((os.path.basename(path), arg.value))
         self.assertEqual(missing, [])
 
+    def test_window_language_request_is_written_to_a_file(self):
+        import engine
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, ".lang-request")
+            original = engine.LANG_REQUEST
+            engine.LANG_REQUEST = path
+            try:
+                self.assertTrue(engine.Api().set_language("uk")["ok"])
+                with open(path, encoding="utf-8") as fh:
+                    self.assertEqual(fh.read(), "uk")
+                self.assertFalse(engine.Api().set_language("de")["ok"])
+            finally:
+                engine.LANG_REQUEST = original
+
     def test_language_pref_accepts_only_known_values(self):
         with tempfile.TemporaryDirectory() as tmp:
             prefs = importlib.import_module("prefs").Prefs(os.path.join(tmp, "налаштування.json"))
-            self.assertEqual(prefs.get("language"), "auto")
+            self.assertEqual(prefs.get("language"), "en")
             prefs.set("language", "en")
             self.assertEqual(importlib.import_module("prefs").Prefs(os.path.join(tmp, "налаштування.json")).get("language"), "en")
             with self.assertRaises(ValueError):
@@ -430,7 +482,7 @@ class I18nTests(unittest.TestCase):
 
 
 class MonitorScanTests(unittest.TestCase):
-    """Список процесів сканується лише коли він відкритий: закритий агент не торкається процесів."""
+    """The process list is scanned only when it is open: a closed agent does not touch processes."""
 
     def setUp(self):
         import metrics
@@ -480,7 +532,7 @@ class MonitorScanTests(unittest.TestCase):
         try:
             mon.set_detail(True)
             time.sleep(0.4)
-            self.assertGreaterEqual(self.calls, 2)   # прайм і хоча б один справжній замір
+            self.assertGreaterEqual(self.calls, 2)   # priming and at least one real measurement
             mon.set_detail(False)
             time.sleep(0.1)
             stopped_at = self.calls
@@ -530,7 +582,7 @@ class QuickMetricsTests(unittest.TestCase):
 
 
 class OldCacheCleanTests(unittest.TestCase):
-    """Швидке очищення: лише файли старші за порогом; свіжі, символічні посилання і корінь лишаються."""
+    """Quick clean: only files older than the threshold; recent files, symbolic links and the root stay."""
 
     def setUp(self):
         import cleanup
@@ -571,7 +623,7 @@ class OldCacheCleanTests(unittest.TestCase):
 
 
 class CategoryCleanTests(OldCacheCleanTests):
-    """Детальне очищення: категорії, поріг віку, знімок памʼяті; логи тепер у дозволених коренях."""
+    """Detailed cleaning: categories, age threshold, memory snapshot; logs are now in the allowed roots."""
 
     def test_unselected_category_is_skipped(self):
         result = self.cleanup.clean_old(["npm"], days=30, categories=["logs"])
@@ -584,7 +636,7 @@ class CategoryCleanTests(OldCacheCleanTests):
         self.assertGreater(result["results"][0]["freedMb"], 0.9)
 
     def test_invalid_days_falls_back_to_default(self):
-        result = self.cleanup.clean_old(["npm"], days=1, categories=None)   # 1 день не дозволено
+        result = self.cleanup.clean_old(["npm"], days=1, categories=None)   # 1 day, not allowed
         self.assertEqual(result["days"], self.cleanup.OLD_DAYS)
         self.assertTrue(os.path.exists(self.new))
 
@@ -616,7 +668,7 @@ class LogsRootTests(unittest.TestCase):
 
 
 class KillableTests(unittest.TestCase):
-    """«×» доступний для будь-якого процесу користувача, крім самого MacSafe."""
+    """“×” is available for any user process except MacSafe itself."""
 
     def test_user_process_is_killable(self):
         import metrics
@@ -635,7 +687,7 @@ class KillableTests(unittest.TestCase):
 
 
 class KillMarkTests(unittest.TestCase):
-    """«Так?» стоїть на одному рядку з наскрізним індексом: CPU-рядки, потім RAM-рядки."""
+    """“Sure?” is on one row by the running index: CPU rows, then RAM rows."""
 
     class _Button:
         def __init__(self):
@@ -653,23 +705,23 @@ class KillMarkTests(unittest.TestCase):
             process_rows = [cpu, ram]
         bar = menubar.StatusBar.__new__(menubar.StatusBar)
         bar._panel = Panel()
-        bar._mark_kill(2)   # перший рядок RAM
+        bar._mark_kill(2)   # the first RAM row
         self.assertEqual([r[4].title for r in cpu + ram], ["×", "×", "Так?", "×"])
         bar._mark_kill(None)
         self.assertEqual([r[4].title for r in cpu + ram], ["×", "×", "×", "×"])
 
 
 class PinnedRowsTests(unittest.TestCase):
-    """Зафіксовані рядки: порядок лишається, значення беруться зі свіжого знімка, зниклі позначаються."""
+    """Pinned rows: the order stays, values come from a fresh snapshot, vanished ones are marked."""
 
     def test_stable_names_keep_positions_and_fill_free_slots(self):
         import menubar
         top = [{"name": "a"}, {"name": "c"}, {"name": "b"}]
-        # b вже випав з топ-2: його місце займає c, a лишається на місці
+        # b has dropped out of the top 2: c takes its place, a stays in place
         self.assertEqual(menubar._stable_names(["a", "b"], top, 2), ["a", "c"])
-        # порядок уже відомих рядків не міняється, навіть якщо за CPU тепер інший порядок
+        # the order of already known rows does not change, even if the CPU order is now different
         self.assertEqual(menubar._stable_names(["b", "a"], [{"name": "a"}, {"name": "b"}], 2), ["b", "a"])
-        # спочатку список порожній: нові займають місця в порядку CPU, зайві слоти — None
+        # at first the list is empty: new ones take places in CPU order, extra slots — None
         self.assertEqual(menubar._stable_names([], [{"name": "x"}, {"name": "y"}], 3), ["x", "y", None])
 
     def test_pinned_keeps_position_and_takes_fresh_values(self):
@@ -683,8 +735,8 @@ class PinnedRowsTests(unittest.TestCase):
         import menubar
         pinned = [{"name": "gone", "cpu": 3.0}]
         out = menubar._pinned_groups(pinned, {})
-        self.assertEqual(out[0][0]["cpu"], 3.0)   # останні відомі значення
-        self.assertTrue(out[0][1])                 # позначено як зниклий
+        self.assertEqual(out[0][0]["cpu"], 3.0)   # the last known values
+        self.assertTrue(out[0][1])                 # marked as gone
 
 
 class AlertsTests(unittest.TestCase):
@@ -702,9 +754,9 @@ class AlertsTests(unittest.TestCase):
         self.now[0] = 61
         self.assertEqual(len(self.rules.check(self.snap(ram=95))), 1)
         self.now[0] = 200
-        self.assertEqual(self.rules.check(self.snap(ram=95)), [])      # пауза
+        self.assertEqual(self.rules.check(self.snap(ram=95)), [])      # pause
         self.now[0] = 4000
-        self.assertEqual(len(self.rules.check(self.snap(ram=95))), 1)  # пауза минула
+        self.assertEqual(len(self.rules.check(self.snap(ram=95))), 1)  # the pause has passed
 
     def test_ram_recovery_resets_hold(self):
         self.rules.check(self.snap(ram=95))
