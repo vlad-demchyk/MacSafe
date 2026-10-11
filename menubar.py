@@ -20,6 +20,7 @@ from PyObjCTools import AppHelper
 import cleanup
 from metrics import GB, MB, core_types, hardware_info
 from prefs import STYLES
+from i18n import T, language as current_language, plural_problem
 
 # CGColor з AppKit повертає сирий вказівник; PyObjC попереджає про це при кожному виклику, результат коректний
 warnings.filterwarnings("ignore", category=objc.ObjCPointerWarning)
@@ -30,8 +31,12 @@ PROC_RAM_ROWS = 3     # рядків за RAM у зоні «Процеси»
 PROC_GPU_ROWS = 3     # рядків за GPU у зоні «Процеси»
 RAM_SLOTS = 5        # скільки рядків за памʼяттю
 NAME_WIDTH = 22      # ширина назви в підменю (моноширинний шрифт, вирівнювання стовпчиків)
-STYLE_TITLES = {"both": "Іконка і цифри", "icon": "Лише іконка", "text": "Лише цифри"}
-METRIC_TITLES = {"cpu": "Показувати CPU", "ram": "Показувати RAM", "gpu": "Показувати GPU"}
+def style_titles():
+    return {"both": T("Іконка і цифри"), "icon": T("Лише іконка"), "text": T("Лише цифри")}
+
+
+def metric_titles():
+    return {"cpu": T("Показувати CPU"), "ram": T("Показувати RAM"), "gpu": T("Показувати GPU")}
 PANEL_W = 340         # вузька панель
 PANEL_PAD = 16        # відступ по краях
 INNER_W = PANEL_W - 2 * PANEL_PAD
@@ -46,29 +51,21 @@ DETAIL_ROW = 16      # висота рядка деталей (назва і з�
 BAR_H = 8            # висота складеної смуги деталей
 STYLE_INDEX = {style: i for i, style in enumerate(STYLE_BY_INDEX)}
 INTERVALS = (1, 2, 5)   # секунд між вибірками; сегмент у зоні «Вигляд»
+LANGUAGE_CODES = ("uk", "en")   # порядок сегментів мови в зоні «Вигляд»
 INTERVAL_INDEX = {seconds: i for i, seconds in enumerate(INTERVALS)}
 SECURITY_EVERY = 30.0  # секунд між читаннями підсумку безпеки з останнього звіту (файл, не щосекунди)
-
-
-def _plural_problems(n):
-    """Українська множина: 1 проблема, 2 проблеми, 5 проблем."""
-    if n % 10 == 1 and n % 100 != 11:
-        return "проблема"
-    if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
-        return "проблеми"
-    return "проблем"
 
 
 def _security_line(sec):
     """Текст і колір стану безпеки для панелі й статус-бару."""
     level = (sec or {}).get("level", "none")
     if level == "none":
-        return "Безпека: звіту ще немає", None
+        return T("Безпека: звіту ще немає"), None
     if level == "ok":
-        return "Безпека: усе гаразд", None
+        return T("Безпека: усе гаразд"), None
     n = int(sec.get("issues", 0))
     color = AppKit.NSColor.systemRedColor() if level == "critical" else AppKit.NSColor.systemOrangeColor()
-    return f"Безпека: {n} {_plural_problems(n)}", color
+    return T("Безпека: {n} {word}", n=n, word=plural_problem(n)), color
 
 
 def _reduce_motion():
@@ -297,7 +294,7 @@ def _legend_row(view, y, color, title):
 def _rate(bytes_per_s):
     """Швидкість для підпису: КБ/с або МБ/с."""
     kb = bytes_per_s / 1024
-    return f"{kb / 1024:.1f} МБ/с" if kb >= 1024 else f"{kb:.0f} КБ/с"
+    return T("{v:.1f} МБ/с", v=kb / 1024) if kb >= 1024 else T("{v:.0f} КБ/с", v=kb)
 
 
 def _pct(value):
@@ -310,8 +307,8 @@ def _uptime_text(seconds):
     days, rest = divmod(int(seconds), 86400)
     hours, rest = divmod(rest, 3600)
     if days:
-        return f"{days} дн. {hours} год"
-    return f"{hours} год {rest // 60} хв"
+        return T("{d} дн. {h} год", d=days, h=hours)
+    return T("{h} год {m} хв", h=hours, m=rest // 60)
 
 
 def _caption(parent, text, y):
@@ -463,7 +460,7 @@ class _SidePanel:
         self.owner = owner
         self.root = _RootView.alloc().initWithFrame_(NSMakeRect(0, 0, SIDE_W, 120))
         inner = SIDE_W - 2 * PANEL_PAD
-        self.title = _label(self.root, "Коротко", PANEL_PAD, 12, inner, 13, height=18)
+        self.title = _label(self.root, T("Коротко"), PANEL_PAD, 12, inner, 13, height=18)
         self.title.setFont_(AppKit.NSFont.systemFontOfSize_weight_(13, 0.4))
         self.status = _label(self.root, "", PANEL_PAD, 36, inner, 12, height=16)
         self.report = _label(self.root, "", PANEL_PAD, 54, inner, 10, True, height=14)
@@ -481,18 +478,18 @@ class _SidePanel:
         self.status.setStringValue_(text)
         self.status.setTextColor_(color or AppKit.NSColor.labelColor())
         checked = summary.get("checkedAt")
-        self.report.setStringValue_(f"Звіт від {checked}" if checked else "Звіту ще немає")
+        self.report.setStringValue_(T("Звіт від {checked}", checked=checked) if checked else T("Звіту ще немає"))
         count = int(summary.get("changeCount", 0))
-        self.changes_head.setStringValue_(f"ЗМІНИ ВІД ПОПЕРЕДНЬОГО ЗВІТУ: {count}" if count else "ЗМІН НЕМАЄ")
+        self.changes_head.setStringValue_(T("ЗМІНИ ВІД ПОПЕРЕДНЬОГО ЗВІТУ: {count}", count=count) if count else T("ЗМІН НЕМАЄ"))
         changes = summary.get("changes") or []
         y = 102
         for i, row in enumerate(self.change_rows):
             if i < len(changes):
                 c = changes[i]
                 if c.get("from") is None:
-                    detail = f"з'явилась: {c.get('to')}"
+                    detail = T("з'явилась: {to}", to=c.get("to"))
                 elif c.get("to") is None:
-                    detail = "зникла"
+                    detail = T("зникла")
                 else:
                     detail = f"{c.get('from')} → {c.get('to')}"
                 row.setStringValue_(f"{c.get('label')}: {detail}")
@@ -518,7 +515,7 @@ class _PopoverPanel:
         root = self.root
         title = _label(root, "MacSafe", PANEL_PAD, 12, 160, 15, height=20)
         title.setFont_(AppKit.NSFont.systemFontOfSize_weight_(15, 0.5))
-        self.security = _label(root, "Безпека: звіту ще немає", PANEL_PAD, 14, INNER_W, 11, True, height=16)
+        self.security = _label(root, T("Безпека: звіту ще немає"), PANEL_PAD, 14, INNER_W, 11, True, height=16)
         self.security.setAlignment_(AppKit.NSTextAlignmentRight)
         self.meters = {}
         y = 44
@@ -527,7 +524,7 @@ class _PopoverPanel:
             cap.setFont_(AppKit.NSFont.systemFontOfSize_weight_(11, 0.5))
             value = _label(root, "—", PANEL_W - PANEL_PAD - 110, y - 7, 110, size=20, digits=True, height=28)
             value.setAlignment_(AppKit.NSTextAlignmentRight)
-            detail = _label(root, "Очікування даних", PANEL_PAD, y + 18, INNER_W, 11, True, height=16)
+            detail = _label(root, T("Очікування даних"), PANEL_PAD, y + 18, INNER_W, 11, True, height=16)
             graph = _MeterView.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, y + 34, INNER_W, 24))
             graph.value, graph.samples, graph.end = None, (), 0
             graph.setWantsLayer_(True)
@@ -535,20 +532,20 @@ class _PopoverPanel:
             graph.fill.setWantsLayer_(True)
             graph.fill.setHidden_(True)          # смуга-заливка прибрана; лишилась лише лінія історії
             graph.addSubview_(graph.fill)
-            graph.setAccessibilityLabel_(key.upper() + ": історія за 60 секунд")
+            graph.setAccessibilityLabel_(key.upper() + ": " + T("історія за 60 секунд"))
             root.addSubview_(graph)
             self.meters[key] = (value, detail, graph)
             if key == "cpu":
                 self.cores = _CoresView.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, y + 62, INNER_W, 42))
                 self.cores.setKinds_(core_types())
-                self.cores.setToolTip_("Ядра: синє — продуктивні (P), бірюзове — економні (E)")
+                self.cores.setToolTip_(T("Ядра: синє — продуктивні (P), бірюзове — економні (E)"))
                 root.addSubview_(self.cores)
                 y += 44
             y += 70
         # Рядок системних показників: диск, мережа, батарея
         self.infos = {}
         col = INNER_W / 3
-        for i, (key, caption) in enumerate((("disk", "ДИСК"), ("net", "МЕРЕЖА"), ("battery", "БАТАРЕЯ"))):
+        for i, (key, caption) in enumerate((("disk", T("ДИСК")), ("net", T("МЕРЕЖА")), ("battery", T("БАТАРЕЯ")))):
             x0 = PANEL_PAD + i * col
             card = _Card.alloc().initWithFrame_(NSMakeRect(x0, y - 8, col - 6, 58))
             root.addSubview_(card)
@@ -581,10 +578,10 @@ class _PopoverPanel:
         self.footer_line = AppKit.NSBox.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, 0, INNER_W, 1))
         self.footer_line.setBoxType_(AppKit.NSBoxSeparator)
         root.addSubview_(self.footer_line)
-        self.footer_open = self._footer_button("Звіти", "openWindow:", 110, AppKit.NSTextAlignmentLeft, "doc.text")
-        self.footer_quit = self._footer_button("Вийти", "quit:", 80, AppKit.NSTextAlignmentLeft, "power")
+        self.footer_open = self._footer_button(T("Звіти"), "openWindow:", 110, AppKit.NSTextAlignmentLeft, "doc.text")
+        self.footer_quit = self._footer_button(T("Вийти"), "quit:", 80, AppKit.NSTextAlignmentLeft, "power")
         self.footer_side = self._footer_button("", "sideReport:", 22, AppKit.NSTextAlignmentLeft, "sidebar.left")
-        self.footer_side.setToolTip_("Коротко: безпека і зміни від попереднього звіту")
+        self.footer_side.setToolTip_(T("Коротко: безпека і зміни від попереднього звіту"))
         # Рядок статусу в один рядок: довгий текст обрізається, а не займає другий рядок внизу
         self.note = _label(root, "", PANEL_PAD, 0, INNER_W, 10, True, height=14)
         self.note.cell().setLineBreakMode_(AppKit.NSLineBreakByTruncatingTail)
@@ -608,7 +605,7 @@ class _PopoverPanel:
     def _zone(self, title, fill):
         index = len(self.zones)
         head = _ZoneTitle.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, 0, INNER_W, ZONE_H))
-        head.title = title
+        head.title = T(title)
         symbol = ZONE_SYMBOLS.get(title)
         if symbol is not None:
             icon = AppKit.NSImageView.alloc().initWithFrame_(NSMakeRect(10, (ZONE_H - 14) / 2, 14, 14))
@@ -696,9 +693,9 @@ class _PopoverPanel:
             legend.append(_legend_row(view, y, color, title))
             y += DETAIL_ROW
         self.details[key] = {"bar": bar, "legend": legend, "h": y}
-        caption = _label(view, "ТОП ПРОЦЕСІВ", 0, y + 6, 110, 10, True)
+        caption = _label(view, T("ТОП ПРОЦЕСІВ"), 0, y + 6, 110, 10, True)
         heads = []
-        for text, x, w in (("CPU", 116, 52), ("GPU", 168, 50), ("ПАМʼЯТЬ", 220, 62)):
+        for text, x, w in (("CPU", 116, 52), ("GPU", 168, 50), (T("ПАМʼЯТЬ"), 220, 62)):
             head = _label(view, text, x, y + 6, w, 9, True, height=14)
             head.setAlignment_(AppKit.NSTextAlignmentRight)
             heads.append(head)
@@ -714,22 +711,22 @@ class _PopoverPanel:
     def _fill_cpu(self, view):
         blue, red = AppKit.NSColor.systemBlueColor(), AppKit.NSColor.systemRedColor()
         return self._fill_block(view, "cpu", [
-            (red, "Система"), (blue, "Користувач"), (AppKit.NSColor.tertiaryLabelColor(), "Вільно"),
-            (AppKit.NSColor.systemTealColor(), "Енергоефективні ядра"), (blue, "Продуктивні ядра"),
-            (None, "Час роботи"), (None, "Навантаження 1 · 5 · 15 хв"),
+            (red, T("Система")), (blue, T("Користувач")), (AppKit.NSColor.tertiaryLabelColor(), T("Вільно")),
+            (AppKit.NSColor.systemTealColor(), T("Енергоефективні ядра")), (blue, T("Продуктивні ядра")),
+            (None, T("Час роботи")), (None, T("Навантаження 1 · 5 · 15 хв")),
         ])
 
     def _fill_gpu(self, view):
         return self._fill_block(view, "gpu", [
-            (None, "Модель"), (None, "Ядра"), (AppKit.NSColor.systemBlueColor(), "Використання"),
+            (None, T("Модель")), (None, T("Ядра")), (AppKit.NSColor.systemBlueColor(), T("Використання")),
             (AppKit.NSColor.systemTealColor(), "Render"), (AppKit.NSColor.systemPurpleColor(), "Tiler"),
         ])
 
     def _fill_ram(self, view):
         return self._fill_block(view, "ram", [
-            (None, "Використовується"), (AppKit.NSColor.systemBlueColor(), "Програми"),
-            (AppKit.NSColor.systemOrangeColor(), "Постійна"), (AppKit.NSColor.systemRedColor(), "Стиснена"),
-            (AppKit.NSColor.tertiaryLabelColor(), "Вільна"), (None, "Swap"),
+            (None, T("Використовується")), (AppKit.NSColor.systemBlueColor(), T("Програми")),
+            (AppKit.NSColor.systemOrangeColor(), T("Постійна")), (AppKit.NSColor.systemRedColor(), T("Стиснена")),
+            (AppKit.NSColor.tertiaryLabelColor(), T("Вільна")), (None, "Swap"),
         ])
 
     def _set_details(self, key, segments, values):
@@ -760,8 +757,8 @@ class _PopoverPanel:
         self._set_details("ram", [(app / total, blue),
                                   (wired / total, AppKit.NSColor.systemOrangeColor()),
                                   (comp / total, AppKit.NSColor.systemRedColor())], [
-            f"{total - free:.1f} ГБ з {total:.0f} ГБ", f"{app:.1f} ГБ", f"{wired:.1f} ГБ",
-            f"{comp:.1f} ГБ", f"{free:.1f} ГБ", f"{mem.get('swapGb', 0.0):.1f} ГБ",
+            T("{used:.1f} ГБ з {total:.0f} ГБ", used=total - free, total=total), T("{v:.1f} ГБ", v=app), T("{v:.1f} ГБ", v=wired),
+            T("{v:.1f} ГБ", v=comp), T("{v:.1f} ГБ", v=free), T("{v:.1f} ГБ", v=mem.get("swapGb", 0.0)),
         ])
 
     def _set_icon(self, icon, idx, path):
@@ -829,7 +826,7 @@ class _PopoverPanel:
                 else:
                     self.kill_targets[idx] = group
                     kill.setHidden_(not group.get("killable"))
-                kill.setTitle_("Так?" if armed and armed[0] == idx else "×")
+                kill.setTitle_(T("Так?") if armed and armed[0] == idx else "×")
             heights[key] = row_y + 8 if filled else top + 4
             flat += size
         return heights
@@ -871,7 +868,7 @@ class _PopoverPanel:
 
     def _fill_appearance(self, view):
         y = 0
-        _caption(view, "Показники в барі", y)
+        _caption(view, T("Показники в барі"), y)
         y += 22
         for key, title in (("cpu", "CPU"), ("ram", "RAM"), ("gpu", "GPU")):
             _label(view, title, 0, y, 200, 12, height=20)
@@ -881,9 +878,9 @@ class _PopoverPanel:
             self.switches[key] = sw
             y += 28
         y += 10
-        _caption(view, "Автоматично", y)
+        _caption(view, T("Автоматично"), y)
         y += 22
-        for key, title in (("alerts", "Сповіщення"), ("dailyCheck", "Щоденна перевірка")):
+        for key, title in (("alerts", T("Сповіщення")), ("dailyCheck", T("Щоденна перевірка"))):
             _label(view, title, 0, y, 200, 12, height=20)
             sw = _Switch.alloc().initWithFrame_(NSMakeRect(INNER_W - _Switch.WIDTH, y, _Switch.WIDTH, _Switch.HEIGHT))
             sw.on_change = lambda key=key: self.owner.toggle_flag(key)
@@ -891,30 +888,37 @@ class _PopoverPanel:
             self.switches[key] = sw
             y += 28
         y += 10
-        _caption(view, "Стиль в барі", y)
+        _caption(view, T("Стиль в барі"), y)
         y += 22
         self.style_seg = _Segments.alloc().initWithFrame_(NSMakeRect(0, y, INNER_W, 26))
-        self.style_seg.setItems_(("Обидва", "Іконка", "Цифри"))
+        self.style_seg.setItems_((T("Обидва"), T("Іконка"), T("Цифри")))
         self.style_seg.on_select = lambda i: self.owner.set_style(STYLE_BY_INDEX[i])
         view.addSubview_(self.style_seg)
         y += 26 + 14
-        _caption(view, "Оновлення даних", y)
+        _caption(view, T("Оновлення даних"), y)
         y += 22
         self.interval_seg = _Segments.alloc().initWithFrame_(NSMakeRect(0, y, INNER_W, 26))
-        self.interval_seg.setItems_([f"{seconds} с" for seconds in INTERVALS])
+        self.interval_seg.setItems_([T("{s} с", s=seconds) for seconds in INTERVALS])
         self.interval_seg.on_select = lambda i: self.owner.set_interval(INTERVALS[i])
         view.addSubview_(self.interval_seg)
+        y += 26 + 14
+        _caption(view, T("Мова"), y)
+        y += 22
+        self.lang_seg = _Segments.alloc().initWithFrame_(NSMakeRect(0, y, INNER_W, 26))
+        self.lang_seg.setItems_(("Українська", "English"))
+        self.lang_seg.on_select = lambda i: self.owner.set_language(LANGUAGE_CODES[i])
+        view.addSubview_(self.lang_seg)
         return y + 26
 
     def _fill_actions(self, view):
         tile_w = (INNER_W - 8) / 2
-        for n, (title, selector, symbol) in enumerate((("Швидке очищення", "quickClean:", "sparkles"),
-                                                       ("Перевірка", "runCheck:", "checkmark.shield"),
-                                                       ("Детальне очищення", "cleanup:", "trash"),
-                                                       ("Звільнити памʼять", "purge:", "memorychip"))):
+        for n, (title, selector, symbol) in enumerate(((T("Швидке очищення"), "quickClean:", "sparkles"),
+                                                       (T("Перевірка"), "runCheck:", "checkmark.shield"),
+                                                       (T("Детальне очищення"), "cleanup:", "trash"),
+                                                       (T("Звільнити памʼять"), "purge:", "memorychip"))):
             view.addSubview_(self._tile(title, selector, symbol, (n % 2) * (tile_w + 8), (n // 2) * 42, tile_w))
         y = 92
-        _label(view, "Запускати при вході", 0, y + 2, 240, 12, height=20)
+        _label(view, T("Запускати при вході"), 0, y + 2, 240, 12, height=20)
         self.auto = _Switch.alloc().initWithFrame_(NSMakeRect(INNER_W - _Switch.WIDTH, y + 2, _Switch.WIDTH, _Switch.HEIGHT))
         self.auto.on_change = lambda: self.owner.toggle_autostart()
         view.addSubview_(self.auto)
@@ -956,16 +960,17 @@ class _PopoverPanel:
             control.setOn_(self.owner._settings[key])
         self.style_seg.setSelected_(STYLE_INDEX.get(self.owner._settings["style"], 0))
         self.interval_seg.setSelected_(INTERVAL_INDEX.get(self.owner._settings["interval"], 0))
+        self.lang_seg.setSelected_(LANGUAGE_CODES.index(current_language()) if current_language() in LANGUAGE_CODES else 0)
         self.auto.setOn_(self.owner._autostart_on)
         self.auto.setActive_(not self.owner._auto_busy)
 
     def update(self, snap):
         self.ends = {"cpu": snap["cpu"], "ram": snap["ram"]["percent"], "gpu": snap["gpu"]}
-        self.meters["cpu"][1].setStringValue_(f"{snap['cores']} ядер · загальне навантаження")
+        self.meters["cpu"][1].setStringValue_(T("{cores} ядер · загальне навантаження", cores=snap["cores"]))
         ram = snap["ram"]
         self.meters["ram"][1].setStringValue_(
-            f"{ram['usedGb']:.1f} з {ram['totalGb']:.1f} ГБ · swap {ram['swapGb']:.1f} ГБ")
-        self.meters["gpu"][1].setStringValue_("Дані недоступні" if snap["gpu"] is None else "Навантаження графіки")
+            T("{used:.1f} з {total:.1f} ГБ · swap {swap:.1f} ГБ", used=ram["usedGb"], total=ram["totalGb"], swap=ram["swapGb"]))
+        self.meters["gpu"][1].setStringValue_(T("Дані недоступні") if snap["gpu"] is None else T("Навантаження графіки"))
         self.cores.setLoads_(snap.get("perCore") or [])
         self._update_infos(snap)
         for key, (_, _, graph) in self.meters.items():
@@ -1007,8 +1012,8 @@ class _PopoverPanel:
     def _update_infos(self, snap):
         disk, net, bat = snap.get("disk"), snap.get("net"), snap.get("battery")
         top, sub = self.infos["disk"]
-        top.setStringValue_("—" if not disk else f"{disk['freeGb']:.0f} ГБ")
-        sub.setStringValue_("" if not disk else f"з {disk['totalGb']:.0f} ГБ")
+        top.setStringValue_("—" if not disk else T("{free:.0f} ГБ", free=disk["freeGb"]))
+        sub.setStringValue_("" if not disk else T("з {total:.0f} ГБ", total=disk["totalGb"]))
         low = bool(disk) and disk["freeGb"] < 10
         top.setTextColor_(AppKit.NSColor.systemRedColor() if low else AppKit.NSColor.labelColor())
         top, sub = self.infos["net"]
@@ -1016,7 +1021,7 @@ class _PopoverPanel:
         sub.setStringValue_("" if not net else "↑ " + _rate(net[1]))
         top, sub = self.infos["battery"]
         top.setStringValue_("—" if not bat else f"{bat['percent']:.0f}%")
-        sub.setStringValue_("немає батареї" if not bat else ("від мережі" if bat["plugged"] else "від батареї"))
+        sub.setStringValue_(T("немає батареї") if not bat else (T("від мережі") if bat["plugged"] else T("від батареї")))
         flat = bool(bat) and not bat["plugged"] and bat["percent"] <= 15
         top.setTextColor_(AppKit.NSColor.systemRedColor() if flat else AppKit.NSColor.labelColor())
 
@@ -1090,8 +1095,8 @@ def _highlight_color():
 
 def _mem(rss):
     if rss >= GB:
-        return f"{rss / GB:.1f} ГБ"
-    return f"{rss / MB:.0f} МБ"
+        return T("{v:.1f} ГБ", v=rss / GB)
+    return T("{v:.0f} МБ", v=rss / MB)
 
 
 BAR_MAX_PX = 14   # найвища висота стовпчика значка, пікселів
@@ -1236,7 +1241,7 @@ class StatusBar:
             AppKit.NSVariableStatusItemLength)
         self._button = self._status.button()
         self._button.setImagePosition_(AppKit.NSImageLeading)
-        self._button.setToolTip_("MacSafe: CPU · RAM · GPU, відсотки зайнятості")
+        self._button.setToolTip_(T("MacSafe: CPU · RAM · GPU, відсотки зайнятості"))
 
         menu = AppKit.NSMenu.alloc().initWithTitle_("MacSafe")
         menu.setAutoenablesItems_(False)
@@ -1249,50 +1254,50 @@ class StatusBar:
         self._note_item = self._info(menu)
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
-        procs = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Процеси", None, "")
-        sub = AppKit.NSMenu.alloc().initWithTitle_("Процеси")
+        procs = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(T("Процеси"), None, "")
+        sub = AppKit.NSMenu.alloc().initWithTitle_(T("Процеси"))
         sub.setAutoenablesItems_(False)
         sub.setDelegate_(self._targets)
-        self._info(sub, "За CPU (% одного ядра)")
+        self._info(sub, T("За CPU (% одного ядра)"))
         self._cpu_rows = [self._info(sub) for _ in range(PROC_SLOTS)]
         sub.addItem_(AppKit.NSMenuItem.separatorItem())
-        self._info(sub, "За памʼяттю (RSS)")
+        self._info(sub, T("За памʼяттю (RSS)"))
         self._ram_rows = [self._info(sub) for _ in range(RAM_SLOTS)]
         procs.setSubmenu_(sub)
         menu.addItem_(procs)
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
         # Вигляд: перемикачі показників і стиль статус-бару
-        view = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Вигляд", None, "")
-        vsub = AppKit.NSMenu.alloc().initWithTitle_("Вигляд")
+        view = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(T("Вигляд"), None, "")
+        vsub = AppKit.NSMenu.alloc().initWithTitle_(T("Вигляд"))
         vsub.setAutoenablesItems_(False)
         self._metric_items = {}
         for key, action in (("cpu", "toggleCpu:"), ("ram", "toggleRam:"), ("gpu", "toggleGpu:")):
-            item = self._action(METRIC_TITLES[key], action)
+            item = self._action(metric_titles()[key], action)
             self._metric_items[key] = item
             vsub.addItem_(item)
         vsub.addItem_(AppKit.NSMenuItem.separatorItem())
         self._style_items = {}
         for style, action in (("both", "styleBoth:"), ("icon", "styleIcon:"), ("text", "styleText:")):
-            item = self._action(STYLE_TITLES[style], action)
+            item = self._action(style_titles()[style], action)
             self._style_items[style] = item
             vsub.addItem_(item)
         view.setSubmenu_(vsub)
         menu.addItem_(view)
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
-        menu.addItem_(self._action("Звіти", "openReport:"))
-        menu.addItem_(self._action("Перевірити зараз", "runCheck:"))
-        menu.addItem_(self._action("Звільнити памʼять…", "purge:"))
+        menu.addItem_(self._action(T("Звіти"), "openReport:"))
+        menu.addItem_(self._action(T("Перевірити зараз"), "runCheck:"))
+        menu.addItem_(self._action(T("Звільнити памʼять…"), "purge:"))
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
-        auto = self._action("Запускати при вході", "autostart:")
+        auto = self._action(T("Запускати при вході"), "autostart:")
         self._auto_item = auto
         auto.setState_(_state(autostart_on))
         menu.addItem_(auto)
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
-        quit_item = self._action("Вийти з MacSafe", "quit:")
+        quit_item = self._action(T("Вийти з MacSafe"), "quit:")
         quit_item.setKeyEquivalent_("q")
         menu.addItem_(quit_item)
 
@@ -1306,7 +1311,7 @@ class StatusBar:
         except Exception as exc:
             self._panel = None
             self._status.setMenu_(menu)
-            self.set_note(f"Панель недоступна, використовуйте меню: {exc}")
+            self.set_note(T("Панель недоступна, використовуйте меню: {exc}", exc=exc))
 
         # Таймер у common modes: спрацьовує і під час відкритого меню (NSEventTrackingRunLoopMode)
         self._timer = NSTimer.timerWithTimeInterval_target_selector_userInfo_repeats_(
@@ -1341,7 +1346,7 @@ class StatusBar:
                 try:
                     result = future.result()
                 except Exception as exc:
-                    self.set_note(f"Не вдалося виконати дію: {exc}")
+                    self.set_note(T("Не вдалося виконати дію: {exc}", exc=exc))
                     if completion is not None:
                         completion(None)
                 else:
@@ -1377,31 +1382,31 @@ class StatusBar:
         if self._quick is not None and time.monotonic() - self._quick[1] <= 10:
             ids = self._quick[0]
             self._quick = None
-            self.set_note("Очищую: npm, pip, Homebrew, Xcode…")
+            self.set_note(T("Очищую: npm, pip, Homebrew, Xcode…"))
             self._work(lambda: self.actions["cache_clean"](ids), self._quick_done)
             return
         self._quick = None
-        self.set_note("Рахую розмір безпечних кешів…")   # одразу видно реакцію, підрахунок іде у фоні
+        self.set_note(T("Рахую розмір безпечних кешів…"))   # одразу видно реакцію, підрахунок іде у фоні
         self._work(self.actions["cache_scan"], self._quick_ready)
 
     def _quick_ready(self, items):
         candidates = [i for i in (items or []) if i.get("sizeMb", 0) > 0]
         if not candidates:
-            self.set_note("Безпечних кешів для очищення немає")
+            self.set_note(T("Безпечних кешів для очищення немає"))
             return
         total = sum(i["sizeMb"] for i in candidates)
         self._quick = ([i["id"] for i in candidates], time.monotonic())
-        size = f"{total / 1024:.1f} ГБ" if total >= 1024 else f"{total:.0f} МБ"
+        size = T("{v:.1f} ГБ", v=total / 1024) if total >= 1024 else T("{v:.0f} МБ", v=total)
         names = ", ".join(i["title"] for i in candidates)
-        self.set_note(f"Ще раз: очистити {size} старше {cleanup.OLD_DAYS} днів: {names}")
+        self.set_note(T("Ще раз: очистити {size} старше {days} днів: {names}", size=size, days=cleanup.OLD_DAYS, names=names))
 
     def _quick_done(self, result):
         if not result or not result.get("ok"):
-            self.set_note((result or {}).get("error") or "Не вдалося очистити кеші")
+            self.set_note((result or {}).get("error") or T("Не вдалося очистити кеші"))
             return
         delta = (result.get("memory") or {}).get("delta")
-        mem = f". Памʼять: доступно {delta['availableMb']:+d} МБ, swap {delta['swapMb']:+d} МБ" if delta else ""
-        self.set_note(f"Звільнено на диску: {result.get('freedMb', 0):.0f} МБ{mem}")
+        mem = T(". Памʼять: доступно {avail:+d} МБ, swap {swap:+d} МБ", avail=delta["availableMb"], swap=delta["swapMb"]) if delta else ""
+        self.set_note(T("Звільнено на диску: {freed:.0f} МБ{mem}", freed=result.get("freedMb", 0), mem=mem))
 
     def toggle_autostart(self):
         if self._auto_busy:
@@ -1444,7 +1449,7 @@ class StatusBar:
             self._monitor.set_detail(False)
             self._status.setMenu_(self._menu)
             self._button.setAction_(None)
-            self.set_note(f"Панель недоступна, використовуйте меню: {exc}")
+            self.set_note(T("Панель недоступна, використовуйте меню: {exc}", exc=exc))
 
     # ---------- події ----------
     def on_tick(self):
@@ -1469,7 +1474,7 @@ class StatusBar:
         # Не можна вимкнути всі три разом з видимим текстом: тоді в статус-барі буде порожньо
         now = self._settings[key]
         if now and sum(1 for k in ("cpu", "ram", "gpu") if self._settings[k]) == 1:
-            self.set_note("Має лишитися увімкненим хоча б один показник")
+            self.set_note(T("Має лишитися увімкненим хоча б один показник"))
             self._sync_view_items()
             return
         self._save_setting(key, not now)
@@ -1481,6 +1486,11 @@ class StatusBar:
         """Перемикачі «Сповіщення» і «Щоденна перевірка»."""
         self._save_setting(key, not self._settings[key])
         self._sync_view_items()
+
+    def set_language(self, code):
+        # Мова застосовується під час запуску: агент перезапускається сам (без вікна)
+        if code in LANGUAGE_CODES:
+            self.actions["set_language"](code)
 
     def set_interval(self, seconds):
         if seconds not in INTERVALS:
@@ -1538,7 +1548,7 @@ class StatusBar:
         flat = 0   # наскрізний індекс, як у update: спершу рядки CPU, потім RAM
         for rows in self._panel.process_rows:
             for _, _, _, _, kill, _, _ in rows:
-                kill.setTitle_("Так?" if index is not None and flat == index else "×")
+                kill.setTitle_(T("Так?") if index is not None and flat == index else "×")
                 flat += 1
 
     def select_row(self, index):
@@ -1548,8 +1558,8 @@ class StatusBar:
         if group is None:
             return
         panel.toggle_select(index)
-        self.set_note(f"Зафіксовано: {group['name']}. Ще раз по назві — зняти вибір" if panel.selected == index
-                      else "Вибір знято")
+        self.set_note(T("Зафіксовано: {name}. Ще раз по назві — зняти вибір", name=group["name"]) if panel.selected == index
+                      else T("Вибір знято"))
         snap = self._monitor.latest()
         if snap is not None:
             panel.update(snap)
@@ -1570,7 +1580,7 @@ class StatusBar:
             panel.freeze()
             panel.armed = (index, now, group)
             self._mark_kill(index)
-            self.set_note(f"Натисніть «Так?», щоб завершити {group['name']}")
+            self.set_note(T("Натисніть «Так?», щоб завершити {name}", name=group["name"]))
             return
         group = armed[2]
         panel.clear_selection()   # після спроби вибір і фіксація знімаються
@@ -1585,11 +1595,11 @@ class StatusBar:
             except PermissionError:
                 denied += 1
         if denied:
-            self.set_note(f"Немає доступу, щоб завершити {group['name']}")
+            self.set_note(T("Немає доступу, щоб завершити {name}", name=group["name"]))
         elif sent:
-            self.set_note(f"Завершено: {group['name']}")
+            self.set_note(T("Завершено: {name}", name=group["name"]))
         else:
-            self.set_note(f"{group['name']} вже не працює")
+            self.set_note(T("{name} вже не працює", name=group["name"]))
 
     def set_note(self, text):
         """Короткий рядок про останню дію (наприклад, результат очищення). Викликати з головного потоку."""
@@ -1639,10 +1649,10 @@ class StatusBar:
 
         # Пункти меню і панель оновлюємо лише коли вони відкриті: закриті не витрачають AppKit
         if self._menu_open:
-            self._cpu_item.setAttributedTitle_(_attr(f"CPU   {cpu:5.1f}%   {snap['cores']} ядер"))
+            self._cpu_item.setAttributedTitle_(_attr(f"CPU   {cpu:5.1f}%   " + T("{cores} ядер", cores=snap["cores"])))
             self._ram_item.setAttributedTitle_(_attr(
-                f"RAM   {ram_pct:5.1f}%   {ram['usedGb']:.1f} з {ram['totalGb']:.1f} ГБ, swap {ram['swapGb']:.1f} ГБ"))
-            self._gpu_item.setAttributedTitle_(_attr(f"GPU   {'н/д' if gpu is None else f'{gpu:.0f}%'}"))
+                f"RAM   {ram_pct:5.1f}%   " + T("{used:.1f} з {total:.1f} ГБ, swap {swap:.1f} ГБ", used=ram["usedGb"], total=ram["totalGb"], swap=ram["swapGb"])))
+            self._gpu_item.setAttributedTitle_(_attr(f"GPU   {T('н/д') if gpu is None else f'{gpu:.0f}%'}"))
             self._fill(self._cpu_rows, snap["topCpu"], lambda g: f"{g['cpu']:6.1f}%  {_mem(g['rss'])}")
             self._fill(self._ram_rows, snap["topRam"], lambda g: _mem(g["rss"]))
         if self._panel is not None and self._panel.popover.isShown():
@@ -1703,9 +1713,9 @@ class StatusBar:
                 self._panel.security.setStringValue_(text)
                 self._panel.security.setTextColor_(color or AppKit.NSColor.secondaryLabelColor())
                 sec = self._security or {}
-                checked = sec.get("checkedAt") or "звіту ще немає"
+                checked = sec.get("checkedAt") or T("звіту ще немає")
                 changed = int(sec.get("changeCount", 0))
-                tip = f"Останній звіт: {checked}. Змін з попереднього звіту: {changed}. Деталі: «Звіти»"
+                tip = T("Останній звіт: {checked}. Змін з попереднього звіту: {changed}. Деталі: «Звіти»", checked=checked, changed=changed)
                 self._panel.security.setToolTip_(tip)
 
     def _bar_title(self, text):

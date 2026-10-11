@@ -15,6 +15,7 @@ import webview
 from PyObjCTools import AppHelper
 
 import engine
+import i18n
 
 
 def _section():
@@ -26,6 +27,7 @@ def _section():
 
 
 def main():
+    i18n.load(engine.PREFS_FILE)
     api = engine.Api()
     with open(engine.BAR_JS, encoding="utf-8") as fh:
         bar_js = fh.read()
@@ -34,7 +36,7 @@ def main():
     section = _section()
     window = webview.create_window(
         "MacSafe",
-        url=base + (f"#{section}" if section else ""),
+        url=f"{base}?lang={i18n.language()}" + (f"#{section}" if section else ""),
         js_api=api,
         width=1280,
         height=860,

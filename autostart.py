@@ -7,6 +7,7 @@
 як job launchd: launchd позначає такий процес змінною XPC_SERVICE_NAME, що дорівнює мітці. Bootout
 свого job вбив би процес, який виконує дію. У цьому випадку plist змінюється, і зміна діє з наступного входу.
 """
+from i18n import T
 import os
 import plistlib
 import subprocess
@@ -40,7 +41,7 @@ def _launchctl(*args):
     if r.returncode == 0:
         return True, ""
     lines = (r.stderr or r.stdout).strip().splitlines()
-    return False, lines[-1] if lines else "launchctl не вдався"
+    return False, lines[-1] if lines else T("launchctl не вдався")
 
 
 def _read_plist():

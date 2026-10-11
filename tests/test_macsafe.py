@@ -7,6 +7,7 @@ import importlib
 import json
 import os
 import plistlib
+import re
 import shutil
 import sys
 import tempfile
@@ -339,15 +340,93 @@ class SecuritySummaryChangesTests(SecuritySummaryTests):
 
 
 class PluralTests(unittest.TestCase):
+    def tearDown(self):
+        import i18n
+        i18n.set_language("uk")
+
     def test_ukrainian_plural(self):
-        import menubar
+        import i18n
+        i18n.set_language("uk")
         cases = {1: "проблема", 2: "проблеми", 4: "проблеми", 5: "проблем", 11: "проблем",
                  12: "проблем", 21: "проблема", 22: "проблеми", 112: "проблем", 101: "проблема"}
         for n, word in cases.items():
             with self.subTest(n=n):
-                self.assertEqual(menubar._plural_problems(n), word)
+                self.assertEqual(i18n.plural_problem(n), word)
+
+    def test_english_plural(self):
+        import i18n
+        i18n.set_language("en")
+        self.assertEqual(i18n.plural_problem(1), "problem")
+        self.assertEqual(i18n.plural_problem(2), "problems")
 
 
+class I18nTests(unittest.TestCase):
+    def tearDown(self):
+        import i18n
+        i18n.set_language("uk")
+
+    def test_ukrainian_is_default_and_returns_source(self):
+        import i18n
+        i18n.set_language("uk")
+        self.assertEqual(i18n.T("Звільнити памʼять"), "Звільнити памʼять")
+
+    def test_english_translates_and_formats(self):
+        import i18n
+        i18n.set_language("en")
+        self.assertEqual(i18n.T("Звільнити памʼять"), "Free memory")
+        self.assertEqual(i18n.T("Вільно {free:.1f} ГБ. Спробуйте «Детальне очищення».", free=2.5),
+                         "2.5 GB free. Try “Detailed clean”.")
+
+    def test_missing_key_falls_back_to_source(self):
+        import i18n
+        i18n.set_language("en")
+        self.assertEqual(i18n.T("Текст, якого немає у словнику"), "Текст, якого немає у словнику")
+
+    def test_resolve_and_load(self):
+        import i18n
+        self.assertEqual(i18n.resolve("uk"), "uk")
+        self.assertEqual(i18n.resolve("en"), "en")
+        self.assertIn(i18n.resolve("auto"), i18n.LANGS)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "налаштування.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump({"language": "en"}, fh)
+            self.assertEqual(i18n.load(path), "en")
+            self.assertEqual(i18n.language(), "en")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("не json")
+            self.assertIn(i18n.load(path), i18n.LANGS)
+
+    def test_every_translation_keeps_placeholders(self):
+        import i18n
+        for source, english in i18n.EN.items():
+            with self.subTest(source=source):
+                self.assertEqual(set(re.findall(r"\{(\w+)", source)), set(re.findall(r"\{(\w+)", english)))
+
+    def test_every_t_call_in_code_has_a_translation(self):
+        import ast
+        import glob
+        import i18n
+        root = os.path.join(os.path.dirname(__file__), "..")
+        missing = []
+        for path in glob.glob(os.path.join(root, "*.py")):
+            with open(path, encoding="utf-8") as fh:
+                tree = ast.parse(fh.read())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "T" and node.args:
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value not in i18n.EN:
+                        missing.append((os.path.basename(path), arg.value))
+        self.assertEqual(missing, [])
+
+    def test_language_pref_accepts_only_known_values(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prefs = importlib.import_module("prefs").Prefs(os.path.join(tmp, "налаштування.json"))
+            self.assertEqual(prefs.get("language"), "auto")
+            prefs.set("language", "en")
+            self.assertEqual(importlib.import_module("prefs").Prefs(os.path.join(tmp, "налаштування.json")).get("language"), "en")
+            with self.assertRaises(ValueError):
+                prefs.set("language", "de")
 
 
 class MonitorScanTests(unittest.TestCase):

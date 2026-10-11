@@ -7,9 +7,10 @@ import json
 import os
 
 DEFAULTS = {"cpu": True, "ram": True, "gpu": True, "style": "both", "interval": 2,
-            "alerts": True, "dailyCheck": True}
+            "alerts": True, "dailyCheck": True, "language": "auto"}
 STYLES = ("both", "icon", "text")   # іконка і цифри / лише іконка / лише цифри
 INTERVALS = (1, 2, 5)              # секунд між вибірками показників
+LANGUAGES = ("auto", "uk", "en")   # auto — за мовою системи
 
 
 class Prefs:
@@ -33,6 +34,8 @@ class Prefs:
             self._data["style"] = raw["style"]
         if raw.get("interval") in INTERVALS:
             self._data["interval"] = raw["interval"]
+        if raw.get("language") in LANGUAGES:
+            self._data["language"] = raw["language"]
 
     def get(self, key):
         return self._data[key]
@@ -46,6 +49,9 @@ class Prefs:
         elif key == "interval":
             if value not in INTERVALS:
                 raise ValueError(f"Недопустимий інтервал: {value}")
+        elif key == "language":
+            if value not in LANGUAGES:
+                raise ValueError(f"Невідома мова: {value}")
         else:
             raise KeyError(key)
         self._data[key] = value

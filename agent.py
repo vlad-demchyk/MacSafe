@@ -10,6 +10,7 @@
 import fcntl
 import json
 import os
+import shlex
 import subprocess
 import sys
 import threading
@@ -23,6 +24,7 @@ import autostart
 import persistence
 import cleanup
 import engine
+import i18n
 import menubar
 from metrics import Monitor
 from prefs import Prefs
@@ -68,6 +70,7 @@ def close_window():
 
 def main():
     background = "--background" in sys.argv
+    i18n.load(engine.PREFS_FILE)   # мова до створення будь-яких написів
     if not _acquire_instance():
         if not background:
             _request_show()   # уже працює: звичайний запуск просить показати вікно
@@ -94,22 +97,22 @@ def main():
             s = api.status()
             if s["status"] != "running":
                 break
-            msg = (s.get("message") or "Збір даних")[:90]
+            msg = (s.get("message") or T("Збір даних"))[:90]
             if msg != last:
                 last = msg
-                AppHelper.callAfter(bar["ctrl"].set_note, f"Перевірка: {msg}")
+                AppHelper.callAfter(bar["ctrl"].set_note, T("Перевірка: {msg}", msg=msg))
             time.sleep(1)
         done = s["status"] == "done"
-        AppHelper.callAfter(bar["ctrl"].set_note, "Перевірку завершено, звіт оновлено" if done else "Перевірка не вдалась")
+        AppHelper.callAfter(bar["ctrl"].set_note, T("Перевірку завершено, звіт оновлено") if done else T("Перевірка не вдалась"))
         AppHelper.callAfter(bar["ctrl"].refresh_security)
 
     def purge():
         def work():
             r = api.purge_memory()
             delta = (r.get("memory") or {}).get("delta") if r["ok"] else None
-            extra = f", доступно {delta['availableMb']:+d} МБ" if delta else ""
-            text = (f"Вільна памʼять: {r['freeBefore']}% → {r['freeAfter']}%{extra}" if r["ok"]
-                    else r.get("error") or "Не вдалося очистити памʼять")
+            extra = T(", доступно {avail:+d} МБ", avail=delta["availableMb"]) if delta else ""
+            text = (T("Вільна памʼять: {before}% → {after}%{extra}", before=r["freeBefore"], after=r["freeAfter"], extra=extra) if r["ok"]
+                    else r.get("error") or T("Не вдалося очистити памʼять"))
             AppHelper.callAfter(bar["ctrl"].set_note, text)
         threading.Thread(target=work, daemon=True).start()
 
@@ -117,11 +120,11 @@ def main():
         if autostart.is_enabled():
             ok, err = autostart.disable()
             if not ok:
-                bar["ctrl"].set_note(f"Вимкнено з наступного входу, launchd не зняв зараз: {err}")
+                bar["ctrl"].set_note(T("Вимкнено з наступного входу, launchd не зняв зараз: {err}", err=err))
             return autostart.is_enabled()
         ok, err = autostart.enable(engine.LAUNCH_ARGS, engine.DATA_DIR, engine.AGENT_LOG)
         if not ok:
-            bar["ctrl"].set_note(f"Записано, але launchd не запустив зараз: {err}. Діє з наступного входу.")
+            bar["ctrl"].set_note(T("Записано, але launchd не запустив зараз: {err}. Діє з наступного входу.", err=err))
         return autostart.is_enabled()
 
     rules = alerts.Alerts()
@@ -185,7 +188,22 @@ def main():
         # Підтвердження — двоетапний клік у панелі; видаляються лише файли старші за OLD_DAYS
         return cleanup.clean_old(ids)
 
+    def set_language(code):
+        # Мову застосовуємо під час запуску: зберігаємо її і перезапускаємо агент. Вікно звітів закривається
+        if code not in ("uk", "en"):
+            return
+        prefs.set("language", code)
+        restart_later()
+
+    def restart_later():
+        # Новий процес стартує після виходу старого: лок одного екземпляра звільниться
+        cmd = " ".join(shlex.quote(part) for part in engine.LAUNCH_ARGS + ["--background"])
+        subprocess.Popen(["/bin/sh", "-c", f"sleep 2; exec {cmd}"], start_new_session=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        quit_app()
+
     actions = {
+        "set_language": set_language,
         "show": open_window, "reports": open_window, "cleanup": cleanup_window,
         "security": engine.security_summary,
         "check": check, "purge": purge, "autostart": toggle_autostart,
@@ -208,7 +226,7 @@ def main():
                 return
             if prefs.get("alerts"):
                 for item in [i for i in fresh if i["label"] != autostart.LABEL][:3]:
-                    notify("Новий елемент автозапуску", f"{item['label']} ({item['path']})")
+                    notify(T("Новий елемент автозапуску"), f"{item['label']} ({item['path']})")
         threading.Thread(target=work, daemon=True).start()
         AppHelper.callLater(600, watch_persistence)
 

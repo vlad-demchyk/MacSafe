@@ -4,6 +4,7 @@
 ~/.npm, ~/Library/Caches, ~/Library/Logs, ~/Library/Developer/Xcode. Символічні посилання і папки поза коренями
 пропускаються. Папки com.apple.* не чіпаємо взагалі. Закрийте застосунок, чий кеш очищуєте.
 """
+from i18n import T
 import os
 import re
 import time
@@ -144,7 +145,7 @@ def scan_fixed(days=OLD_DAYS):
     items = []
     for cid, (title, path, note) in FIXED.items():
         if os.path.isdir(path) and not os.path.islink(path):
-            items.append({"id": cid, "title": title, "note": note, "category": FIXED_CATEGORY[cid],
+            items.append({"id": cid, "title": T(title), "note": T(note), "category": FIXED_CATEGORY[cid],
                           "sizeMb": _old_mb(path, days)})
     return items
 
@@ -156,7 +157,7 @@ def clean_old(ids, days=OLD_DAYS, categories=None):
     categories (необов'язково): id поза цими категоріями пропускаються. У результаті є знімок памʼяті до і після.
     """
     if not isinstance(ids, list) or not ids or len(ids) > MAX_IDS:
-        return {"ok": False, "error": "Не вибрано жодного кешу"}
+        return {"ok": False, "error": T("Не вибрано жодного кешу")}
     days = _valid_days(days)
     allowed = set(categories) & set(CATEGORIES) if isinstance(categories, (list, tuple, set)) else None
     cutoff = time.time() - days * 86400
@@ -165,14 +166,14 @@ def clean_old(ids, days=OLD_DAYS, categories=None):
     freed_total = 0.0
     for cid in dict.fromkeys(ids):
         if not isinstance(cid, str):
-            results.append({"id": str(cid), "error": "Неправильний ідентифікатор"})
+            results.append({"id": str(cid), "error": T("Неправильний ідентифікатор")})
             continue
         if allowed is not None and category_of(cid) not in allowed:
-            results.append({"id": cid, "error": "Категорію не вибрано"})
+            results.append({"id": cid, "error": T("Категорію не вибрано")})
             continue
         root = _target(cid)
         if root is None or os.path.islink(root):
-            results.append({"id": cid, "error": "Недозволена або відсутня папка"})
+            results.append({"id": cid, "error": T("Недозволена або відсутня папка")})
             continue
         real_root = os.path.realpath(root)
         removed = 0
@@ -181,7 +182,7 @@ def clean_old(ids, days=OLD_DAYS, categories=None):
             # Перед видаленням батьківська папка не має виходити за корінь (підміна на посилання між скануванням і видаленням)
             parent = os.path.realpath(os.path.dirname(path))
             if parent != real_root and not parent.startswith(real_root + os.sep):
-                errors.append(f"{os.path.basename(path)}: пропущено, шлях веде за межі")
+                errors.append(T("{name}: пропущено, шлях веде за межі", name=os.path.basename(path)))
                 continue
             try:
                 os.remove(path)
@@ -213,13 +214,13 @@ def scan(days=OLD_DAYS):
         cid = CACHE_PREFIX + name
         if _target(cid) is None:
             continue
-        app_items.append({"id": cid, "title": name, "note": "Кеш застосунку. Закрийте його перед очищенням.",
+        app_items.append({"id": cid, "title": name, "note": T("Кеш застосунку. Закрийте його перед очищенням."),
                           "category": "apps", "sizeMb": _old_mb(os.path.join(CACHE_ROOT, name), days)})
     app_items.sort(key=lambda it: -(it["sizeMb"] or 0))
     items += app_items[:40]
     totals = {key: round(sum(i["sizeMb"] or 0 for i in items if i["category"] == key), 1) for key in CATEGORIES}
     return {"items": items, "cacheRoot": CACHE_ROOT, "olderThanDays": days, "daysChoices": list(DAYS_CHOICES),
-            "categories": [{"id": k, "title": t, "sizeMb": totals[k]} for k, t in CATEGORIES.items()],
+            "categories": [{"id": k, "title": T(t), "sizeMb": totals[k]} for k, t in CATEGORIES.items()],
             "memory": memory_snapshot()}
 
 

@@ -3,6 +3,7 @@
 Шлях має бути існуючим файлом або папкою всередині домашньої папки, не символічним посиланням.
 Використовується NSFileManager.trashItemAtURL: без запиту дозволу на керування Finder.
 """
+from i18n import T
 import os
 
 HOME = os.path.expanduser("~")
@@ -27,13 +28,13 @@ def move_to_trash(path):
     """(ok, пояснення). Файл потрапляє в кошик і його можна повернути звідти."""
     real = safe_target(path)
     if real is None:
-        return False, "Недозволений шлях"
+        return False, T("Недозволений шлях")
     try:
         from Foundation import NSFileManager, NSURL
     except ImportError:
-        return False, "Немає доступу до системного кошика"
+        return False, T("Немає доступу до системного кошика")
     url = NSURL.fileURLWithPath_(real)
     ok, _result, error = NSFileManager.defaultManager().trashItemAtURL_resultingItemURL_error_(url, None, None)
     if ok:
         return True, ""
-    return False, str(error.localizedDescription()) if error is not None else "Не вдалося перемістити в кошик"
+    return False, str(error.localizedDescription()) if error is not None else T("Не вдалося перемістити в кошик")

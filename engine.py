@@ -3,6 +3,7 @@
 Спільний код для агента статус-бару (agent.py) і вікна звітів (app.py). Імпорту AppKit і WebKit тут немає,
 тож агент працює без важкого вікна. Усі шляхи і формати даних тут, у одному місці.
 """
+from i18n import T
 import json
 import os
 import shutil
@@ -162,10 +163,10 @@ class Api:
         return {
             "firstRunDone": os.path.exists(MARKER),
             "items": [
-                {"id": "finder", "title": "Керування Finder: очистити кошик", "action": "request_finder",
-                 "note": "macOS покаже запит один раз. Після «Дозволити» запит більше не з'являється."},
-                {"id": "admin", "title": "Очищення памʼяті (purge)", "action": "purge_memory",
-                 "note": "Потрібен пароль адміністратора при кожному запуску. macOS не дає дозволити це наперед."},
+                {"id": "finder", "title": T("Керування Finder: очистити кошик"), "action": "request_finder",
+                 "note": T("macOS покаже запит один раз. Після «Дозволити» запит більше не з'являється.")},
+                {"id": "admin", "title": T("Очищення памʼяті (purge)"), "action": "purge_memory",
+                 "note": T("Потрібен пароль адміністратора при кожному запуску. macOS не дає дозволити це наперед.")},
             ],
         }
 
@@ -185,17 +186,17 @@ class Api:
     # ---------- Календар: регенерація дня з збереженого знімка ----------
     def regen_day(self, day_id):
         if not isinstance(day_id, str) or not DAY_RE.match(day_id):
-            return {"ok": False, "error": "Неправильний ідентифікатор знімка"}
+            return {"ok": False, "error": T("Неправильний ідентифікатор знімка")}
         try:
             r = subprocess.run(
                 ["/bin/bash", GENERATOR, "--regen", day_id],
                 cwd=REPORT_DIR, env=GEN_ENV, capture_output=True, text=True, timeout=120,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
-            return {"ok": False, "error": f"Не вдалося перегенерувати: {exc}"}
+            return {"ok": False, "error": T("Не вдалося перегенерувати: {exc}", exc=exc)}
         if r.returncode != 0:
             last = (r.stderr or r.stdout or "").strip().splitlines()
-            return {"ok": False, "error": last[-1] if last else "Помилка регенерації"}
+            return {"ok": False, "error": last[-1] if last else T("Помилка регенерації")}
         return {"ok": True, "file": os.path.join(DATA_REPORTS, f"report-{day_id}.html")}
 
     # ---------- Памʼять ----------
@@ -211,7 +212,7 @@ class Api:
         except (OSError, subprocess.TimeoutExpired) as exc:
             return {"ok": False, "error": str(exc)}
         if r.returncode != 0:
-            return {"ok": False, "error": "Пароль не введено або дію скасовано"}
+            return {"ok": False, "error": T("Пароль не введено або дію скасовано")}
         mem_after = cleanup.memory_snapshot()
         return {"ok": True, "freeBefore": before, "freeAfter": _free_pct(),
                 "memory": {"before": mem_before, "after": mem_after,
@@ -228,7 +229,7 @@ class Api:
         days — поріг віку файлів (7, 30 або 90), categories — дозволені категорії; решта відхиляється.
         """
         if confirm is not True:
-            return {"ok": False, "error": "Потрібне підтвердження"}
+            return {"ok": False, "error": T("Потрібне підтвердження")}
         return cleanup.clean(ids, days, categories)
 
     # ---------- Великі файли ----------
@@ -240,17 +241,17 @@ class Api:
         """Показує файл у Finder. Шлях має бути існуючим файлом усередині домашньої папки."""
         real = bigfiles.safe_path(path)
         if real is None:
-            return {"ok": False, "error": "Недозволений шлях"}
+            return {"ok": False, "error": T("Недозволений шлях")}
         try:
             subprocess.run(["/usr/bin/open", "-R", real], check=True, timeout=15)
         except (OSError, subprocess.SubprocessError):
-            return {"ok": False, "error": "Не вдалося показати у Finder"}
+            return {"ok": False, "error": T("Не вдалося показати у Finder")}
         return {"ok": True}
 
     def trash_big(self, path, confirm):
         """Переміщує великий файл у кошик (відновлюється). Лише з підтвердженням і для шляху всередині домашньої папки."""
         if confirm is not True:
-            return {"ok": False, "error": "Потрібне підтвердження"}
+            return {"ok": False, "error": T("Потрібне підтвердження")}
         ok, error = trash.move_to_trash(path)
         return {"ok": ok, "error": error}
 
@@ -262,15 +263,15 @@ class Api:
     def leftovers_trash(self, paths, confirm):
         """Переміщує вибрані залишки в кошик. Дозволено лише шляхи, які щойно знайшов пошук."""
         if confirm is not True:
-            return {"ok": False, "error": "Потрібне підтвердження"}
+            return {"ok": False, "error": T("Потрібне підтвердження")}
         if not isinstance(paths, list) or not paths or len(paths) > leftovers.MAX_ITEMS:
-            return {"ok": False, "error": "Нічого не вибрано"}
+            return {"ok": False, "error": T("Нічого не вибрано")}
         allowed = {item["path"]: item for item in leftovers.scan()}
         results, freed = [], 0.0
         for path in dict.fromkeys(paths):
             item = allowed.get(path) if isinstance(path, str) else None
             if item is None:
-                results.append({"path": str(path), "ok": False, "error": "Не є залишком застосунку"})
+                results.append({"path": str(path), "ok": False, "error": T("Не є залишком застосунку")})
                 continue
             ok, error = trash.move_to_trash(path)
             results.append({"path": path, "ok": ok, "error": error})
@@ -288,15 +289,15 @@ class Api:
     def run_check(self):
         with self._guard:
             if self._state["status"] == "running":
-                return {"ok": False, "error": "Перевірка вже виконується"}
+                return {"ok": False, "error": T("Перевірка вже виконується")}
             if not os.path.isfile(GENERATOR):
-                return {"ok": False, "error": f"Не знайдено {GENERATOR}"}
+                return {"ok": False, "error": T("Не знайдено {path}", path=GENERATOR)}
             try:
                 os.makedirs(os.path.dirname(LOCK_DIR), exist_ok=True)
                 os.mkdir(LOCK_DIR)
             except FileExistsError:
                 if _lock_holder_alive():
-                    return {"ok": False, "error": "MacSafe уже виконує перевірку в іншому вікні"}
+                    return {"ok": False, "error": T("MacSafe уже виконує перевірку в іншому вікні")}
                 # Замок лишився від процесу, який зупинився під час перевірки: прибираємо і запускаємо
                 shutil.rmtree(LOCK_DIR, ignore_errors=True)
                 os.mkdir(LOCK_DIR)
@@ -304,7 +305,7 @@ class Api:
                 fh.write(str(os.getpid()))
             self._log.clear()
             self._stop_requested = False
-            self._state.update(status="running", started=time.time(), finished=None, exit=None, message="Збір даних")
+            self._state.update(status="running", started=time.time(), finished=None, exit=None, message=T("Збір даних"))
         try:
             threading.Thread(target=self._run, daemon=True).start()
         except RuntimeError as exc:
@@ -313,7 +314,7 @@ class Api:
                 shutil.rmtree(LOCK_DIR, ignore_errors=True)
             except OSError:
                 pass
-            self._finish(-1, f"Не вдалося запустити потік: {exc}")
+            self._finish(-1, T("Не вдалося запустити потік: {exc}", exc=exc))
             return {"ok": False, "error": str(exc)}
         return {"ok": True}
 
@@ -345,7 +346,7 @@ class Api:
                         self._state["message"] = line.strip()[:160]
             code = proc.wait()
         except OSError as exc:
-            note = f"Не вдалося запустити перевірку: {exc}"
+            note = T("Не вдалося запустити перевірку: {exc}", exc=exc)
         finally:
             with self._guard:
                 self._proc = None
@@ -360,10 +361,10 @@ class Api:
             if note:
                 self._log.append(note)
             if self._stop_requested:
-                msg, status = "Перевірку зупинено", "error"
+                msg, status = T("Перевірку зупинено"), "error"
             else:
                 status = "done" if code == 0 else "error"
-                msg = "Готово" if code == 0 else "Перевірка завершилась помилкою"
+                msg = T("Готово") if code == 0 else T("Перевірка завершилась помилкою")
             self._state.update(status=status, finished=time.time(), exit=code, message=msg)
             window = self._window
         # Після успішної перевірки показуємо свіжий звіт; панель запуску додасть обробник завантаження

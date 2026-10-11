@@ -5,6 +5,8 @@
 """
 
 
+from i18n import T
+
 KIND_UA = {"good": "ок", "info": "до відома", "warning": "увага", "critical": "критично"}
 
 
@@ -12,7 +14,7 @@ def _shown(item):
     """Значення разом зі статусом, щоб зміна статусу без зміни тексту була видна."""
     value = item.get("value")
     kind = item.get("kind")
-    return f"{value} · {KIND_UA.get(kind, kind)}" if kind else value
+    return f"{value} · {T(KIND_UA.get(kind, kind))}" if kind else value
 
 
 def _by_label(items):
