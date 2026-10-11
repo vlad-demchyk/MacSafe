@@ -13,8 +13,17 @@
 </head>
 <body>
   <main>
-    <h1 style="font-size:22px;margin:0">Звіту ще немає</h1>
-    <p>Натисніть «Запустити перевірку» у верхній панелі. Перший звіт з'явиться після завершення.</p>
+    <h1 style="font-size:22px;margin:0" data-en="No report yet">Звіту ще немає</h1>
+    <p data-en="Click “Run check” in the top bar. The first report appears when it finishes.">Натисніть «Запустити перевірку» у верхній панелі. Перший звіт з'явиться після завершення.</p>
   </main>
+  <script>
+    // Мова за параметром ?lang (його передає застосунок) або за мовою браузера
+    (() => {
+      const lang = new URLSearchParams(location.search).get('lang') || ((navigator.language || '').toLowerCase().startsWith('uk') ? 'uk' : 'en');
+      if (lang !== 'en') return;
+      document.documentElement.lang = 'en';
+      document.querySelectorAll('[data-en]').forEach(el => { el.textContent = el.dataset.en; });
+    })();
+  </script>
 </body>
 </html>
