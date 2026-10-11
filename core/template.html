@@ -1,0 +1,1910 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>MacSafe</title>
+  <style>
+    /* Поверхні macOS: білий, сірий, графіт; синій лише для взаємодії. */
+    :root { color-scheme:light dark; --ink:#242426; --muted:#64646a; --canvas:#f5f5f7; --card:#ffffff; --card2:#ededf0; --line:#d6d6dc; --blue:#0069c7; --good:#267447; --warn:#8a5900; --critical:#b32635; --shadow:none; --ease:cubic-bezier(.2,.8,.2,1); --side:248px; }
+    @media (prefers-color-scheme:dark) {
+      :root { --ink:#ededf0; --muted:#a5a5ad; --canvas:#202022; --card:#29292c; --card2:#333337; --line:#45454b; --blue:#78b7ff; --good:#87c296; --warn:#e2bb72; --critical:#f3949d; }
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:320px; font:15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; color:var(--ink); background:var(--canvas); }
+    code, pre { font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    code { background:var(--card2); border:1px solid var(--line); border-radius:6px; padding:1px 5px; word-break:break-all; }
+    pre.cmd { background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; overflow:auto; margin:10px 0 8px; }
+    h1 { font-size:clamp(24px,3.6vw,34px); line-height:1.1; margin:0; letter-spacing:-.04em; }
+    h2 { font-size:20px; margin:0; letter-spacing:-.02em; }
+    h3 { font-size:15px; margin:18px 0 8px; }
+    h4 { font-size:13px; margin:16px 0 6px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+    a { color:var(--blue); }
+    .muted { color:var(--muted); font-size:13px; }
+    .empty { color:var(--muted); text-align:center; padding:12px; }
+    .hint { color:var(--muted); font-size:13px; margin:6px 0 0; }
+    .skip { position:absolute; left:-999px; top:8px; background:var(--blue); color:var(--card); padding:8px 12px; border-radius:8px; z-index:99; }
+    .skip:focus { left:12px; }
+
+    /* Макет: сайдбар + основна частина */
+    .layout { display:grid; grid-template-columns:var(--side) minmax(0,1fr); min-height:100vh; }
+    .side { position:sticky; top:0; height:100vh; overflow:auto; border-right:1px solid var(--line); background:var(--card2); padding:18px 12px 24px; display:flex; flex-direction:column; gap:14px; }
+    .side__brand { padding:4px 8px 0; }
+    .content { min-width:0; padding:22px 30px 60px; }
+    .topbar { display:flex; justify-content:space-between; gap:14px; align-items:flex-end; flex-wrap:wrap; padding-bottom:16px; border-bottom:1px solid var(--line); margin-bottom:6px; }
+    .eyebrow { color:var(--blue); text-transform:uppercase; font-size:11px; letter-spacing:.11em; font-weight:650; margin:0 0 6px; }
+    .sub { color:var(--muted); margin:8px 0 0; font-size:13.5px; }
+    .sub b { color:var(--ink); font-weight:650; }
+    .top__actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .search { font:inherit; font-size:14px; color:var(--ink); background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:7px 12px; min-width:240px; }
+    .btn { font:inherit; font-size:13px; color:var(--ink); background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:7px 12px; cursor:pointer; transition:transform .15s var(--ease),background .2s; }
+    .btn:hover { background:var(--card2); } .btn:active { transform:scale(.97); }
+    .btn:disabled { opacity:.45; cursor:not-allowed; }
+    .btn--danger { background:var(--card); border-color:var(--line); color:var(--critical); }
+    .btn--small { padding:4px 9px; font-size:12px; margin-top:10px; }
+    .copy { font:inherit; font-size:12px; color:var(--blue); background:none; border:1px solid var(--line); border-radius:8px; padding:3px 9px; cursor:pointer; margin-left:6px; }
+    :focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+
+    /* Одна секція за раз */
+    .view { display:none; }
+    .view.is-active { display:block; animation:reveal 180ms var(--ease) both; }
+    .view.is-active :is(.card,.metric,.score,.issue) { animation:rise 240ms var(--ease) both; }
+    .view.is-active .grid > :nth-child(2), .view.is-active .tiles > :nth-child(2) { animation-delay:35ms; }
+    .view.is-active .tiles > :nth-child(n+3) { animation-delay:60ms; }
+    @keyframes reveal { from { opacity:0; } to { opacity:1; } }
+    .block { margin-top:26px; }
+    .block:first-child { margin-top:0; }
+    .block__head { margin-bottom:12px; }
+    @keyframes rise { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+    .stack { display:grid; gap:10px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+    .card, .score, .metric, .issue { border:1px solid var(--line); border-radius:10px; background:var(--card); box-shadow:var(--shadow); }
+    .card { padding:18px; }
+    .card h3 { margin-top:0; }
+
+    /* Інтерактивне очищення кешів */
+    .cache-panel { margin-bottom:14px; }
+    .cache-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:14px; }
+    .cache-list { display:grid; gap:8px; margin:14px 0; }
+    .cache-item { display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--card2); cursor:pointer; }
+    .cache-item input, .cache-confirm input { flex:none; margin:4px 0 0; accent-color:var(--blue); }
+    .cache-copy { flex:1; min-width:0; overflow-wrap:anywhere; }
+    .cache-title { display:block; font-weight:600; }
+    .cache-note { display:block; margin-top:3px; color:var(--muted); font-size:13px; }
+    .cache-size { flex:none; font-variant-numeric:tabular-nums; white-space:nowrap; font-size:13px; }
+    .cache-confirm { display:flex; align-items:flex-start; gap:10px; font-size:13px; }
+    .cache-summary { flex:1; min-width:180px; margin:0; font-size:13px; }
+    .cache-results { margin-top:14px; overflow-wrap:anywhere; }
+    .cache-results p { margin:8px 0; }
+    .cache-results ul { padding-inline-start:22px; font-size:13px; }
+    .cache-root { overflow-wrap:anywhere; }
+    .cache-filters { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin:14px 0 0; padding:0; border:0; }
+    .cache-filters legend { padding:0; margin-bottom:6px; color:var(--muted); font-size:13px; }
+    .cache-flag { display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border:1px solid var(--line); border-radius:999px; background:var(--card2); font-size:13px; cursor:pointer; }
+    .cache-flag input { margin:0; accent-color:var(--blue); }
+    .cache-flag small { color:var(--muted); font-variant-numeric:tabular-nums; }
+    .cache-days { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); }
+    .cache-days select { font:inherit; color:inherit; background:var(--card2); border:1px solid var(--line); border-radius:8px; padding:5px 8px; }
+    .cache-memory { margin:12px 0 0; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--card2); font-size:13px; font-variant-numeric:tabular-nums; }
+    .big-path { display:block; font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+    .big-item .btn { flex:none; padding:5px 10px; font-size:12px; }
+    .cache-memory[hidden] { display:none; }
+    @media (max-width:520px) {
+      .cache-item { flex-wrap:wrap; }
+      .cache-copy { flex-basis:calc(100% - 30px); }
+      .cache-size { margin-inline-start:24px; }
+    }
+
+    /* Бейджі і смуги */
+    .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:650; white-space:nowrap; vertical-align:middle; }
+    .badge--good { color:var(--good); background:var(--card2); }
+    .badge--warning { color:var(--warn); background:var(--card2); }
+    .badge--critical { color:var(--critical); background:var(--card2); }
+    .badge--unknown { color:var(--muted); background:var(--card2); }
+    .badge--info { color:var(--blue); background:var(--card2); }
+    .bar { height:7px; border-radius:999px; background:var(--card2); overflow:hidden; margin-top:10px; }
+    .bar--thin { height:5px; }
+    .bar__fill { display:block; height:100%; width:0; border-radius:999px; transition:width 1.1s var(--ease); }
+    .bar__fill--good { background:var(--good); } .bar__fill--warning { background:var(--warn); }
+    .bar__fill--critical { background:var(--critical); } .bar__fill--info { background:var(--blue); }
+
+    /* Hero */
+    .hero { display:grid; grid-template-columns:minmax(260px,.9fr) 1.6fr; gap:14px; margin-top:4px; }
+    .score { display:flex; align-items:center; gap:18px; padding:20px; }
+    .ring { width:132px; height:132px; flex:0 0 132px; transform:rotate(-90deg); }
+    .ring__bg { fill:none; stroke:var(--card2); stroke-width:10; }
+    .ring__fg { fill:none; stroke-width:10; stroke-linecap:round; transition:stroke-dashoffset 1.3s var(--ease); }
+    .score--good .ring__fg { stroke:var(--good); } .score--warning .ring__fg { stroke:var(--warn); }
+    .score--critical .ring__fg { stroke:var(--critical); } .score--info .ring__fg { stroke:var(--blue); }
+    .score__num { font-size:44px; font-weight:650; letter-spacing:-.05em; margin:0; line-height:1; }
+    .score--good .score__num { color:var(--good); } .score--warning .score__num { color:var(--warn); }
+    .score--critical .score__num { color:var(--critical); }
+    .score__label { margin:6px 0 4px; font-weight:600; font-size:17px; }
+    .score__copy { margin:0; color:var(--muted); font-size:13px; max-width:40ch; }
+    .tiles { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .metric { padding:13px 14px; background:var(--card2); box-shadow:none; }
+    .metric__value { font-size:22px; font-weight:650; letter-spacing:-.03em; line-height:1.15; }
+    .metric__label { color:var(--muted); font-size:12px; margin-top:2px; }
+
+    /* Таблиці, пари, акордеони */
+    .kvs { margin:0; display:grid; gap:0; }
+    .kvs > div { display:flex; justify-content:space-between; gap:16px; padding:8px 0; border-top:1px solid var(--line); }
+    .kvs > div:first-child { border-top:0; padding-top:0; }
+    .kvs dt { color:var(--muted); font-size:13px; } .kvs dd { margin:0; text-align:right; font-weight:650; overflow-wrap:anywhere; }
+    .tablewrap { overflow:auto; border-radius:12px; }
+    table { border-collapse:collapse; width:100%; font-size:13px; }
+    th { text-align:left; color:var(--muted); font-size:11px; letter-spacing:.07em; text-transform:uppercase; padding:8px; border-bottom:1px solid var(--line); }
+    td { padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+    .grp { margin-bottom:12px; } .grp__head { display:flex; justify-content:space-between; gap:12px; font-size:13px; }
+    .verify { font-size:13px; color:var(--muted); margin:12px 0 0; }
+    .steps { margin:0; padding-left:20px; } .steps li { margin:4px 0; }
+    .tips { margin:8px 0 0; padding-left:20px; color:var(--muted); }
+    .group { color:var(--blue); font-size:12px; text-transform:uppercase; letter-spacing:.09em; margin:18px 0 6px; }
+    .progress { height:8px; border-radius:999px; background:var(--card2); overflow:hidden; border:1px solid var(--line); }
+    .progress__bar { height:100%; width:0; background:var(--blue); transition:width .6s var(--ease); }
+    .phase { margin-top:14px; } .phase h3 { display:flex; justify-content:space-between; }
+    .check { display:flex; gap:10px; align-items:flex-start; padding:9px 12px; border:1px solid var(--line); border-radius:12px; margin-top:6px; background:var(--card2); cursor:pointer; transition:background .2s; }
+    .check:hover { background:var(--card2); }
+    .check input { margin-top:4px; accent-color:var(--blue); }
+    .check input:checked + span { color:var(--muted); text-decoration:line-through; }
+    .acc { border:1px solid var(--line); border-radius:10px; background:var(--card); overflow:hidden; transition:border-color .25s; }
+    .acc.open { border-color:var(--line); }
+    .acc__btn:focus-visible { outline:2px solid var(--blue); outline-offset:-3px; }
+    .acc__btn { all:unset; box-sizing:border-box; display:flex; width:100%; align-items:center; gap:10px; padding:13px 16px; cursor:pointer; }
+    .acc__head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; flex:1; min-width:0; }
+    .acc__chev { color:var(--muted); transition:transform .35s var(--ease); }
+    .acc.open .acc__chev { transform:rotate(180deg); }
+    .acc__panel { display:grid; grid-template-rows:0fr; transition:grid-template-rows .35s var(--ease); }
+    .acc.open .acc__panel { grid-template-rows:1fr; }
+    .acc__inner { overflow:hidden; min-height:0; padding:0 16px; }
+    .acc.open .acc__inner { padding:0 16px 16px; }
+    .acc__inner > *:first-child { margin-top:0; }
+    .stack > .acc, .stack > .issue { margin:0; }
+    .issue { padding:0; box-shadow:none; overflow:hidden; }
+    .issue__title { font-weight:700; font-size:15px; }
+    .issue__cat { color:var(--muted); font-size:12px; margin-left:auto; }
+    .sys { display:flex; flex-direction:column; }
+    .sys__head { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .sys__head h3 { margin:0; }
+
+    /* Чіпи, пошук, дропзона, нотатки, історія */
+    .chips { display:flex; gap:6px; flex-wrap:wrap; }
+    .chip { font:inherit; font-size:13px; color:var(--muted); background:var(--card2); border:1px solid var(--line); border-radius:999px; padding:5px 12px; cursor:pointer; transition:all .2s; }
+    .chip[aria-pressed="true"] { color:var(--ink); border-color:var(--blue); background:var(--card2); }
+    .chip__n { font-weight:650; margin-left:4px; }
+    .toolbar { display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; margin:4px 0 14px; }
+    .drop { border:1.5px dashed var(--line); border-radius:10px; padding:22px; text-align:center; background:var(--card2); transition:border-color .2s,background .2s; cursor:pointer; }
+    .drop.over { border-color:var(--blue); background:var(--card2); }
+    .drop p { margin:4px 0; }
+    .linkish { color:var(--blue); text-decoration:underline; cursor:pointer; }
+    textarea { width:100%; font:inherit; font-size:14px; color:var(--ink); background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:12px 14px; resize:vertical; }
+    .chart { width:100%; height:auto; background:var(--card2); border:1px solid var(--line); border-radius:10px; margin-bottom:12px; }
+    .chart__line { fill:none; stroke:var(--blue); stroke-width:2.5; stroke-linejoin:round; stroke-dasharray:100; stroke-dashoffset:100; animation:draw 1.4s var(--ease) .2s forwards; }
+    .chart__dot { fill:var(--blue); }
+    @keyframes draw { to { stroke-dashoffset:0; } }
+    .toast { position:fixed; left:50%; bottom:22px; transform:translate(-50%,160%); background:var(--card2); border:1px solid var(--line); border-radius:12px; padding:10px 16px; box-shadow:var(--shadow); transition:transform .35s var(--ease); z-index:50; }
+    .toast.show { transform:translate(-50%,0); }
+    .footer { color:var(--muted); text-align:center; font-size:12px; margin:40px 0 0; }
+
+    /* Типографіка і відступи: правки після перегляду знімків */
+    h1 { font-size:clamp(24px,3vw,30px); line-height:1.2; letter-spacing:-.025em; }
+    h2 { font-size:22px; line-height:1.3; }
+    .hint, .score__copy { font-size:14px; }
+    .metric__label, .issue__cat { font-size:13px; }
+    .badge { font-size:12px; }
+    .top__actions { width:100%; }
+    .search { flex:1 1 320px; min-width:0; width:100%; }
+    .search::placeholder { color:var(--muted); opacity:1; }
+    .topbar { gap:18px; margin-bottom:16px; }
+    .metric { padding:16px; min-height:110px; }
+    .metric__value { font-size:24px; font-variant-numeric:tabular-nums; }
+    .score { gap:14px; }
+    .ring { width:104px; height:104px; flex-basis:104px; }
+    .date-pick { flex:0 0 auto; width:auto; min-width:230px; }
+    .sec-link { display:flex; gap:10px; align-items:center; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--card2); color:var(--ink); text-decoration:none; }
+    .sec-link:hover { background:var(--card2); }
+    .sec-link span { font-size:14px; }
+    .cal { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; }
+    .cal__head { text-align:center; color:var(--muted); font-size:12px; font-weight:700; padding:4px 0; }
+    .cal__day { font:inherit; font-size:14px; color:var(--ink); background:var(--card2); border:1px solid var(--card2); border-radius:10px;
+      min-height:50px; padding:6px 8px; cursor:pointer; text-align:left; position:relative; transition:background .2s, transform .15s var(--ease); }
+    .cal__day:hover { background:var(--card2); transform:translateY(-1px); }
+    .cal__day.has { background:var(--card); }
+    .cal__day.today { border-color:var(--blue); }
+    .cal__day.sel { background:var(--card); border-color:var(--blue); }
+    .cal__day i { position:absolute; right:7px; bottom:6px; font-style:normal; font-size:11px; font-weight:650; color:var(--good); }
+    .cal__panel { margin-top:14px; padding:16px 18px; border:1px solid var(--line); border-radius:10px; background:var(--card); display:grid; gap:10px; }
+    .cal__actions { display:flex; gap:8px; flex-wrap:wrap; }
+    /* Редизайн: каталог розділів, м'які картки, один акцент */
+    :root { --accent:#0a64d6; --on-accent:#fff; --soft:rgba(10,100,214,.09); --radius:16px; --line:#e2e2e8;
+      --shadow:0 1px 2px rgba(20,20,30,.04),0 8px 24px rgba(20,20,30,.06); }
+    @media (prefers-color-scheme:dark) {
+      :root { --accent:#2c6fd8; --soft:rgba(120,183,255,.14); --line:#3a3a40; --shadow:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.25); }
+    }
+    .side { background:color-mix(in srgb,var(--card) 60%,var(--canvas)); padding:18px 14px 14px; gap:16px; }
+    .side__brand { display:flex; align-items:center; gap:11px; padding:2px 8px; }
+    .side__logo { width:36px; height:36px; flex:none; border-radius:11px; display:grid; place-items:center; color:#fff; background:linear-gradient(145deg,#4cc3ff,#0a64d6); box-shadow:0 4px 12px rgba(10,100,214,.35); }
+    .side__logo svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+    .side__title { font-weight:700; font-size:17px; letter-spacing:-.02em; line-height:1.15; }
+    .side__sub { color:var(--muted); font-size:12px; margin-top:1px; overflow-wrap:anywhere; }
+    .groups { display:flex; flex-direction:column; gap:14px; }
+    .sgrp { display:flex; flex-direction:column; gap:2px; }
+    .sgrp__title { font-size:11px; font-weight:650; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); padding:0 10px 6px; }
+    .sec { font:inherit; font-size:14px; color:var(--ink); background:none; border:0; border-radius:10px; padding:6px 10px; cursor:pointer; text-align:left; display:flex; align-items:center; gap:10px; transition:background .18s,color .18s; }
+    .sec .ico { width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; color:var(--muted); transition:color .18s; }
+    .sec:hover { background:var(--soft); }
+    .sec[aria-current="page"] { background:var(--accent); color:var(--on-accent); font-weight:600; }
+    .sec[aria-current="page"] .ico { color:var(--on-accent); }
+    .sec__title { flex:1; }
+    .sec__n { margin-left:auto; font-size:11px; font-weight:650; min-width:20px; text-align:center; border-radius:999px; padding:1px 7px; background:var(--card2); color:var(--muted); }
+    .sec__n--critical { background:var(--critical); color:#fff; }
+    .sec__n--warning { background:var(--warn); color:#fff; }
+    .sec[aria-current="page"] .sec__n { background:rgba(255,255,255,.26); color:#fff; }
+    .side__foot { display:block; margin-top:auto; color:var(--muted); font-size:11px; padding:0 8px; }
+    .content { padding:26px 34px 70px; }
+    h1 { font-size:clamp(26px,3vw,32px); font-weight:700; }
+    h2 { font-weight:700; }
+    .topbar { border-bottom:0; padding-bottom:4px; }
+    .search { border-radius:12px; background:var(--card); box-shadow:var(--shadow); }
+    .btn { border-radius:10px; background:var(--card); box-shadow:var(--shadow); font-weight:500; }
+    .btn:hover { background:var(--soft); }
+    .card, .score, .metric, .issue, .acc, .cal__panel { border-radius:var(--radius); box-shadow:var(--shadow); border-color:var(--line); }
+    .card { padding:20px; }
+    .metric { background:var(--card); }
+    .score { background:linear-gradient(160deg,var(--card),color-mix(in srgb,var(--card) 88%,var(--accent))); }
+    .block__head h2 { display:flex; align-items:center; gap:10px; }
+    .block__head h2::before { content:""; width:4px; height:20px; border-radius:2px; background:var(--accent); }
+    .cache-item, .cache-memory, .sec-link, .check, .drop, .chart, pre.cmd, textarea { border-radius:12px; }
+    .chip[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+    .cache-flag { background:var(--card); }
+    :focus-visible { outline-color:var(--accent); }
+    @media (max-width:860px) {
+      .groups { flex-direction:row; overflow-x:auto; gap:6px; }
+      .sgrp { flex-direction:row; align-items:center; gap:4px; }
+      .sgrp__title { display:none; }
+      .sec { white-space:nowrap; }
+    }
+    @media (max-width:1040px) { .tiles { grid-template-columns:repeat(2,minmax(0,1fr)); } .hero { grid-template-columns:1fr; } }
+    @media (max-width:860px) {
+      .layout { grid-template-columns:1fr; }
+      .side { position:sticky; top:0; height:auto; border-right:0; border-bottom:1px solid var(--line); padding:10px 12px; gap:8px; z-index:30; }
+      .side__brand, .side__foot { display:none; }
+      .content { padding:16px 14px 50px; }
+      .search { min-width:0; width:100%; }
+      .grid { grid-template-columns:1fr; }
+    }
+    @media (max-width:560px) { .tiles { grid-template-columns:1fr 1fr; } .ring { width:110px; height:110px; flex-basis:110px; } .score__num { font-size:36px; } }
+    @media (prefers-reduced-motion:reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } .chart__line { stroke-dashoffset:0; } }
+    @media print {
+      body { background:#fff; color:#102033; }
+      .side, .topbar .top__actions, .search, .toolbar, .btn, .copy, .toast, .drop, .skip { display:none !important; }
+      .layout { display:block; } .content { padding:0; }
+      .view { display:block !important; animation:none; page-break-inside:auto; }
+      .view :is(.card,.metric,.score,.issue) { animation:none !important; }
+      .card, .score, .metric, .issue, .acc { background:#fff; box-shadow:none; border-color:#d7dfeb; }
+      .acc__panel { grid-template-rows:1fr; } .acc__chev { display:none; } .acc__btn { cursor:default; }
+      .sub, .muted, .hint, .kvs dt, .footer { color:#526278; } .bar { display:none; }
+    }
+      .daypick { position:relative; }
+    .daypick__btn { min-width:200px; text-align:left; cursor:pointer; }
+    .daypick__menu { position:absolute; right:0; top:calc(100% + 8px); z-index:60; width:300px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; box-shadow:0 18px 40px rgba(0,0,0,.22); }
+    .daypick__head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .daypick__head b { font-size:14px; font-weight:650; }
+    .daypick__nav { font:inherit; font-size:18px; line-height:1; color:var(--ink); background:none; border:0; border-radius:8px; width:30px; height:28px; cursor:pointer; }
+    .daypick__nav:hover { background:var(--card2); }
+    .daypick__grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+    .daypick__wd { font-size:11px; color:var(--muted); text-align:center; padding:4px 0; }
+    .daypick__day { font:inherit; font-size:13px; color:var(--ink); background:none; border:0; border-radius:9px; height:32px; cursor:pointer; position:relative; }
+    .daypick__day:hover:not([disabled]) { background:var(--card2); }
+    .daypick__day[disabled] { color:var(--muted); opacity:.35; cursor:default; }
+    .daypick__day.out { opacity:.4; }
+    .daypick__day.has { font-weight:650; }
+    .daypick__day.has::after { content:""; position:absolute; left:50%; bottom:4px; width:4px; height:4px; margin-left:-2px; border-radius:50%; background:var(--blue); }
+    .daypick__day.sel { background:var(--blue); color:#fff; }
+    .daypick__day.sel::after { background:#fff; }
+    .daypick__day.today { box-shadow:inset 0 0 0 1px var(--line); }
+    .daypick__hint { margin:10px 0 0; font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+  <a class="skip" href="#" data-skip>Перейти до змісту</a>
+  <div class="layout">
+    <aside class="side" aria-label="Навігація">
+      <div class="side__brand">
+        <div class="side__logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div>
+        <div><div class="side__title">MacSafe</div><div class="side__sub" id="side-computer"></div></div>
+      </div>
+      <nav aria-label="Розділи">
+        <div class="groups" id="modes"></div>
+      </nav>
+      <div class="side__foot">Клавіші 1–9: розділи групи. Esc: огляд.</div>
+    </aside>
+
+    <div class="content" id="content" tabindex="-1">
+      <header class="topbar">
+        <div>
+          <h1 id="title">MacSafe</h1>
+          <p class="sub" id="meta"></p>
+        </div>
+        <div class="top__actions">
+          <div class="daypick" id="day-pick-wrap" hidden>
+            <button class="search daypick__btn" id="day-pick" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Вибір дня звіту"></button>
+            <div class="daypick__menu" id="day-menu" role="dialog" aria-label="Календар звітів" hidden></div>
+          </div>
+          <input class="search" id="q" type="search" placeholder="Пошук по розділах" aria-label="Пошук">
+          <button class="btn" type="button" data-act="expand">Розгорнути</button>
+          <button class="btn" type="button" data-act="collapse">Згорнути</button>
+          <button class="btn" type="button" data-act="export">Експорт JSON</button>
+          <button class="btn" type="button" data-act="print">Друк</button>
+        </div>
+      </header>
+
+      <!-- Режим «Стан» -->
+      <section class="view" data-view="overview" aria-label="Огляд">
+        <div class="hero" id="hero"></div>
+        <div class="block" id="overview-priorities"></div>
+        <div class="block" id="overview-changes"></div>
+        <div class="block" id="overview-facts"></div>
+      </section>
+
+      <section class="view" data-view="issues" aria-label="Проблеми">
+        <div class="block" id="issues">
+          <div class="block__head"><h2>Проблеми</h2><p class="hint">Спершу терміново, потім увага і до відома. Кожна проблема розгортається: докази, чому важливо, кроки і перевірка.</p></div>
+          <div class="toolbar">
+            <div class="chips" role="group" aria-label="Фільтр за важливістю">
+              <button class="chip" type="button" data-sev="all" aria-pressed="true">Усі <span class="chip__n"></span></button>
+              <button class="chip" type="button" data-sev="critical" aria-pressed="false">Терміново <span class="chip__n"></span></button>
+              <button class="chip" type="button" data-sev="warning" aria-pressed="false">Увага <span class="chip__n"></span></button>
+              <button class="chip" type="button" data-sev="info" aria-pressed="false">До відома <span class="chip__n"></span></button>
+            </div>
+          </div>
+          <div class="stack" id="issues-list"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="plan" aria-label="План дій">
+        <div class="block" id="plan">
+          <div class="block__head"><h2>План дій</h2><p class="hint">Порядок: зараз, цього тижня, цього місяця, регулярно. Відмітки зберігаються в цьому браузері.</p></div>
+          <div class="progress"><div class="progress__bar" id="plan-progress"></div></div>
+          <p class="muted" id="plan-count"></p>
+          <div id="plan-list"></div>
+        </div>
+      </section>
+
+      <!-- Режим «Система» -->
+      <section class="view" data-view="system" aria-label="Система">
+        <div class="block" id="system">
+          <div class="block__head"><h2>Система</h2><p class="hint">Модель, батарея, сховище і навантаження на момент звіту.</p></div>
+          <div id="system-body"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="memory" aria-label="Памʼять">
+        <div class="block" id="memory">
+          <div class="block__head"><h2>Памʼять</h2><p class="hint">Тиск памʼяті, swap, стиснення і хто займає памʼять.</p></div>
+          <div id="memory-body"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="processes" aria-label="Процеси">
+        <div class="block" id="processes">
+          <div class="block__head"><h2>Процеси</h2><p class="hint">Топ за CPU і памʼяттю. «За життя» показує середнє навантаження за весь час роботи процесу.</p></div>
+          <div id="processes-body"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="thermal" aria-label="Температури">
+        <div class="block" id="thermal">
+          <div class="block__head"><h2>Температури і графіка</h2><p class="hint">Температури компонентів, охолодження і тротлінг.</p></div>
+          <div id="thermal-body"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="security" aria-label="Безпека">
+        <div class="block" id="security">
+          <div class="block__head"><h2>Безпека</h2><p class="hint">Локальні перевірки без root і Full Disk Access. Невідомий стан не означає, що захист вимкнений.</p></div>
+          <div id="security-body"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="launch" aria-label="Автозапуск">
+        <div class="block" id="launch">
+          <div class="block__head"><h2>Автозапуск</h2><p class="hint">Фонові агенти, битий шлях і секрети з відкритими правами.</p></div>
+          <div id="launch-body"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="crashes" aria-label="Збої">
+        <div class="block" id="crashes">
+          <div class="block__head"><h2>Збої</h2><p class="hint">Аварійні звіти за тиждень і паніки ядра за 30 днів.</p></div>
+          <div id="crashes-body"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="daemon" aria-label="XBrain daemon">
+        <div class="block" id="daemon">
+          <div class="block__head"><h2>XBrain daemon</h2><p class="hint">Очікуваний фоновий процес. Оцінюється за сплесками, циклом перезапусків, помилками в логах і цілісністю бази, а не за середнім CPU.</p></div>
+          <div id="daemon-body"></div>
+        </div>
+      </section>
+
+      <!-- Режим «Очищення» -->
+      <section class="view" data-view="cleanup" aria-label="Очищення">
+        <div class="block" id="cleanup">
+          <div class="block__head"><h2>Очищення</h2><p class="hint">Кандидати з розміром і командою. Звіт нічого не видаляє сам.</p></div>
+          <article class="card cache-panel" id="cache-panel" aria-labelledby="cache-heading" aria-busy="false">
+            <h3 id="cache-heading">Кеші застосунків</h3>
+            <p class="hint">Перевірте поточні розміри й виберіть папки. Очищення видаляє лише їхній вміст.</p>
+            <div class="cache-actions">
+              <button class="btn" id="cache-scan" type="button" disabled>Перевірити кеші</button>
+              <label class="cache-days">Файли старші за
+                <select id="cache-days" disabled><option value="7">7 днів</option><option value="30" selected>30 днів</option><option value="90">90 днів</option></select>
+              </label>
+            </div>
+            <fieldset class="cache-filters" id="cache-filters" hidden><legend>Що очищати (усе безпечне: кеші й логи, які створяться знову)</legend></fieldset>
+            <p class="cache-memory" id="cache-memory" role="status" hidden></p>
+            <p class="hint" id="cache-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
+            <p class="hint cache-root" id="cache-root" hidden></p>
+            <div class="cache-list" id="cache-list" role="group" aria-label="Кеші для очищення"></div>
+            <label class="cache-confirm"><input id="cache-confirm" type="checkbox" disabled><span>Я закрив застосунки, кеші яких очищую, і розумію, що вміст папок буде видалено</span></label>
+            <div class="cache-actions">
+              <p class="cache-summary" id="cache-selected" aria-live="polite">Вибрано: 0 МБ</p>
+              <button class="btn btn--danger" id="cache-clean" type="button" disabled>Очистити вибране</button>
+            </div>
+            <div class="cache-results" id="cache-results" role="status" aria-live="polite" aria-atomic="true"></div>
+          </article>
+          <article class="card cache-panel" id="big-panel" aria-labelledby="big-heading" aria-busy="false">
+            <h3 id="big-heading">Великі файли</h3>
+            <p class="hint">Пошук у домашній папці без Library. Тільки перегляд: файли не видаляються, їх можна показати у Finder. Downloads і Documents macOS може попросити дозволити.</p>
+            <div class="cache-actions">
+              <button class="btn" id="big-scan" type="button" disabled>Знайти великі файли</button>
+              <label class="cache-days">Від
+                <select id="big-min" disabled><option value="50">50 МБ</option><option value="100" selected>100 МБ</option><option value="500">500 МБ</option><option value="1000">1 ГБ</option></select>
+              </label>
+            </div>
+            <p class="hint" id="big-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
+            <div class="cache-list" id="big-list"></div>
+          </article>
+          <article class="card cache-panel" id="left-panel" aria-labelledby="left-heading" aria-busy="false">
+            <h3 id="left-heading">Залишки видалених застосунків</h3>
+            <p class="hint">Папки з іменем bundle id в ~/Library, для яких застосунка вже немає, не змінені понад 30 днів. Вибране переміщується в кошик, його можна повернути.</p>
+            <div class="cache-actions">
+              <button class="btn" id="left-scan" type="button" disabled>Знайти залишки</button>
+              <button class="btn btn--danger" id="left-trash" type="button" disabled>У кошик вибране</button>
+            </div>
+            <p class="hint" id="left-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
+            <div class="cache-list" id="left-list"></div>
+          </article>
+          <p class="card" id="cleanup-summary"></p>
+          <div class="stack" id="cleanup-list" style="margin-top:10px"></div>
+        </div>
+      </section>
+
+      <!-- Режим «Дії» -->
+      <section class="view" data-view="actions" aria-label="Кнопки дій">
+        <div class="block" id="actions">
+          <div class="block__head"><h2>Кнопки дій</h2><p class="hint">Команди для Terminal на цьому Mac. Сторінка нічого не запускає: команду копіюєте і виконуєте самі. Руйнівні позначені червоним.</p></div>
+          <div id="actions-body"><p class="empty">Сервер дій ще не підключено.</p></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="agents" aria-label="Агенти">
+        <div class="block" id="agents">
+          <div class="block__head"><h2>Агенти</h2><p class="hint">Пояснення проблеми від моделі. Команди копіюєте в Terminal самі. Текст проблеми надсилається провайдеру, перевірте його перед запуском.</p></div>
+          <div id="agents-body"><p class="empty">Агенти ще не підключено.</p></div>
+        </div>
+      </section>
+
+      <!-- Режим «Довідка» -->
+      <section class="view" data-view="advice" aria-label="Поради">
+        <div class="block" id="advice">
+          <div class="block__head"><h2>Поради</h2><p class="hint">Довідка за темами. Пошук зверху фільтрує і цей список.</p></div>
+          <div id="advice-list"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="history" aria-label="Історія">
+        <div class="block" id="history">
+          <div class="block__head"><h2>Історія звітів</h2><p class="hint">Тренд оцінки за запусками. Посилання ведуть на попередні HTML-звіти.</p></div>
+          <div id="history-body"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="systems" aria-label="Системи">
+        <div class="block" id="systems">
+          <div class="block__head"><h2>Системи</h2><p class="hint">Зона для інших Mac. Перетягніть JSON-знімок сюди або покладіть його в папку «звіти/системи» і згенеруйте звіт знову.</p></div>
+          <div class="drop" id="drop" tabindex="0" role="button" aria-label="Зона для знімків систем">
+            <p>Перетягніть JSON-знімки сюди або <label class="linkish">оберіть файли<input id="file" type="file" accept=".json,application/json" multiple hidden></label></p>
+            <p class="muted">Знімки зберігаються в цьому браузері. Видалити можна кнопкою на картці.</p>
+          </div>
+          <div id="systems-body" style="margin-top:14px"></div>
+        </div>
+      </section>
+
+      <section class="view" data-view="notes" aria-label="Нотатки">
+        <div class="block" id="notes">
+          <div class="block__head"><h2>Нотатки</h2><p class="hint">Вільні записи: що зроблено, що перевірено, що чекає. Зберігаються автоматично.</p></div>
+          <textarea id="notes-input" rows="8" placeholder="Наприклад: 18.10 вимкнув Gemini FinderSync, перевірити CPU наступного тижня"></textarea>
+          <p class="muted" id="notes-state"></p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script id="report-data" type="application/json">__REPORT_JSON__</script>
+  <script>
+  (() => {
+    'use strict';
+    // Один знімок (звіт) або набір знімків (центральна сторінка dashboard.html) з перемиканням дат
+    const RAW = JSON.parse(document.getElementById('report-data').textContent);
+    const MULTI = !!RAW.snapshotsById;
+    const selectData = id => (MULTI ? { ...RAW.snapshotsById[id], history: RAW.history, systems: RAW.systems } : RAW);
+    let DATA = selectData(MULTI ? RAW.latestId : null);
+    const NA = 'Немає даних';
+    const KIND_TEXT = { critical: 'Терміново', warning: 'Увага', info: 'До відома', good: 'Норма' };
+    const RISK_TEXT = { safe: 'Безпечно', review: 'Перевірити', keep: 'Не чіпати' };
+    const RISK_KIND = { safe: 'good', review: 'warning', keep: 'info' };
+    const SEV_ORDER = { critical: 0, warning: 1, info: 2, good: 3 };
+    const LS_SYS = 'report.systems.v1';
+    // План і нотатки прив'язані до комп'ютера, а не до дати: записи однієї машини не змішуються з іншою
+    const planKey = () => `report.plan.v1:${(DATA.meta && DATA.meta.computer) || 'mac'}`;
+    const notesKey = () => `report.notes.v1:${(DATA.meta && DATA.meta.computer) || 'mac'}`;
+    // Доступ до localStorage може бути заборонений браузером: тоді просто без збереження
+    const store = {
+      get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+      set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* без збереження */ } },
+    };
+    const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const state = { sev: 'all', q: '' };
+
+    // Режими і розділи: порядок тут визначає сайдбар і клавіші 1–9
+    const MODES = [
+      { id: 'state', title: 'Огляд', sections: [['overview', 'Стан'], ['issues', 'Проблеми'], ['plan', 'План дій']] },
+      { id: 'system', title: 'Система', sections: [['system', 'Mac'], ['memory', 'Памʼять'], ['processes', 'Процеси'], ['thermal', 'Температури']] },
+      { id: 'security', title: 'Безпека', sections: [['security', 'Перевірки'], ['launch', 'Автозапуск'], ['crashes', 'Збої'], ['daemon', 'XBrain daemon']] },
+      { id: 'cleanup', title: 'Обслуговування', sections: [['cleanup', 'Очищення'], ['actions', 'Кнопки дій']] },
+      { id: 'help', title: 'Довідка', sections: [['advice', 'Поради'], ['agents', 'Агенти']] },
+      { id: 'archive', title: 'Архів', sections: [['history', 'Історія'], ['systems', 'Інші Mac'], ['notes', 'Нотатки']] },
+    ];
+    const ICONS = {
+      overview: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+      issues: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+      plan: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17"/>',
+      system: '<rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2 20h20"/>',
+      memory: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+      processes: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+      thermal: '<path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0z"/>',
+      security: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+      launch: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
+      crashes: '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
+      daemon: '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+      cleanup: '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>',
+      actions: '<path d="m4 17 6-5-6-5M12 19h8"/>',
+      agents: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+      advice: '<path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/>',
+      history: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+      systems: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+      notes: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+    };
+    const ico = id => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[id] || ''}</svg>`;
+
+    const $ = (s, r = document) => r.querySelector(s);
+    const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const has = v => v !== null && v !== undefined && v !== '' && !(typeof v === 'number' && !Number.isFinite(v));
+    const fmt = (v, unit = '') => (has(v) ? `${esc(v)}${unit ? ' ' + esc(unit) : ''}` : NA);
+    const clamp = v => Math.max(0, Math.min(100, Number(v) || 0));
+    const badge = (kind, text) => `<span class="badge badge--${esc(kind || 'info')}">${esc(text)}</span>`;
+    const bar = (pct, kind = 'info') => `<div class="bar"><span class="bar__fill bar__fill--${esc(kind)}" data-w="${clamp(pct).toFixed(1)}"></span></div>`;
+    const tile = (label, valueHtml, kind, pct) => `<div class="metric"><div class="metric__value">${valueHtml}</div><div class="metric__label">${esc(label)}</div>${bar(pct, kind)}</div>`;
+    const rows = pairs => `<dl class="kvs">${pairs.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
+    const card = (title, body) => `<article class="card"><h3>${esc(title)}</h3>${body}</article>`;
+    const copyBtn = text => `<button class="copy" type="button" data-copy="${esc(text)}">Копіювати</button>`;
+    const tableOf = (heads, bodyRows) => `<div class="tablewrap"><table><thead><tr>${heads.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${bodyRows || `<tr><td colspan="${heads.length}" class="empty">${NA}</td></tr>`}</tbody></table></div>`;
+    const list = v => (Array.isArray(v) ? v : []);
+    const reportLink = file => (typeof file === 'string' && /^report-[0-9]{4}-[0-9]{2}-[0-9]{2}\.html$/.test(file)
+      ? `<a href="${esc(file)}">відкрити</a>` : NA);
+
+    function acc(head, body, open = false) {
+      const el = document.createElement('div');
+      el.className = 'acc' + (open ? ' open' : '');
+      el.innerHTML = `<button class="acc__btn" type="button" aria-expanded="${open}"><span class="acc__head">${head}</span><span class="acc__chev" aria-hidden="true">&#9662;</span></button><div class="acc__panel"><div class="acc__inner">${body}</div></div>`;
+      const btn = $('.acc__btn', el);
+      const panel = $('.acc__panel', el);
+      panel.inert = !open;   // закрита панель не отримує фокус з Tab
+      btn.addEventListener('click', () => {
+        const isOpen = el.classList.toggle('open');
+        btn.setAttribute('aria-expanded', String(isOpen));
+        panel.inert = !isOpen;
+      });
+      return el;
+    }
+
+    // Смуги: скидаємо до 0 і рахуємо від нуля, щоб анімація відбувалась і коли секція тільки відкрилась
+    function animateBars(root = document) {
+      $$('.bar__fill', root).forEach(f => {
+        const w = f.dataset.w + '%';
+        f.style.transition = 'none';
+        f.style.width = '0';
+        void f.offsetWidth;
+        f.style.transition = '';
+        requestAnimationFrame(() => { f.style.width = w; });
+      });
+    }
+
+    function countUp(el, to) {
+      if (REDUCED) { el.textContent = Math.round(to); return; }
+      const t0 = performance.now(), dur = 900;
+      const step = t => {
+        const k = Math.min(1, (t - t0) / dur);
+        el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3)));
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+
+    function toast(text) {
+      const t = $('#toast');
+      t.textContent = text;
+      t.classList.add('show');
+      clearTimeout(toast.timer);
+      toast.timer = setTimeout(() => t.classList.remove('show'), 2600);
+    }
+
+    function copyText(text, btn) {
+      const flash = msg => { const old = btn.textContent; btn.textContent = msg; setTimeout(() => { btn.textContent = old; }, 1400); };
+      if (!navigator.clipboard) { flash('Немає доступу'); return; }
+      navigator.clipboard.writeText(text).then(() => flash('Скопійовано'), () => flash('Не вдалося'));
+    }
+
+    // ---------- Огляд ----------
+    function renderHero() {
+      const h = DATA.health || {}, m = DATA.memory || {}, s = DATA.storage || {};
+      const b = DATA.battery || {}, l = DATA.load || {}, t = DATA.thermal || {};
+      const C = 2 * Math.PI * 52;
+      const off = C * (1 - clamp(h.score) / 100);
+      const memKind = m.pressure === 'critical' ? 'critical' : m.pressure === 'warning' ? 'warning' : m.pressure === 'ok' ? 'good' : 'info';
+      const cpuKind = !has(l.cpuTotal) ? 'info' : l.cpuTotal >= 90 ? 'critical' : l.cpuTotal >= 60 ? 'warning' : 'good';
+      const loadPct = has(l.perCore5) ? l.perCore5 * 100 : null;
+      const loadKind = !has(loadPct) ? 'info' : loadPct >= 150 ? 'critical' : loadPct >= 100 ? 'warning' : 'good';
+      const diskKind = !has(s.pct) ? 'info' : s.pct >= 90 ? 'critical' : s.pct >= 85 ? 'warning' : 'good';
+      const batKind = !has(b.healthPct) ? 'info' : b.healthPct < 80 ? 'critical' : b.healthPct < 85 ? 'warning' : 'good';
+      const swapKind = !has(m.swapMb) ? 'info' : m.swapMb >= 2048 ? 'critical' : m.swapMb >= 1024 ? 'warning' : 'good';
+      const tempKind = !has(t.cpuTemp) ? 'info' : t.cpuTemp >= 95 ? 'critical' : t.cpuTemp >= 80 ? 'warning' : 'good';
+      const batValue = b.present === false ? 'Немає батареї' : fmt(b.healthPct, '%');
+      $('#hero').innerHTML = `
+        <article class="score score--${esc(h.kind || 'info')}">
+          <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="ring__bg" cx="60" cy="60" r="52"></circle>
+            <circle class="ring__fg" cx="60" cy="60" r="52" style="stroke-dasharray:${C.toFixed(1)};stroke-dashoffset:${C.toFixed(1)}" data-off="${off.toFixed(1)}"></circle>
+          </svg>
+          <div>
+            <p class="score__num">${esc(clamp(h.score))}<small class="score__of"> /100</small></p>
+            <p class="score__label">${esc(h.text || NA)}</p>
+            <p class="score__copy">${esc(h.summary || '')} Штрафи: ${esc(h.penalty ?? 0)}.</p>
+          </div>
+        </article>
+        <div class="tiles">
+          ${tile('CPU зараз', fmt(l.cpuTotal, '%'), cpuKind, l.cpuTotal)}
+          ${tile('Навантаження на ядро (5 хв)', fmt(l.perCore5), loadKind, loadPct)}
+          ${tile('Вільна памʼять (memory_pressure)', fmt(m.freePct, '%'), memKind, m.freePct)}
+          ${tile('Swap', has(m.swapMb) ? `${esc(m.swapMb)} МБ` : NA, swapKind, has(m.swapMb) ? m.swapMb / 20 : null)}
+          ${tile('Диск заповнено', fmt(s.pct, '%'), diskKind, s.pct)}
+          ${tile('Ємність батареї', batValue, batKind, b.healthPct)}
+          ${tile('Температура CPU', fmt(t.cpuTemp, '°C'), tempKind, t.cpuTemp)}
+          ${tile('Вільно на диску', fmt(s.availGb, 'ГБ'), diskKind, has(s.pct) ? 100 - s.pct : null)}
+        </div>`;
+      const ring = $('.ring__fg');
+      requestAnimationFrame(() => { ring.style.strokeDashoffset = ring.dataset.off; });
+    }
+
+    // ---------- Огляд: з чого почати, знімок і контекст ----------
+    // Зміни безпеки відносно попереднього дня (звіти: один на день, тож це попередній звіт)
+    const SEC_KIND_TEXT = { good: 'ок', info: 'до відома', warning: 'увага', critical: 'критично' };
+    function securityChangesVs(id, ids, byId) {
+      const idx = ids.indexOf(id);
+      if (idx < 0 || idx + 1 >= ids.length) return null;
+      const items = snap => (snap && Array.isArray(snap.security) ? snap.security : []).filter(i => i && typeof i.label === 'string');
+      const shown = i => (i ? `${i.value ?? '—'} · ${SEC_KIND_TEXT[i.kind] || i.kind}` : null);
+      const prev = Object.fromEntries(items(byId[ids[idx + 1]]).map(i => [i.label, i]));
+      const cur = Object.fromEntries(items(byId[id]).map(i => [i.label, i]));
+      const out = [];
+      Object.keys(cur).forEach(label => {
+        const p = prev[label], c = cur[label];
+        if (!p) out.push({ label, from: null, to: shown(c) });
+        else if (p.kind !== c.kind || p.value !== c.value) out.push({ label, from: shown(p), to: shown(c) });
+      });
+      Object.keys(prev).forEach(label => { if (!cur[label]) out.push({ label, from: shown(prev[label]), to: null }); });
+      return out;
+    }
+
+    function renderOverviewChanges() {
+      const box = $('#overview-changes');
+      if (!box) return;
+      const changes = MULTI ? securityChangesVs(currentId(), RAW.snapshotIds, RAW.snapshotsById) : null;
+      if (changes === null) { box.innerHTML = ''; return; }
+      const body = changes.length
+        ? `<div class="stack">${changes.map(c => `<div class="sec-link"><span>${esc(c.label)}</span><span class="muted">${esc(c.from ?? '—')} → ${esc(c.to ?? '—')}</span></div>`).join('')}</div>`
+        : '<p class="muted">Змін безпеки з попереднього звіту немає.</p>';
+      box.innerHTML = card('Зміни від попереднього звіту', body);
+    }
+
+    function renderOverview() {
+      const top = sortedIssues().filter(i => i.sev === 'critical' || i.sev === 'warning').slice(0, 5);
+      const pri = top.length
+        ? top.map(i => `<a class="sec-link" href="#issues">${badge(i.sev, KIND_TEXT[i.sev])}<span>${esc(i.title)}</span></a>`).join('')
+        : '<p class="muted">Критичних проблем і попереджень немає.</p>';
+      const sys = DATA.system || {}, bk = DATA.backup || {}, up = DATA.updates || {}, m = DATA.meta || {};
+      const ageH = has(m.generatedEpoch) ? Math.floor((Date.now() / 1000 - m.generatedEpoch) / 3600) : null;
+      const ageText = ageH === null ? NA : ageH < 1 ? 'менше години тому' : `${ageH} год тому`;
+      const stale = ageH !== null && ageH >= 168 ? ` ${badge('warning', 'знімку понад тиждень')}` : '';
+      $('#overview-priorities').innerHTML = card('З чого почати', `<div class="stack">${pri}</div>`);
+      renderOverviewChanges();
+      $('#overview-facts').innerHTML = `<div class="grid">
+        ${card('Знімок', rows([
+          ['Створено', fmt(m.generatedAt)], ['Давність', `${esc(ageText)}${stale}`], ['Режим', fmt(m.mode === 'deep' ? 'глибокий' : 'швидкий')],
+        ]))}
+        ${card('Контекст', rows([
+          ['macOS', fmt(sys.os)], ['Безперервна робота', fmt(sys.uptime)],
+          ['Резервна копія', badge(bk.kind, bk.status || NA)],
+          ['Оновлення macOS', up.checked ? fmt(up.pending, 'доступно') : 'не перевірялись'],
+        ]))}
+      </div>`;
+    }
+
+    // ---------- Перемикання дат (лише для dashboard.html) ----------
+    // Календар вибору дня: один звіт на день, тож ідентифікатор звіту — дата
+    function bindDate() {
+      if (!MULTI) return;
+      const wrap = $('#day-pick-wrap'), btn = $('#day-pick'), menu = $('#day-menu');
+      wrap.hidden = false;
+      const has = new Set(RAW.snapshotIds);
+      const months = ['Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень', 'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'];
+      const monthsGen = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
+      const wdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+      const dayLabel = id => { const [y, m, d] = id.split('-'); return `${Number(d)} ${monthsGen[+m - 1]} ${y}`; };
+      let shown = new Date(`${currentId() || RAW.latestId}T00:00:00`);
+      const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+      const paint = () => {
+        const y = shown.getFullYear(), m = shown.getMonth();
+        const offset = (new Date(y, m, 1).getDay() + 6) % 7;
+        const today = dayKey(new Date()), cur = currentId();
+        const cells = [];
+        for (let i = 0; i < 42; i++) {
+          const d = new Date(y, m, 1 - offset + i), key = dayKey(d);
+          const hasReport = has.has(key) && key <= today;
+          const classes = ['daypick__day', hasReport ? 'has' : '', key === cur ? 'sel' : '', key === today ? 'today' : '', d.getMonth() === m ? '' : 'out'].join(' ');
+          cells.push(`<button type="button" class="${classes}" data-day="${key}"${hasReport ? '' : ' disabled'}>${d.getDate()}</button>`);
+        }
+        menu.innerHTML = `<div class="daypick__head"><button type="button" class="daypick__nav" data-nav="-1" aria-label="Попередній місяць">‹</button><b>${months[m]} ${y}</b><button type="button" class="daypick__nav" data-nav="1" aria-label="Наступний місяць">›</button></div>`
+          + `<div class="daypick__grid">${wdays.map(x => `<span class="daypick__wd">${x}</span>`).join('')}${cells.join('')}</div>`
+          + `<p class="daypick__hint">Один звіт на день. Позначені дні мають звіт.</p>`;
+      };
+      btn.textContent = dayLabel(currentId() || RAW.latestId);
+      btn.addEventListener('click', () => {
+        const open = menu.hidden;
+        if (open) { shown = new Date(`${currentId() || RAW.latestId}T00:00:00`); paint(); }
+        menu.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
+      });
+      menu.addEventListener('click', e => {
+        const nav = e.target.closest('[data-nav]');
+        if (nav) { shown = new Date(shown.getFullYear(), shown.getMonth() + Number(nav.dataset.nav), 1); paint(); return; }
+        const day = e.target.closest('[data-day]');
+        if (!day || day.disabled) return;
+        close();
+        selectSnapshot(day.dataset.day);
+        btn.textContent = dayLabel(day.dataset.day);
+      });
+      document.addEventListener('click', e => { if (!wrap.contains(e.target)) close(); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    }
+
+    function selectSnapshot(id) {
+      if (!MULTI || !Object.prototype.hasOwnProperty.call(RAW.snapshotsById, id)) return;
+      DATA = selectData(id);
+      state.q = '';
+      state.sev = 'all';
+      $('#q').value = '';
+      renderAll();
+      refreshSideCounts();
+      route(false);
+    }
+
+    function renderMeta() {
+      const m = DATA.meta || {}, u = DATA.updates || {};
+      const updates = u.checked ? `перевірено, оновлень: ${esc(u.pending ?? 0)}` : 'не перевірялись';
+      const mode = m.mode === 'deep' ? 'глибокий' : 'швидкий';
+      $('#title').textContent = `MacSafe: ${m.computer || NA}`;
+      $('#meta').innerHTML = `Знімок <b>${esc(m.generatedAt || NA)}</b> · режим: <b>${esc(mode)}</b> · оновлення macOS: <b>${updates}</b>`;
+      $('#side-computer').textContent = m.computer || '';
+      document.title = `MacSafe: ${m.computer || ''}`;
+    }
+
+    // ---------- Проблеми ----------
+    function sortedIssues() {
+      return list(DATA.issues).slice().sort((a, b) => (SEV_ORDER[a.sev] ?? 9) - (SEV_ORDER[b.sev] ?? 9));
+    }
+
+    function issueBody(i) {
+      const steps = list(i.fix).map(s => `<li>${esc(s)}</li>`).join('') || '<li>Окремих кроків немає, перевірте вручну.</li>';
+      return `${rows([
+        ['Що сталося', esc(i.detail)],
+        ['Докази', `<code>${esc(i.evidence)}</code>`],
+        ['Чому важливо', esc(i.why)],
+        ['Ризик дії', esc(i.risk)],
+      ])}
+        <h4>Що зробити</h4>
+        <ol class="steps">${steps}</ol>
+        <p class="verify">Перевірити: <code>${esc(i.verify)}</code> ${copyBtn(i.verify || '')}</p>`;
+    }
+
+    function renderIssues() {
+      const box = $('#issues-list');
+      const all = sortedIssues();
+      const q = state.q.trim().toLowerCase();
+      const shown = all.filter(i => (state.sev === 'all' || i.sev === state.sev)
+        && (!q || [i.title, i.detail, i.cat, i.evidence, i.why].join(' ').toLowerCase().includes(q)));
+      $$('.chip').forEach(c => {
+        const n = c.dataset.sev === 'all' ? all.length : all.filter(i => i.sev === c.dataset.sev).length;
+        $('.chip__n', c).textContent = n;
+        c.setAttribute('aria-pressed', String(state.sev === c.dataset.sev));
+      });
+      box.innerHTML = '';
+      if (!all.length) {
+        box.innerHTML = `<article class="issue issue--good"><div style="padding:16px 18px">${badge('good', 'Норма')} <b>Суттєвих ризиків у цьому знімку не виявлено</b><p class="muted">Нічого термінового. Порівнюйте наступні звіти, щоб бачити тенденцію.</p></div></article>`;
+        return;
+      }
+      if (!shown.length) { box.innerHTML = '<p class="empty">Нічого не знайдено за цим фільтром.</p>'; return; }
+      shown.forEach(i => {
+        const head = `${badge(i.sev, KIND_TEXT[i.sev] || i.sev)}<span class="issue__title">${esc(i.title)}</span><span class="issue__cat">${esc(i.cat)}</span>`;
+        box.append(acc(head, issueBody(i), i.sev === 'critical'));
+      });
+      animateBars(box);
+    }
+
+    // ---------- План ----------
+    function hash(s) {
+      let h = 5381;
+      for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+      return (h >>> 0).toString(36);
+    }
+
+    function readPlan() {
+      try {
+        const v = JSON.parse(store.get(planKey()) || '{}');
+        return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+      } catch (e) { return {}; }
+    }
+
+    function planItems() {
+      const phase = { critical: 'Зараз', warning: 'Цього тижня', info: 'Цього місяця' };
+      const fromIssues = sortedIssues().filter(i => phase[i.sev]).map(i => {
+        const step = list(i.fix)[0] || i.verify || '';
+        return { id: hash(`${i.title}|${step}`), phase: phase[i.sev], text: `${i.title}: ${step}` };
+      });
+      const regular = [
+        'Раз на тиждень: запустити звіт і переглянути критичні та попередження.',
+        'Раз на місяць: перезавантажити Mac, перевірити оновлення macOS і застосунків.',
+        'Перед змінами в системі: переконатися, що резервна копія працює.',
+        'Після встановлення нового застосунку: перевірити автозапуск і розширення Finder.',
+      ].map((t, n) => ({ id: `reg${n}`, phase: 'Регулярно', text: t }));
+      return fromIssues.concat(regular);
+    }
+
+    function updatePlanCount(all, done) {
+      const n = all.filter(x => done[x.id]).length;
+      $('#plan-progress').style.width = (all.length ? (n / all.length) * 100 : 0) + '%';
+      $('#plan-count').textContent = `${n} з ${all.length} виконано`;
+    }
+
+    function renderPlan() {
+      const done = readPlan();
+      const all = planItems();
+      const box = $('#plan-list');
+      box.innerHTML = '';
+      ['Зараз', 'Цього тижня', 'Цього місяця', 'Регулярно'].forEach(p => {
+        const its = all.filter(x => x.phase === p);
+        if (!its.length) return;
+        const sec = document.createElement('div');
+        sec.className = 'phase';
+        sec.innerHTML = `<h3><span>${esc(p)}</span><span class="muted">${its.filter(x => done[x.id]).length} з ${its.length}</span></h3>`
+          + its.map(x => `<label class="check"><input type="checkbox" data-id="${esc(x.id)}" ${done[x.id] ? 'checked' : ''}><span>${esc(x.text)}</span></label>`).join('');
+        box.append(sec);
+      });
+      box.onchange = e => {
+        const id = e.target.dataset.id;
+        if (!id) return;
+        const cur = readPlan();
+        cur[id] = e.target.checked;
+        store.set(planKey(), JSON.stringify(cur));
+        updatePlanCount(all, cur);
+      };
+      updatePlanCount(all, done);
+    }
+
+    // ---------- Розділи з даними ----------
+    function renderSystem() {
+      const s = DATA.system || {}, b = DATA.battery || {}, st = DATA.storage || {}, l = DATA.load || {};
+      const batteryBody = b.present === false ? '<p class="muted">Батареї немає.</p>' : rows([
+        ['Заряд і стан', `${fmt(b.pct, '%')} · ${fmt(b.state)}`],
+        ['До розрядження', fmt(b.remain)],
+        ['Здоровʼя', fmt(b.healthPct, '%')],
+        ['Цикли', fmt(b.cycles)],
+        ['Ємність, поточна / проєктна', `${fmt(b.maxCapacity)} / ${fmt(b.designCapacity)} мАг`],
+        ['Температура', fmt(b.tempC, '°C')],
+        ['Напруга', fmt(b.voltageV, 'В')],
+        ['Стан контролера', fmt(b.condition)],
+      ]);
+      $('#system-body').innerHTML = `<div class="grid">
+        ${card('Mac і macOS', rows([
+          ['Модель', fmt(s.model)], ['Чип', fmt(s.chip)], ['Ядра', fmt(s.cores)], ['Памʼять', fmt(s.memory)],
+          ['macOS', fmt(s.os)], ['Збірка', fmt(s.build)], ['Ядро', fmt(s.kernel)],
+          ['Безперервна робота', fmt(s.uptime)], ['Останнє завантаження', fmt(s.bootDate)],
+        ]))}
+        ${card('Батарея', batteryBody)}
+        ${card('Сховище', rows([
+          ['Пристрій', fmt(st.device)], ['S.M.A.R.T.', fmt(st.smart)],
+          ['Використано', `${fmt(st.usedGb, 'ГБ')} з ${fmt(st.totalGb, 'ГБ')}`],
+          ['Вільно', fmt(st.availGb, 'ГБ')], ['Заповнення', fmt(st.pct, '%')],
+          ['Локальні знімки Time Machine', fmt(st.localSnapshots)],
+        ]))}
+        ${card('Навантаження', rows([
+          ['Load average (1, 5, 15 хв)', `${fmt(l.l1)} / ${fmt(l.l5)} / ${fmt(l.l15)}`],
+          ['На ядро (5 хв)', fmt(l.perCore5)], ['CPU разом', fmt(l.cpuTotal, '%')],
+          ['Користувач / система', `${fmt(l.cpuUser, '%')} / ${fmt(l.cpuSys, '%')}`],
+          ['Процеси', fmt(l.processCount)], ['Ядра', fmt(l.ncpu)],
+        ]))}
+      </div>`;
+      animateBars($('#system-body'));
+    }
+
+    function renderMemory() {
+      const m = DATA.memory || {}, d = DATA.daemon || {};
+      const pKind = m.pressure === 'critical' ? 'critical' : m.pressure === 'warning' ? 'warning' : m.pressure === 'ok' ? 'good' : 'info';
+      const pText = { good: 'Норма', warning: 'Увага', critical: 'Терміново', info: NA }[pKind];
+      $('#memory-body').innerHTML = `<div class="grid">
+        ${card('Стан памʼяті', rows([
+          ['Використано', fmt(m.usedText)], ['Вільно за memory_pressure', fmt(m.freePct, '%')],
+          ['Не зайнято (сирі дані PhysMem)', fmt(m.unusedMb, 'МБ')],
+          ['Стиснуто компресором', fmt(m.compressorMb, 'МБ')], ['Swap', fmt(m.swapMb, 'МБ')],
+          ['Виведення сторінок за 5 с (Swapouts / Pageouts)',has(m.swapoutsIn5s) ? `${esc(m.swapoutsIn5s)} / ${esc(m.pageoutsIn5s ?? NA)}` : NA],
+          ['Тиск памʼяті', badge(pKind, pText)],
+        ]))}
+        ${card('Найбільші споживачі', rows([
+          ['Finder', fmt(m.finderRssMb, 'МБ')],
+          ['Панель відкриття/збереження (сума)', fmt(m.panelRssMb, 'МБ')],
+          ['Електрон-застосунки разом', fmt(m.electronMb, 'МБ')],
+          ['XBrain daemon (очікуваний)', fmt(d.rssMb, 'МБ')],
+        ]))}
+      </div>
+      <p class="muted" style="margin-top:12px">Памʼять, що стиснута або в swap, не зникає сама. Закриття невикористаних вікон звільняє її найшвидше.</p>`;
+      animateBars($('#memory-body'));
+    }
+
+    function renderProcesses() {
+      const p = DATA.processes || {};
+      const exp = e => (e ? ' ' + badge('info', 'очікуваний') : '');
+      const cpuRows = list(p.cpu).map(r => `<tr><td>${esc(r.name)}${exp(r.expected)}</td><td>${fmt(r.cpu, '%')}</td><td>${fmt(r.rssMb, 'МБ')}</td><td>${fmt(r.life, '%')}</td><td>${esc(r.category)}</td></tr>`).join('');
+      const memRows = list(p.mem).map(r => `<tr><td>${esc(r.name)}${exp(r.expected)}</td><td>${fmt(r.rssMb, 'МБ')}</td><td>${fmt(r.cpu, '%')}</td><td>${fmt(r.life, '%')}</td><td>${esc(r.category)}</td></tr>`).join('');
+      const groups = list(p.groups);
+      const gmax = Math.max(1, ...groups.map(g => g.rssMb || 0));
+      const groupsHtml = groups.map(g => `<div class="grp"><div class="grp__head"><span>${esc(g.name)} <span class="muted">(${esc(g.count)} проц.)</span></span><span>${fmt(g.rssMb, 'МБ')}</span></div>${bar((g.rssMb || 0) / gmax * 100, 'info')}</div>`).join('') || `<p class="empty">${NA}</p>`;
+      $('#processes-body').innerHTML = `
+        <h3>Топ за CPU</h3>${tableOf(['Процес', 'CPU', 'RSS', 'За життя', 'Категорія'], cpuRows)}
+        <h3>Топ за памʼяттю</h3>${tableOf(['Процес', 'RSS', 'CPU', 'За життя', 'Категорія'], memRows)}
+        <div class="grid" style="margin-top:14px">${card('Памʼять за застосунками', groupsHtml)}
+          ${card('Як читати', `<p class="muted">100% у CPU означає одне повністю зайняте ядро. Значення «За життя» стабільно низьке у фонових службах, а короткі піки не означають постійної проблеми.</p>`)}</div>`;
+      animateBars($('#processes-body'));
+    }
+
+    function renderCleanup() {
+      const q = state.q.trim().toLowerCase();
+      const all = list(DATA.cleanup);
+      const items = all.slice()
+        .sort((a, b) => (b.sizeMb ?? -1) - (a.sizeMb ?? -1))
+        .filter(c => !q || `${c.label} ${c.path} ${c.note}`.toLowerCase().includes(q));
+      const safeTotal = all.filter(c => c.risk === 'safe' && has(c.sizeMb)).reduce((s, c) => s + c.sizeMb, 0);
+      const max = Math.max(1, ...items.map(c => c.sizeMb || 0));
+      $('#cleanup-summary').innerHTML = `Безпечно прибрати: <b>${esc(safeTotal)} МБ</b>. Звіт нічого не видаляє. Кожну команду потрібно запустити вручну.`;
+      const box = $('#cleanup-list');
+      box.innerHTML = '';
+      if (!items.length) {
+        box.innerHTML = `<p class="empty">${all.length ? 'Нічого не знайдено за цим пошуком.' : 'Кандидатів не знайдено.'}</p>`;
+        return;
+      }
+      items.forEach(c => {
+        const kind = RISK_KIND[c.risk] || 'info';
+        const size = has(c.sizeMb) ? `${c.sizeMb} МБ` : NA;
+        const head = `${badge(kind, RISK_TEXT[c.risk] || c.risk)}<span class="issue__title">${esc(c.label)}</span><span class="issue__cat">${esc(size)}</span>`;
+        const body = `<p>${esc(c.note)}</p>
+          <p class="muted"><code>${esc(c.path)}</code></p>
+          ${c.cmd ? `<pre class="cmd"><code>${esc(c.cmd)}</code></pre>${copyBtn(c.cmd)}` : ''}
+          <div class="bar bar--thin"><span class="bar__fill bar__fill--${kind}" data-w="${has(c.sizeMb) ? (c.sizeMb / max * 100).toFixed(1) : 0}"></span></div>`;
+        box.append(acc(head, body));
+      });
+      animateBars(box);
+    }
+
+    function renderLaunch() {
+      const l = DATA.launch || {};
+      const broken = list(l.broken).map(b => `<tr><td>${esc(b.label)}</td><td><code>${esc(b.program)}</code></td></tr>`).join('');
+      const secrets = list(l.secrets).map(s => `<tr><td>${esc(s.label)}</td><td>${esc(s.perm)}</td><td><code>${esc(s.path)}</code></td></tr>`).join('');
+      $('#launch-body').innerHTML = `
+        <div class="grid">${card('Сторонні агенти', rows([['Кількість (без com.apple)', fmt(l.thirdParty)]]))}</div>
+        <h3>Битий автозапуск</h3>${tableOf(['Мітка', 'Програма'], broken)}
+        <h3>Секрети з відкритими правами</h3>${tableOf(['Мітка', 'Права', 'Файл'], secrets)}
+        <p class="muted" style="margin-top:10px">Значення секретів у звіт не потрапляють, показано лише шлях і права.</p>`;
+    }
+
+    function renderSecurity() {
+      const status = { good: 'ок', warning: 'увага', critical: 'критично', unknown: 'немає даних' };
+      const sec = list(DATA.security).map(r => {
+        const kind = r.status ? r.kind : (has(r.value) ? r.kind : 'unknown');
+        return `<tr><td><b>${esc(r.label)}</b>${r.command ? `<div class="hint"><code>${esc(r.command)}</code></div>` : ''}</td>
+          <td>${badge(kind, r.status || status[kind] || NA)}</td><td>${esc(r.value || NA)}</td>
+          <td>${esc(r.advice || 'Порада відсутня в цьому знімку.')}</td></tr>`;
+      }).join('');
+      const net = DATA.network || {}, ext = DATA.extensions || {}, launch = DATA.launch || {};
+      // Старі знімки мають лише exposed: не приписуємо їм повний список слухачів.
+      const listeners = Array.isArray(net.listening) ? net.listening : list(net.exposed);
+      const ports = listeners.map(e => `<tr><td>${esc(e.proc)}</td><td>${fmt(e.pid)}</td><td>${esc(e.port)}</td><td><code>${esc(e.addr)}</code></td></tr>`).join('');
+      const dirs = list(launch.directories).map(d => `<tr><td><code>${esc(d.path)}</code></td><td>${fmt(d.count)}</td></tr>`).join('');
+      const items = list(launch.items).map(i => `<tr><td>${esc(i.label || NA)}</td><td>${esc(i.origin)}</td><td><code>${esc(i.path)}</code></td></tr>`).join('');
+      const extensions = list(ext.nonApple).map(e => `<tr><td><code>${esc(e)}</code></td></tr>`).join('');
+      const b = DATA.backup || {};
+      $('#security-body').innerHTML = `
+        <div class="card">${tableOf(['Перевірка', 'Статус', 'Результат', 'Порада'], sec)}</div>
+        <h3>TCP-порти, видимі користувачу</h3>
+        <p class="hint">Без root список може бути неповним. Адреса поза localhost не доводить доступність порту з мережі.</p>
+        ${tableOf(['Процес', 'PID', 'Порт', 'Адреса'], ports || `<tr><td colspan="4" class="empty">${NA}</td></tr>`)}
+        <h3>Системні розширення · ${fmt(ext.count)}</h3>
+        <p class="hint">Нижче записи без префікса com.apple. Префікс не підтверджує підпис, а сторонній запис не означає загрозу.</p>
+        ${tableOf(['Запис'], extensions || `<tr><td class="empty">${has(ext.count) ? 'Записів без префікса com.apple немає.' : NA}</td></tr>`)}
+        <h3>Агенти й демони автозапуску</h3>${tableOf(['Папка', 'Файлів plist'], dirs)}
+        ${tableOf(['Мітка', 'Префікс', 'Файл'], items)}
+        <p class="hint">Це файли у трьох папках, а не перелік усіх активних служб. Відсутню мітку не підмінюємо назвою файлу.</p>
+        <h3>Резервні копії</h3>
+        <div class="grid">${card('Time Machine', rows([['Стан', badge(b.kind, b.status || NA)], ['Остання копія', fmt(b.latest)]]))}</div>`;
+    }
+
+    function renderThermal() {
+      const t = DATA.thermal || {}, g = DATA.gpu || {};
+      const note = has(t.cpuTemp) ? '' : '<p class="muted" style="margin-bottom:12px">Сенсори температури CPU і GPU не знайдено. Через ioreg на Apple Silicon їх зазвичай не видно без додаткових інструментів.</p>';
+      $('#thermal-body').innerHTML = `${note}<div class="grid">
+        ${card('Температури', rows([
+          ['CPU', fmt(t.cpuTemp, '°C')], ['GPU', fmt(t.gpuTemp, '°C')],
+          ['SSD (NAND)', fmt(t.ssdTemp, '°C')], ['Батарея', fmt(t.batteryTemp, '°C')],
+        ]))}
+        ${card('Охолодження', rows([
+          ['Тепловий тиск (pmset -g therm)', esc(t.pmsetPressure || NA)],
+          ['Вентилятори', fmt(t.fans)], ['Обороти', fmt(t.fanSpeed, 'RPM')],
+          ['Тротлінг', badge(t.throttleKind, t.throttle || NA)],
+        ]))}
+        ${card('Графіка', rows([
+          ['GPU', fmt(g.model)], ['VRAM або ядра', fmt(g.vram)], ['Metal', fmt(g.metal)],
+          ['Роздільна здатність', fmt(g.resolution)], ['Тип дисплея', fmt(g.displayType)],
+        ]))}
+      </div>`;
+    }
+
+    function renderCrashes() {
+      const c = DATA.crashes || {};
+      const byApp = list(c.byApp);
+      const max = Math.max(1, ...byApp.map(a => a.count || 0));
+      const appBars = byApp.map(a => `<div class="grp"><div class="grp__head"><span>${esc(a.app)}</span><span>${fmt(a.count)}</span></div>${bar((a.count || 0) / max * 100, 'warning')}</div>`).join('') || `<p class="empty">Аварійних звітів за тиждень немає.</p>`;
+      const recent = list(c.recent).map(r => `<tr><td>${esc(r.app)}</td><td>${esc(r.date)}</td></tr>`).join('');
+      $('#crashes-body').innerHTML = `
+        <div class="grid">
+          ${card('Підсумок', rows([
+            ['Звіти .ips за 7 днів', fmt(c.ips7d)], ['Звіти .diag за 7 днів', fmt(c.diag7d)],
+            ['Паніки ядра за 30 днів', badge((c.panics30d || 0) > 0 ? 'critical' : 'good', String(c.panics30d ?? 0))],
+          ]))}
+          ${card('Застосунки з найбільшою кількістю збоїв', appBars)}
+        </div>
+        <h3>Останні звіти</h3>${tableOf(['Застосунок', 'Час'], recent)}`;
+      animateBars($('#crashes-body'));
+    }
+
+    function renderDaemon() {
+      const d = DATA.daemon || {};
+      const dbKind = d.dbCheck === 'ok' ? 'good' : d.dbCheck === 'error' ? 'critical' : 'info';
+      const dbText = d.dbCheck === 'ok' ? 'quick_check: ok' : d.dbCheck === 'error' ? 'quick_check: помилка' : 'не перевірялось';
+      $('#daemon-body').innerHTML = `<div class="grid">
+        ${card('Сигнали з логу і бази', rows([
+          ['Помилки «Address already in use»', fmt(d.addrInUse)],
+          ['Банери запуску', fmt(d.banners)],
+          ['Помилки запису в базу', fmt(d.dbErrors)],
+          ['Цілісність бази', badge(dbKind, dbText)],
+          ['Розмір логу', fmt(d.logKb, 'КБ')],
+        ]))}
+        ${card('Процес і шлях', rows([
+          ['Памʼять (RSS)', fmt(d.rssMb, 'МБ')],
+          ['База індексу', `<code>${esc(d.dbPath || NA)}</code>`],
+          ['Статус', badge('info', 'очікуваний процес')],
+        ]))}
+      </div>
+      <p class="muted" style="margin-top:12px">Лог без дат, тому помилки показано сумою за весь час. Щоб бачити, коли саме вони були, додайте часові мітки в лог.</p>`;
+    }
+
+    // ---------- Дії: команди для Terminal. Сторінка нічого не запускає сама ----------
+    const ACTION_CMDS = [
+      { level: 'read', title: 'Хто блокує сон', cmd: 'pmset -g assertions' },
+      { level: 'read', title: 'Тепловий стан', cmd: 'pmset -g therm' },
+      { level: 'read', title: 'Призначення Time Machine', cmd: 'tmutil destinationinfo' },
+      { level: 'read', title: 'Керування пристроєм (MDM/DEP)', cmd: 'profiles status -type enrollment' },
+      { level: 'read', title: 'Статус SIP', cmd: 'csrutil status' },
+      { level: 'read', title: 'Системні проксі', cmd: 'scutil --proxy' },
+      { level: 'read', title: 'Порти, що слухають', cmd: 'lsof -nP -iTCP -sTCP:LISTEN' },
+      { level: 'read', title: 'Топ процесів за CPU', cmd: 'ps -Ao pid,%cpu,rss,comm -r | head -20' },
+      { level: 'mild', title: 'Перезапустити Finder', cmd: 'killall Finder' },
+      { level: 'mild', title: 'Перезапустити панель відкриття/збереження', cmd: 'killall com.apple.appkit.xpc.openAndSavePanelService' },
+      { level: 'destructive', title: 'Очистити кеш npm', cmd: 'npm cache clean --force' },
+      { level: 'destructive', title: 'Очистити кеш Homebrew', cmd: 'brew cleanup -s' },
+      { level: 'destructive', title: 'Очистити Xcode DerivedData', cmd: 'find ~/Library/Developer/Xcode/DerivedData -mindepth 1 -maxdepth 1 -exec rm -rf {} +' },
+      { level: 'destructive', title: 'Очистити кошик Finder', cmd: `osascript -e 'tell application "Finder" to empty the trash'` },
+    ];
+    const LEVEL_TEXT = { read: 'Читання', mild: 'Легка дія', destructive: 'Руйнівна дія' };
+    const LEVEL_KIND = { read: 'good', mild: 'info', destructive: 'critical' };
+
+    function renderActions() {
+      const rowsHtml = ACTION_CMDS.map(a => `<div class="check" style="cursor:default">
+          <span style="flex:1"><b>${esc(a.title)}</b> ${badge(LEVEL_KIND[a.level], LEVEL_TEXT[a.level])}
+          <code style="display:block;margin-top:6px">${esc(a.cmd)}</code></span>
+          ${copyBtn(a.cmd)}</div>`).join('');
+      $('#actions-body').innerHTML = `
+        <p class="card" style="margin-bottom:12px">Ці команди виконуються в Terminal на цьому Mac. Сторінка сама нічого не запускає. Руйнівні дії не мають швидкого відкату: спершу переконайтеся, що вони вам потрібні.</p>
+        <div class="stack">${rowsHtml}</div>`;
+    }
+
+    // ---------- Агенти: попередній перегляд тексту і команди для Terminal ----------
+    const AGENT_CMDS = {
+      haiku: 'claude -p --model haiku --safe-mode --tools "" --strict-mcp-config --disable-slash-commands --no-chrome --no-session-persistence --permission-mode dontAsk',
+      opus_max: 'claude -p --model opus --effort max --safe-mode --tools "" --strict-mcp-config --disable-slash-commands --no-chrome --no-session-persistence --permission-mode dontAsk',
+      codex_high: 'codex exec -s read-only --skip-git-repo-check -m gpt-6.1-sol -c model_reasoning_effort="high" -',
+    };
+    const AGENT_TITLE = { haiku: 'Claude Haiku', opus_max: 'Claude Opus, effort max', codex_high: 'Codex gpt-6.1-sol, effort high' };
+
+    function renderAgents() {
+      const issues = sortedIssues();
+      if (!issues.length) { $('#agents-body').innerHTML = '<p class="empty">Проблем для пояснення немає.</p>'; return; }
+      const opts = issues.map((i, n) => `<option value="${n}">${esc(KIND_TEXT[i.sev] || i.sev)}: ${esc(i.title)}</option>`).join('');
+      $('#agents-body').innerHTML = `
+        <div class="grid">
+          ${card('Вибір проблеми', `
+            <label for="agent-issue" class="muted">Проблема для пояснення</label>
+            <select id="agent-issue" class="search" style="width:100%;min-width:0;margin-top:6px">${opts}</select>
+            <h4>Що буде надіслано</h4>
+            <pre class="cmd" id="agent-payload" style="white-space:pre-wrap"></pre>
+            <button class="copy" id="agent-copy" type="button" data-copy="">Копіювати текст</button>
+            <p class="muted">Текст вище піде до зовнішнього провайдера, якщо виконати команду. Перевірте його перед запуском.</p>`)}
+          ${card('Команди для Terminal', Object.keys(AGENT_CMDS).map(k => `
+            <h4>${esc(AGENT_TITLE[k])}</h4>
+            <pre class="cmd"><code>printf '%s' '&lt;текст вибраної проблеми&gt;' | ${esc(AGENT_CMDS[k])}</code></pre>
+            <button class="copy" type="button" data-copy-agent="${esc(k)}">Копіювати команду з текстом</button>`).join(''))}
+        </div>`;
+      const sel = $('#agent-issue');
+      const show = () => {
+        const i = issues[Number(sel.value)];
+        const text = [i.title, i.detail, i.evidence, i.why, ...list(i.fix)].filter(Boolean).join('\n');
+        $('#agent-payload').textContent = text;
+        $('#agent-copy').dataset.copy = text;
+      };
+      sel.addEventListener('change', show);
+      show();
+    }
+
+    // ---------- Поради ----------
+    const ADVICE = [
+      { cat: 'Памʼять', items: [
+        { t: 'Електрон-застосунки споживають найбільше памʼяті', b: 'Claude, ChatGPT і Codex, VS Code, Gemini і Chrome мають власний рушій браузера. Кожне вікно і вкладка додають памʼять.', tips: ['Закривайте вікна і вкладки, які не використовуєте', 'Перезапускайте важкі застосунки раз на день, якщо їх багато'] },
+        { t: 'Swap сам по собі не проблема, стійке зростання — так', b: 'Swap це дисковий резерв памʼяті. Одиничні піки нормальні. Велике значення, яке не падає, означає нестачу памʼяті.', tips: ['Перевіряйте swap у звіті після важких задач', 'Перезавантаження очищає swap'] },
+      ]},
+      { cat: 'Процесор і нагрів', items: [
+        { t: 'Розрізняйте постійне навантаження і разовий пік', b: 'Activity Monitor показує поточний CPU, а не середнє. Порівнюйте кілька знімків, щоб побачити повторення.', tips: ['Activity Monitor → CPU → сортування за % CPU', 'Звертайте увагу на процес, який з’являється в кожному знімку'] },
+        { t: 'Системні процеси зазвичай навантажені через дії, а не через помилку', b: 'kernel_task, WindowServer і Spotlight навантажуються, коли система стискає памʼять, змінює дисплей або індексує файли.', tips: ['Спершу шукайте причину: багато вікон, індексація, тротлінг', 'Перезавантаження знімає більшість сплесків'] },
+      ]},
+      { cat: 'Spotlight і Siri', items: [
+        { t: 'Індексація після великих змін тимчасова', b: 'Після оновлення macOS, копіювання великих папок або встановлення застосунків Spotlight переіндексовує файли. Це займає години.', tips: ['Зачекайте 30–60 хвилин і перевірте CPU знову', 'Не перезапускайте Spotlight без потреби, переіндексація довга'] },
+        { t: 'Виключайте важкі папки зі Spotlight', b: 'Папки з тисячами дрібних файлів (node_modules, кеші, архіви) найбільше навантажують індексацію.', tips: ['Системні налаштування → Siri і Spotlight → Конфіденційність Spotlight', 'Додайте туди непотрібні папки'] },
+      ]},
+      { cat: 'Сховище', items: [
+        { t: 'Кеші відновлюються, тож їх можна чистити', b: 'Кеші застосунків, Xcode DerivedData і npm створюються заново. Видалення безпечне, якщо застосунок закрито.', tips: ['Кошик очищайте через Finder', 'DerivedData і кеш npm можна видаляти без ризику'] },
+        { t: 'Локальні знімки Time Machine займають місце', b: 'macOS тримає знімки, поки місця вистачає. Коли його бракує, вона звільняє їх сама.', tips: ['Не видаляйте їх вручну без потреби', 'Головне: зовнішня копія має працювати'] },
+      ]},
+      { cat: 'Безпека', items: [
+        { t: 'FileVault, брандмауер, SIP і Gatekeeper мають бути увімкнені', b: 'Це базові механізми захисту macOS. Вимкнені означають відкриті ризики.', tips: ['Перевіряйте їх у звіті щотижня', 'Не вимикайте Gatekeeper, щоб обійти попередження'] },
+        { t: 'Секрети не зберігайте у plist з відкритими правами', b: 'LaunchAgent з токеном, доступним для всіх, може прочитати будь-який користувач або процес на Mac.', tips: ['Права 600 для файлів з секретами', 'Токени краще зберігати в Keychain'] },
+      ]},
+      { cat: 'Резервні копії', items: [
+        { t: 'Правило 3-2-1', b: 'Три копії, на двох типах носіїв, одна поза домом. Налаштована, але неробоча копія не захищає.', tips: ['Time Machine на зовнішньому диску', 'Хмара або інший фізичний диск для важливих файлів'] },
+        { t: 'Перевіряйте, що копія справді створюється', b: 'Якщо диск Time Machine не монтується, резервної копії фактично немає.', tips: ['Раз на місяць відкривайте Time Machine і дивіться дату останньої копії', 'Перевірте кабель і диск, якщо він не монтується'] },
+      ]},
+      { cat: 'Батарея', items: [
+        { t: 'Оптимізоване заряджання', b: 'Тримає батарею близько 80%, коли Mac довго на зарядці. Це продовжує ресурс.', tips: ['Системні налаштування → Батарея → Оптимізоване заряджання', 'Уникайте постійного заряду 100% і спеки'] },
+      ]},
+      { cat: 'Автозапуск і розширення', items: [
+        { t: 'Автозапуск має бути коротким', b: 'Кожен агент запускає код у фоні, навіть коли ви його не використовуєте.', tips: ['Перевіряйте ~/Library/LaunchAgents після встановлення нових застосунків', 'Видаляйте агенти від застосунків, які вже видалено'] },
+        { t: 'FinderSync-розширення навантажують Finder', b: 'Розширення Google Drive, Gemini, Keka тощо додають роботу Finder при кожній папці.', tips: ['Системні налаштування → Загальні → Розширення', 'Вимикайте ті, які не використовуєте'] },
+      ]},
+      { cat: 'Діалоги і Finder', items: [
+        { t: 'Панель відкриття і збереження сканує папку', b: 'Діалог читає вміст папки і метадані хмарних дисків. У великих папках він довго працює.', tips: ['Не відкривайте в діалозі папки з тисячами файлів або хмарні диски', 'Якщо зависла, закрийте застосунок, який її відкрив'] },
+        { t: 'Перезапуск Finder звільняє памʼять', b: 'Finder накопичує памʼять і кеші за тижні роботи.', tips: ['killall Finder відновлює його за секунди', 'Відкриті вікна з’являться знову'] },
+      ]},
+      { cat: 'Обслуговування', items: [
+        { t: 'Раз на тиждень запускайте звіт', b: 'Звіт показує тенденції. Порівнюйте знімки, а не робіть висновки з одного.', tips: ['Запускайте звіт у той самий час', 'Фіксуйте дії в нотатках звіту'] },
+        { t: 'Перезавантаження раз на два тижні', b: 'Очищає swap, кеші та накопичені процеси.', tips: ['Зберігайте роботу перед перезавантаженням', 'Оновлення macOS ставте разом із перезавантаженням'] },
+      ]},
+      { cat: 'Розробникам', items: [
+        { t: 'Інструменти накопичують великі кеші', b: 'Xcode, Docker, npm і Homebrew створюють великі кеші, які можна очищати командами.', tips: ['brew cleanup -s', 'npm cache clean --force', 'docker system df, потім docker system prune'] },
+      ]},
+      { cat: 'XBrain', items: [
+        { t: 'Очікуваний фоновий процес', b: 'Daemon XBrain потрібен для роботи. Його оцінюють за сплесками, циклами перезапусків, помилками і цілісністю бази, а не за середнім CPU.', tips: ['Слідкуйте за лічильником «Address already in use»', 'Перевіряйте права на plist, де є токен'] },
+      ]},
+    ];
+
+    function renderAdvice() {
+      const box = $('#advice-list');
+      const q = state.q.trim().toLowerCase();
+      box.innerHTML = '';
+      ADVICE.forEach(g => {
+        const items = g.items.filter(it => !q || `${g.cat} ${it.t} ${it.b} ${it.tips.join(' ')}`.toLowerCase().includes(q));
+        if (!items.length) return;
+        const h = document.createElement('h3');
+        h.className = 'group';
+        h.textContent = g.cat;
+        box.append(h);
+        items.forEach(it => box.append(acc(`<span class="issue__title">${esc(it.t)}</span>`,
+          `<p>${esc(it.b)}</p><ul class="tips">${it.tips.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`)));
+      });
+      if (!box.children.length) box.innerHTML = '<p class="empty">Нічого не знайдено.</p>';
+    }
+
+    // ---------- Історія ----------
+    function renderHistory() {
+      const box = $('#history-body');
+      const hist = list(DATA.history).slice().reverse();
+      if (!hist.length) { box.innerHTML = '<p class="empty">Історія ще порожня. Після другого запуску тут зʼявиться тренд.</p>'; return; }
+      const W = 640, H = 160, pad = 12, n = hist.length;
+      const pts = hist.map((h, i) => {
+        const x = n === 1 ? W / 2 : pad + i * (W - 2 * pad) / (n - 1);
+        const y = H - pad - clamp(h.score) / 100 * (H - 2 * pad);
+        return [x, y];
+      });
+      const poly = pts.map(p => p.map(v => v.toFixed(1)).join(',')).join(' ');
+      const dots = pts.map((p, i) => `<circle class="chart__dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4"><title>${esc(hist[i].date)}: ${esc(hist[i].score)}</title></circle>`).join('');
+      const trs = hist.map(h => `<tr><td>${esc(h.date)}</td><td>${badge(h.kind, String(h.score ?? NA))}</td><td>${fmt(h.critical)}</td><td>${fmt(h.warning)}</td><td>${reportLink(h.file)}</td></tr>`).join('');
+      box.innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Тренд оцінки"><polyline class="chart__line" pathLength="100" points="${poly}"></polyline>${dots}</svg>`
+        + tableOf(['Дата', 'Оцінка', 'Критичних', 'Уваги', 'Звіт'], trs);
+    }
+
+    // ---------- Системи (зона) ----------
+    const loadDropped = () => { try { const v = JSON.parse(store.get(LS_SYS) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
+    const saveDropped = arr => store.set(LS_SYS, JSON.stringify(arr.slice(-20)));
+
+    function systemList() {
+      const current = [{ snap: DATA, src: 'поточна' }];
+      const folder = list(DATA.systems).map(s => ({ snap: s, src: 'папка «системи»' }));
+      const dropped = loadDropped().map((s, i) => ({ snap: s, src: 'перетягнуто', idx: i }));
+      return current.concat(folder, dropped);
+    }
+
+    const METRICS = [
+      ['Модель', s => s.system?.model],
+      ['macOS', s => s.system?.os],
+      ['Оцінка', s => s.health?.score],
+      ['Критичних / уваги', s => `${s.health?.counts?.critical ?? '-'} / ${s.health?.counts?.warning ?? '-'}`],
+      ['Вільна памʼять, %', s => s.memory?.freePct],
+      ['Swap, МБ', s => s.memory?.swapMb],
+      ['Диск вільно, ГБ', s => s.storage?.availGb],
+      ['Ємність батареї, %', s => s.battery?.healthPct],
+      ['Безперервна робота, днів', s => s.system?.uptimeDays],
+    ];
+
+    function renderSystems() {
+      const items = systemList();
+      const cards = items.map(({ snap, src, idx }) => {
+        const m = snap.meta || {}, h = snap.health || {};
+        const remove = idx !== undefined ? `<button class="btn btn--small" type="button" data-remove="${idx}">Прибрати</button>` : '';
+        return `<article class="card sys"><div class="sys__head"><h3>${esc(m.computer || NA)}</h3>${badge(h.kind, h.text || NA)}</div>
+          <p class="muted">${esc(src)} · ${esc(m.generatedAt || '')}</p>
+          ${rows([['Оцінка', fmt(h.score)], ['Модель', fmt(snap.system?.model)], ['macOS', fmt(snap.system?.os)]])}${remove}</article>`;
+      }).join('');
+      const head = ['Показник', ...items.map(x => x.snap.meta?.computer || NA)];
+      const body = METRICS.map(([label, get]) => `<tr><td>${esc(label)}</td>${items.map(x => `<td>${fmt(get(x.snap))}</td>`).join('')}</tr>`).join('');
+      $('#systems-body').innerHTML = `<div class="grid">${cards}</div>
+        <h3>Порівняння</h3>${tableOf(head, body)}`;
+    }
+
+    function ingest(files) {
+      const arr = loadDropped();
+      const pending = Array.from(files);
+      if (!pending.length) return;
+      let added = 0, bad = 0, left = pending.length;
+      const finish = () => {
+        saveDropped(arr);
+        renderSystems();
+        toast(`Додано знімків: ${added}. Пропущено: ${bad}.`);
+      };
+      pending.forEach(f => {
+        const rd = new FileReader();
+        const done = () => { if (--left === 0) finish(); };
+        rd.onload = () => {
+          try {
+            const d = JSON.parse(rd.result);
+            if (d && d.meta && d.health) { arr.push(d); added++; } else bad++;
+          } catch (e) { bad++; }
+          done();
+        };
+        rd.onerror = () => { bad++; done(); };
+        rd.readAsText(f);
+      });
+    }
+
+    function bindDrop() {
+      const drop = $('#drop'), input = $('#file');
+      drop.addEventListener('click', e => { if (e.target !== input) input.click(); });
+      drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+      input.addEventListener('change', () => { ingest(input.files); input.value = ''; });
+      ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+      ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+      drop.addEventListener('drop', e => ingest(e.dataTransfer.files));
+      $('#systems-body').addEventListener('click', e => {
+        const btn = e.target.closest('[data-remove]');
+        if (!btn) return;
+        const arr = loadDropped();
+        arr.splice(Number(btn.dataset.remove), 1);
+        saveDropped(arr);
+        renderSystems();
+        toast('Знімок прибрано з цього браузера');
+      });
+    }
+
+    // ---------- Нотатки ----------
+    function bindNotes() {
+      const ta = $('#notes-input'), st = $('#notes-state');
+      ta.value = store.get(notesKey()) || '';
+      let timer;
+      ta.addEventListener('input', () => {
+        store.set(notesKey(), ta.value);
+        st.textContent = 'Збережено';
+        clearTimeout(timer);
+        timer = setTimeout(() => { st.textContent = ''; }, 1500);
+      });
+    }
+
+    // ---------- Календар: дні від сьогодні назад ----------
+
+    const dayKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const idToDay = id => id.slice(0, 10);
+    const idToTime = id => id.slice(11, 16).replace('-', ':');
+    const currentId = () => ((DATA.meta && DATA.meta.file) || '').replace(/^report-/, '').replace(/\.html$/, '');
+    const allIds = () => (MULTI ? list(RAW.snapshotIds) : [currentId()]).filter(Boolean);
+    const scoreOf = id => (MULTI && RAW.snapshotsById[id] ? RAW.snapshotsById[id] : DATA).health?.score;
+
+    // Виклики застосунку (pywebview). У браузері без застосунку кнопки лише пояснюють, що потрібно.
+    async function callApp(name, ...args) {
+      const a = window.pywebview && window.pywebview.api;
+      if (!a || typeof a[name] !== 'function') {
+        toast('Ця дія доступна в застосунку MacSafe');
+        return null;
+      }
+      return a[name](...args);
+    }
+
+
+    // ---------- Сайдбар: режими, розділи, маршрут ----------
+    const sectionIndex = () => MODES.flatMap(m => m.sections.map(s => ({ mode: m.id, id: s[0], title: s[1] })));
+
+    function sectionCount(id) {
+      if (id === 'issues') return { n: list(DATA.issues).length, kind: (list(DATA.issues).some(i => i.sev === 'critical') ? 'critical' : list(DATA.issues).some(i => i.sev === 'warning') ? 'warning' : '') };
+      if (id === 'cleanup') return { n: list(DATA.cleanup).length, kind: '' };
+      if (id === 'security') { const w = list(DATA.security).filter(r => r.kind === 'warning' || r.kind === 'critical').length; return { n: w, kind: w ? 'warning' : '' }; }
+      return null;
+    }
+
+    // Сайдбар-каталог: групи із заголовками, усі розділи завжди видно
+    function buildSide() {
+      $('#modes').innerHTML = MODES.map(m => `
+        <div class="sgrp" data-grp="${m.id}" role="group" aria-label="${esc(m.title)}">
+          <div class="sgrp__title">${esc(m.title)}</div>
+          ${m.sections.map(([id, title]) => `<button class="sec" type="button" data-section="${esc(id)}">${ico(id)}<span class="sec__title">${esc(title)}</span><span class="sec__n" hidden></span></button>`).join('')}
+        </div>`).join('');
+    }
+
+    // Лічильники розділів: один прохід, без перебудови дерева
+    function refreshSideCounts() {
+      MODES.forEach(m => m.sections.forEach(([id]) => {
+        const el = $(`.sec[data-section="${id}"] .sec__n`);
+        if (!el) return;
+        const c = sectionCount(id);
+        el.hidden = !(c && c.n); el.textContent = c && c.n ? c.n : '';
+        el.className = `sec__n ${c && c.kind ? 'sec__n--' + c.kind : ''}`;
+      }));
+    }
+
+    function route(push = true) {
+      const raw = location.hash.replace(/^#/, '');
+      const found = sectionIndex().find(s => s.id === raw) || sectionIndex().find(s => s.id === raw.split('/').pop()) || sectionIndex()[0];
+      const mode = MODES.find(m => m.id === found.mode);
+      showSection(found.id, mode.id, push);
+    }
+
+    function showSection(id, modeId, push) {
+      $$('.view').forEach(v => v.classList.toggle('is-active', v.dataset.view === id));
+      refreshSideCounts();
+      $$('.sec').forEach(b => { if (b.dataset.section === id) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+      const active = $(`.view[data-view="${id}"]`);
+      if (active) animateBars(active);
+      if (push) history.replaceState(null, '', `#${id}`);
+      $('#content').scrollTop = 0;
+      window.scrollTo(0, 0);
+      const title = sectionIndex().find(s => s.id === id);
+      if (title) document.title = `${title.title} · MacSafe`;
+    }
+
+    function bindSide() {
+      document.querySelector('[data-skip]').addEventListener('click', e => {
+        e.preventDefault();
+        $('#content').focus();
+      });
+      $('#modes').addEventListener('click', e => {
+        const sec = e.target.closest('.sec');
+        if (sec) location.hash = sec.dataset.section;
+      });
+      window.addEventListener('hashchange', route);
+      document.addEventListener('keydown', e => {
+        const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '') || !!document.activeElement?.isContentEditable;
+        if (e.key === 'Escape' && !typing) { location.hash = 'overview'; return; }
+        if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+        const cur = location.hash.replace(/^#/, '');
+        const modeId = (sectionIndex().find(s => s.id === cur) || { mode: 'state' }).mode;
+        const sections = MODES.find(m => m.id === modeId).sections;
+        if (/^[1-9]$/.test(e.key) && sections[Number(e.key) - 1]) location.hash = sections[Number(e.key) - 1][0];
+      });
+    }
+
+    // ---------- Дії (вбудовані): маркування пошуку ----------
+    function bindToolbar() {
+      $('#q').addEventListener('input', e => {
+        state.q = e.target.value;
+        renderIssues(); renderAdvice(); renderCleanup();
+      });
+      document.querySelector('.topbar .top__actions').addEventListener('click', e => {
+        const b = e.target.closest('[data-act]');
+        if (!b) return;
+        const act = b.dataset.act;
+        if (act === 'expand') $$('.acc').forEach(a => { a.classList.add('open'); $('.acc__btn', a).setAttribute('aria-expanded', 'true'); });
+        if (act === 'collapse') $$('.acc').forEach(a => { a.classList.remove('open'); $('.acc__btn', a).setAttribute('aria-expanded', 'false'); });
+        if (act === 'print') window.print();
+        if (act === 'export') {
+          // Експорт лише вибраного знімка: історія й дані інших систем не потрапляють у файл
+          const { history, systems, ...snap } = DATA;
+          const blob = new Blob([JSON.stringify(snap, null, 2)], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `аудит-${(DATA.meta && DATA.meta.computer) || 'mac'}.json`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }
+      });
+      $('#issues .chips').addEventListener('click', e => {
+        const c = e.target.closest('.chip');
+        if (!c) return;
+        state.sev = c.dataset.sev;
+        renderIssues();
+      });
+      document.addEventListener('click', e => {
+        const agent = e.target.closest('[data-copy-agent]');
+        if (agent) {
+          const text = $('#agent-payload') ? $('#agent-payload').textContent : '';
+          const quoted = "'" + text.replace(/'/g, "'\\''") + "'";
+          copyText(`printf '%s' ${quoted} | ${AGENT_CMDS[agent.dataset.copyAgent]}`, agent);
+          return;
+        }
+        const c = e.target.closest('[data-copy]');
+        if (c) copyText(c.dataset.copy, c);
+      });
+    }
+
+    function renderAll() {
+      renderMeta(); renderHero(); renderOverview(); renderIssues(); renderPlan(); renderSystem(); renderMemory();
+      renderProcesses(); renderThermal(); renderSecurity(); renderLaunch(); renderCrashes(); renderDaemon();
+      renderCleanup(); renderActions(); renderAgents(); renderAdvice(); renderHistory(); renderSystems();
+    }
+
+    buildSide();
+    renderAll();
+    bindSide();
+    bindToolbar();
+    bindDrop();
+    bindNotes();
+    bindDate();
+    route(false);
+    document.querySelectorAll('.block').forEach((b, i) => b.style.setProperty('--i', i));
+  })();
+  </script>
+  <script>
+  (() => {
+    'use strict';
+    // Ця панель не залежить від статичного знімка звіту.
+    const panel = document.getElementById('cache-panel');
+    const scanButton = document.getElementById('cache-scan');
+    const cleanButton = document.getElementById('cache-clean');
+    const confirmation = document.getElementById('cache-confirm');
+    const status = document.getElementById('cache-status');
+    const root = document.getElementById('cache-root');
+    const list = document.getElementById('cache-list');
+    const summary = document.getElementById('cache-selected');
+    const results = document.getElementById('cache-results');
+    const daysSelect = document.getElementById('cache-days');
+    const filters = document.getElementById('cache-filters');
+    const memoryBox = document.getElementById('cache-memory');
+    const unavailable = 'Доступно лише в застосунку MacSafe';
+    const selected = new Set();
+    let items = [];
+    let categories = [];
+    const categoryOn = new Set();
+    let busy = false;
+    const visible = () => items.filter(item => categoryOn.has(item.category));
+    const gb = value => `${(value / 1024).toLocaleString('uk-UA', { maximumFractionDigits:1 })} ГБ`;
+    const signed = value => `${value >= 0 ? '+' : '−'}${Math.abs(value).toLocaleString('uk-UA')} МБ`;
+    function renderMemory(snap) {
+      memoryBox.hidden = !snap;
+      if (!snap) return;
+      memoryBox.textContent = `Памʼять зараз: доступно ${snap.availableMb} МБ, вільна ${snap.freeMb} МБ, неактивна ${snap.inactiveMb} МБ, swap ${snap.swapMb} МБ`;
+    }
+    function renderFilters() {
+      filters.replaceChildren();
+      const legend = document.createElement('legend');
+      legend.textContent = 'Що очищати (усе безпечне: кеші й логи, які створяться знову)';
+      filters.append(legend);
+      categories.forEach(cat => {
+        const label = document.createElement('label');
+        label.className = 'cache-flag';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = categoryOn.has(cat.id);
+        box.addEventListener('change', () => {
+          if (busy) return;
+          if (box.checked) categoryOn.add(cat.id);
+          else { categoryOn.delete(cat.id); items.filter(i => i.category === cat.id).forEach(i => selected.delete(i.id)); }
+          renderCacheItems();
+        });
+        const name = document.createElement('span');
+        name.textContent = cat.title;
+        const size = document.createElement('small');
+        size.textContent = gb(cat.sizeMb);
+        label.append(box, name, size);
+        filters.append(label);
+      });
+      filters.hidden = !categories.length;
+    }
+
+    function cacheApi() {
+      const api = window.pywebview && window.pywebview.api;
+      return api && typeof api.cache_scan === 'function' && typeof api.cache_clean === 'function' ? api : null;
+    }
+
+    const knownSize = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+    const mb = value => knownSize(value) ? value.toLocaleString('uk-UA', { maximumFractionDigits:2 }) : 'н/д';
+    const errorText = error => String(error && error.message || error || 'Невідома помилка');
+
+    function updateCacheControls() {
+      const available = !!cacheApi();
+      const chosen = visible().filter(item => selected.has(item.id));
+      const total = chosen.reduce((sum, item) => sum + (knownSize(item.sizeMb) ? item.sizeMb : 0), 0);
+      const unknown = chosen.filter(item => !knownSize(item.sizeMb)).length;
+      summary.textContent = `Вибрано: ${mb(total)} МБ` + (unknown ? ` · розмір н/д: ${unknown}` : '');
+      scanButton.disabled = busy || !available;
+      confirmation.disabled = busy || !available || !items.length;
+      daysSelect.disabled = busy || !available;
+      cleanButton.disabled = busy || !available || !chosen.length || !confirmation.checked;
+      list.querySelectorAll('input').forEach(input => { input.disabled = busy || !available; });
+      filters.querySelectorAll('input').forEach(input => { input.disabled = busy || !available; });
+      panel.setAttribute('aria-busy', String(busy));
+    }
+
+    function renderCacheItems() {
+      list.replaceChildren();
+      visible().forEach(item => {
+        const label = document.createElement('label');
+        label.className = 'cache-item';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = selected.has(item.id);
+        checkbox.addEventListener('change', () => {
+          if (busy) return;
+          if (checkbox.checked) selected.add(item.id);
+          else selected.delete(item.id);
+          updateCacheControls();
+        });
+        const copy = document.createElement('span');
+        copy.className = 'cache-copy';
+        const title = document.createElement('span');
+        title.className = 'cache-title';
+        title.textContent = item.title;
+        const note = document.createElement('span');
+        note.className = 'cache-note';
+        note.textContent = item.note;
+        copy.append(title, note);
+        const size = document.createElement('span');
+        size.className = 'cache-size';
+        size.textContent = knownSize(item.sizeMb) ? `${mb(item.sizeMb)} МБ` : 'н/д';
+        label.append(checkbox, copy, size);
+        list.append(label);
+      });
+      updateCacheControls();
+    }
+
+    async function refreshCacheItems(api) {
+      // Старий вибір і підтвердження не переносяться на новий список.
+      selected.clear();
+      confirmation.checked = false;
+      items = [];
+      root.hidden = true;
+      root.textContent = '';
+      renderCacheItems();
+      const scan = await api.cache_scan(Number(daysSelect.value));
+      if (!scan || !Array.isArray(scan.items)) throw new Error('Некоректна відповідь перевірки кешів');
+      items = scan.items;
+      categories = Array.isArray(scan.categories) ? scan.categories : [];
+      categoryOn.clear();
+      categories.forEach(cat => categoryOn.add(cat.id));
+      renderFilters();
+      renderMemory(scan.memory);
+      root.textContent = scan.cacheRoot ? `Папка кешів: ${scan.cacheRoot}` : '';
+      root.hidden = !scan.cacheRoot;
+      renderCacheItems();
+      status.textContent = items.length ? 'Виберіть кеші для очищення.' : 'Кешів для очищення не знайдено.';
+    }
+
+    async function scanCaches() {
+      if (busy) return;
+      const api = cacheApi();
+      if (!api) { status.textContent = unavailable; updateCacheControls(); return; }
+      busy = true;
+      status.textContent = 'Перевіряю кеші…';
+      updateCacheControls();
+      try {
+        await refreshCacheItems(api);
+      } catch (error) {
+        status.textContent = `Не вдалося перевірити кеші: ${errorText(error)}`;
+      } finally {
+        busy = false;
+        updateCacheControls();
+      }
+    }
+
+    function renderCacheResults(outcome, titles) {
+      results.replaceChildren();
+      outcome.results.forEach(result => {
+        const row = document.createElement('p');
+        const errors = Array.isArray(result.errors) ? result.errors : [];
+        const count = Math.max(Number(result.errorCount) || 0, errors.length);
+        const title = titles.get(result.id);
+        const name = title ? `${title} (${result.id})` : String(result.id);
+        row.textContent = `${name}: ` + (count ? `помилок: ${count}; звільнено ${mb(result.freedMb)} МБ` : `звільнено ${mb(result.freedMb)} МБ`);
+        results.append(row);
+        if (errors.length) {
+          const details = document.createElement('ul');
+          errors.slice(0, 3).forEach(error => {
+            const entry = document.createElement('li');
+            entry.textContent = errorText(error);
+            details.append(entry);
+          });
+          results.append(details);
+        }
+      });
+      const total = document.createElement('p');
+      total.textContent = `Звільнено на диску всього ${mb(outcome.freedMb)} МБ (файли старші за ${outcome.days} дн.)`;
+      results.append(total);
+      const mem = outcome.memory;
+      if (mem && mem.before && mem.after && mem.delta) {
+        const note = document.createElement('p');
+        note.textContent = `Памʼять до і після: доступно ${mem.before.availableMb} → ${mem.after.availableMb} МБ (${signed(mem.delta.availableMb)}), `
+          + `вільна ${signed(mem.delta.freeMb)}, неактивна ${signed(mem.delta.inactiveMb)}, swap ${signed(mem.delta.swapMb)}. `
+          + 'Видалення кешів на диску майже не змінює памʼять: це знімок, а не обіцянка.';
+        results.append(note);
+      }
+    }
+
+    async function cleanCaches() {
+      if (busy) return;
+      const api = cacheApi();
+      if (!api) { status.textContent = unavailable; updateCacheControls(); return; }
+      const ids = visible().filter(item => selected.has(item.id)).map(item => item.id);
+      if (!ids.length || !confirmation.checked) return;
+      const titles = new Map(items.map(item => [item.id, item.title]));
+      busy = true;
+      cleanButton.textContent = 'Очищую…';
+      status.textContent = 'Очищую…';
+      results.replaceChildren();
+      updateCacheControls();
+      try {
+        const outcome = await api.cache_clean(ids, true, Number(daysSelect.value), [...categoryOn]);
+        if (!outcome || !outcome.ok) throw new Error(outcome && outcome.error || 'Не вдалося очистити кеші');
+        if (!Array.isArray(outcome.results)) throw new Error('Некоректна відповідь очищення кешів');
+        renderCacheResults(outcome, titles);
+      } catch (error) {
+        results.textContent = `Помилка очищення: ${errorText(error)}`;
+      } finally {
+        status.textContent = 'Перевіряю розміри після очищення…';
+        try {
+          await refreshCacheItems(api);
+        } catch (error) {
+          status.textContent = `Не вдалося оновити розміри: ${errorText(error)}. Натисніть «Перевірити кеші» ще раз.`;
+        } finally {
+          busy = false;
+          cleanButton.textContent = 'Очистити вибране';
+          updateCacheControls();
+        }
+      }
+    }
+
+    function syncCacheAvailability() {
+      if (!busy) status.textContent = cacheApi() ? (items.length ? 'Виберіть кеші для очищення.' : 'Натисніть «Перевірити кеші», щоб прочитати розміри.') : unavailable;
+      updateCacheControls();
+    }
+
+    // Великі файли: лише перегляд і показ у Finder
+    (() => {
+      const btn = document.getElementById('big-scan');
+      const minSel = document.getElementById('big-min');
+      const st = document.getElementById('big-status');
+      const out = document.getElementById('big-list');
+      const bigApi = () => {
+        const api = window.pywebview && window.pywebview.api;
+        return api && typeof api.big_files === 'function' ? api : null;
+      };
+      const sizeText = v => v >= 1024 ? `${(v / 1024).toLocaleString('uk-UA', { maximumFractionDigits:1 })} ГБ` : `${Math.round(v)} МБ`;
+      const sync = () => { const on = !!bigApi(); btn.disabled = !on; minSel.disabled = !on; if (!on) st.textContent = unavailable; };
+      btn.addEventListener('click', async () => {
+        const api = bigApi();
+        if (!api) { sync(); return; }
+        btn.disabled = true; minSel.disabled = true;
+        st.textContent = 'Шукаю…';
+        out.replaceChildren();
+        try {
+          const r = await api.big_files(Number(minSel.value));
+          if (!r || !Array.isArray(r.files)) throw new Error('Некоректна відповідь');
+          st.textContent = (r.files.length ? `Знайдено ${r.files.length}, переглянуто файлів: ${r.scanned.toLocaleString('uk-UA')}.` : 'Файлів такого розміру не знайдено.')
+            + (r.truncated ? ' Пошук зупинено за часом: список неповний.' : '');
+          r.files.forEach(f => {
+            const row = document.createElement('div');
+            row.className = 'cache-item big-item';
+            const copy = document.createElement('span');
+            copy.className = 'cache-copy';
+            const name = document.createElement('span');
+            name.className = 'cache-title';
+            name.textContent = f.path.split('/').pop();
+            const path = document.createElement('span');
+            path.className = 'big-path';
+            path.textContent = `${f.path} · змінено ${f.days} дн. тому`;
+            copy.append(name, path);
+            const size = document.createElement('span');
+            size.className = 'cache-size';
+            size.textContent = sizeText(f.sizeMb);
+            const show = document.createElement('button');
+            show.type = 'button'; show.className = 'btn'; show.textContent = 'У Finder';
+            show.addEventListener('click', async () => {
+              const res = await api.reveal_file(f.path);
+              if (!res || !res.ok) st.textContent = (res && res.error) || 'Не вдалося показати у Finder';
+            });
+            const del = document.createElement('button');
+            del.type = 'button'; del.className = 'btn btn--danger'; del.textContent = 'У кошик';
+            del.addEventListener('click', async () => {
+              if (!window.confirm(`Перемістити в кошик?\n${f.path}\n\nФайл можна буде повернути з кошика.`)) return;
+              del.disabled = true;
+              const res = await api.trash_big(f.path, true);
+              if (res && res.ok) { row.remove(); st.textContent = 'Переміщено в кошик.'; }
+              else { del.disabled = false; st.textContent = (res && res.error) || 'Не вдалося перемістити'; }
+            });
+            row.append(copy, size, show, del);
+            out.append(row);
+          });
+        } catch (error) {
+          st.textContent = `Не вдалося знайти файли: ${errorText(error)}`;
+        } finally {
+          sync();
+        }
+      });
+      window.addEventListener('pywebviewready', sync);
+      sync();
+    })();
+
+    // Залишки видалених застосунків: пошук і переміщення в кошик
+    (() => {
+      const scanBtn = document.getElementById('left-scan');
+      const trashBtn = document.getElementById('left-trash');
+      const st = document.getElementById('left-status');
+      const out = document.getElementById('left-list');
+      const chosen = new Set();
+      let rows = [];
+      const lApi = () => {
+        const api = window.pywebview && window.pywebview.api;
+        return api && typeof api.leftovers_scan === 'function' ? api : null;
+      };
+      const sizeText = v => v >= 1024 ? `${(v / 1024).toLocaleString('uk-UA', { maximumFractionDigits:1 })} ГБ` : `${v.toLocaleString('uk-UA', { maximumFractionDigits:1 })} МБ`;
+      const sync = () => {
+        const on = !!lApi();
+        scanBtn.disabled = !on;
+        trashBtn.disabled = !on || !chosen.size;
+        if (!on) st.textContent = unavailable;
+      };
+      function draw() {
+        out.replaceChildren();
+        rows.forEach(item => {
+          const label = document.createElement('label');
+          label.className = 'cache-item';
+          const box = document.createElement('input');
+          box.type = 'checkbox';
+          box.checked = chosen.has(item.path);
+          box.addEventListener('change', () => { if (box.checked) chosen.add(item.path); else chosen.delete(item.path); sync(); });
+          const copy = document.createElement('span');
+          copy.className = 'cache-copy';
+          const name = document.createElement('span');
+          name.className = 'cache-title';
+          name.textContent = item.id;
+          const path = document.createElement('span');
+          path.className = 'big-path';
+          path.textContent = `${item.path} · змінено ${item.days} дн. тому`;
+          copy.append(name, path);
+          const size = document.createElement('span');
+          size.className = 'cache-size';
+          size.textContent = sizeText(item.sizeMb);
+          label.append(box, copy, size);
+          out.append(label);
+        });
+        sync();
+      }
+      scanBtn.addEventListener('click', async () => {
+        const api = lApi();
+        if (!api) { sync(); return; }
+        scanBtn.disabled = true; st.textContent = 'Шукаю…'; chosen.clear();
+        try {
+          const r = await api.leftovers_scan();
+          rows = Array.isArray(r.items) ? r.items : [];
+          st.textContent = rows.length ? `Знайдено: ${rows.length}. Позначте те, що точно не потрібне.` : 'Залишків не знайдено.';
+          draw();
+        } catch (error) {
+          st.textContent = `Не вдалося знайти: ${errorText(error)}`;
+        } finally { sync(); }
+      });
+      trashBtn.addEventListener('click', async () => {
+        const api = lApi();
+        const paths = [...chosen];
+        if (!api || !paths.length) return;
+        if (!window.confirm(`Перемістити в кошик: ${paths.length}?\nЇх можна повернути з кошика.`)) return;
+        trashBtn.disabled = true; st.textContent = 'Переміщую…';
+        try {
+          const r = await api.leftovers_trash(paths, true);
+          if (!r || !r.ok) throw new Error(r && r.error || 'Помилка');
+          const failed = r.results.filter(x => !x.ok).length;
+          st.textContent = `Переміщено в кошик, звільнено близько ${sizeText(r.freedMb)}` + (failed ? `; не вдалося: ${failed}` : '') + '.';
+          const done = new Set(r.results.filter(x => x.ok).map(x => x.path));
+          rows = rows.filter(x => !done.has(x.path));
+          done.forEach(p => chosen.delete(p));
+          draw();
+        } catch (error) {
+          st.textContent = `Помилка: ${errorText(error)}`;
+        } finally { sync(); }
+      });
+      window.addEventListener('pywebviewready', sync);
+      sync();
+    })();
+
+    scanButton.addEventListener('click', scanCaches);
+    cleanButton.addEventListener('click', cleanCaches);
+    confirmation.addEventListener('change', updateCacheControls);
+    daysSelect.addEventListener('change', () => { if (!busy && items.length) scanCaches(); });
+    window.addEventListener('pywebviewready', syncCacheAvailability);
+    syncCacheAvailability();
+  })();
+  </script>
+</body>
+</html>
