@@ -1846,5 +1846,73 @@ class TrashTargetTests(unittest.TestCase):
         self.assertEqual(self.t.move_to_trash("/etc/hosts"), (False, "Недозволений шлях"))
 
 
+class ActionResultTests(unittest.TestCase):
+    """The parsers turn the command text into rows; row actions only work with what the last result holds."""
+
+    def setUp(self):
+        import action_results
+        import actions
+        self.parse, self.actions = action_results.parse, actions
+        action_results._refresh_mine = lambda: None
+        action_results._mine = {123, 321, 10, 11}
+
+    def test_sleep_blockers_rows_have_a_quit_operation(self):
+        text = ('Assertion status system-wide:\n   PreventUserIdleSystemSleep    1\n'
+                'Listed by owning process:\n   pid 123(Safari): [0x0001] 00:05:00 PreventUserIdleSystemSleep named: "Playing video"\n')
+        r = self.parse("sleep_blockers", text)
+        self.assertEqual(r["rows"][0]["title"], "Safari")
+        self.assertEqual([o["op"] for o in r["rows"][0]["ops"]], ["quit"])
+        self.assertEqual(r["rows"][0]["ops"][0]["arg"]["pid"], 123)
+
+    def test_nothing_blocking_is_good(self):
+        r = self.parse("sleep_blockers", "Assertion status system-wide:\n   PreventUserIdleSystemSleep    0\n")
+        self.assertEqual(r["status"], "good")
+
+    def test_top_cpu_table(self):
+        r = self.parse("top_cpu", "  PID  %CPU    RSS COMM\n  321  95.5 204800 /Applications/Foo.app/Contents/MacOS/Foo\n")
+        row = r["rows"][0]
+        self.assertEqual(row["title"], "Foo.app")
+        self.assertEqual(row["status"], "warning")
+        self.assertIn("200", row["value"])
+
+    def test_security_statuses(self):
+        self.assertEqual(self.parse("filevault", "FileVault is On.\n")["status"], "good")
+        self.assertEqual(self.parse("filevault", "FileVault is Off.\n")["status"], "critical")
+        self.assertEqual(self.parse("firewall", "Firewall is disabled. (State = 0)")["status"], "warning")
+        self.assertEqual(self.parse("gatekeeper", "assessments enabled")["status"], "good")
+
+    def test_ports_mark_exposed_listeners(self):
+        text = ("COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n"
+                "node 10 me 20u IPv4 0x1 0t0 TCP *:3000 (LISTEN)\nnode 11 me 21u IPv4 0x2 0t0 TCP 127.0.0.1:4000 (LISTEN)\n")
+        rows = self.parse("ports", text)["rows"]
+        self.assertEqual([r["status"] for r in rows], ["warning", "good"])
+
+    def test_unknown_text_falls_back_to_raw(self):
+        self.assertIsNone(self.parse("disk_free", "garbage"))
+        self.assertIsNone(self.parse("restart_dock", "anything"))
+        self.assertIsNone(self.parse("filevault", "FileVault is On.", ok=False))
+
+    def test_status_does_not_leak_operation_arguments(self):
+        self.actions._results["top_cpu"] = self.parse("top_cpu", "  PID  %CPU    RSS COMM\n  321  1.0 2048 /bin/sleep\n")
+        self.actions._state.update(id="top_cpu", state="done")
+        for row in self.actions.status()["result"]["rows"]:
+            for op in row["ops"]:
+                self.assertEqual(set(op), {"op", "label"})
+
+    def test_row_action_rejects_bad_input(self):
+        self.actions._results["top_cpu"] = self.parse("top_cpu", "  PID  %CPU    RSS COMM\n  321  1.0 2048 /bin/sleep\n")
+        self.assertFalse(self.actions.row_action("top_cpu", 5, "quit", True)["ok"])
+        self.assertFalse(self.actions.row_action("top_cpu", True, "quit", True)["ok"])
+        self.assertFalse(self.actions.row_action("top_cpu", 0, "rm", True)["ok"])
+        self.assertFalse(self.actions.row_action("top_cpu", 0, "quit", None)["ok"])
+        self.assertFalse(self.actions.row_action("nope", 0, "quit", True)["ok"])
+
+    def test_row_action_never_quits_this_process_or_init(self):
+        for pid in (1, os.getpid()):
+            self.actions._results["top_cpu"] = {"summary": "", "status": "info", "rows": [
+                {"title": "x", "value": "", "status": "info", "icon": "cpu", "ops": [{"op": "quit", "label": "q", "arg": {"pid": pid, "name": "x"}}]}]}
+            self.assertFalse(self.actions.row_action("top_cpu", 0, "quit", True)["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()

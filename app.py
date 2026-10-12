@@ -9,6 +9,8 @@ Usage: app.py --window [--section cleanup]
 import os
 import pathlib
 import sys
+import threading
+import time
 
 import AppKit
 import webview
@@ -58,6 +60,20 @@ def main():
         api.shutdown()
         return None
 
+    def watch_requests():
+        # A repeated open from the agent while the window is minimized or hidden: bring it back
+        while True:
+            time.sleep(0.4)
+            if os.path.exists(engine.WINDOW_REQUEST):
+                try:
+                    os.remove(engine.WINDOW_REQUEST)
+                    window.restore()
+                    window.show()
+                    AppHelper.callAfter(lambda: AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True))
+                except Exception:
+                    pass
+
+    threading.Thread(target=watch_requests, daemon=True).start()
     window.events.loaded += on_loaded
     window.events.closing += on_closing
     webview.start(debug=False)

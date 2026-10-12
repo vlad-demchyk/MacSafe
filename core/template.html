@@ -155,6 +155,27 @@
     .cc-txt small { color:var(--muted); font-size:12px; line-height:1.3; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
     .cc-tile.is-done .cc-txt small { color:var(--good); }
     .cc-tile.is-error .cc-txt small { color:var(--critical); }
+    .cc-tile.is-warn .cc-txt small { color:var(--warn); }
+    .act-result { margin-top:12px; }
+    .res-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+    .res-ico { width:34px; height:34px; } .res-ico svg { width:18px; height:18px; }
+    .res-title { display:flex; flex-direction:column; min-width:0; flex:1 1 200px; }
+    .res-title small { color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; }
+    .res-close { padding:2px 10px; font-size:16px; line-height:1.2; }
+    .res-rows { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+    .res-row { display:flex; align-items:center; gap:12px; padding:9px 12px; background:var(--card2); }
+    .res-row + .res-row { border-top:1px solid var(--line); }
+    .res-st { flex:none; width:26px; height:26px; border-radius:50%; display:grid; place-items:center; background:var(--blue); color:var(--on-info); }
+    .res-st svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+    .res-row--good .res-st { background:var(--good); color:var(--on-good); }
+    .res-row--warning .res-st { background:var(--warn); color:var(--on-warn); }
+    .res-row--critical .res-st { background:var(--critical); color:var(--on-critical); }
+    .res-txt { display:flex; flex-direction:column; min-width:0; flex:1; }
+    .res-txt b { font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .res-txt small { color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .res-ops { display:flex; align-items:center; gap:6px; flex:none; }
+    .res-op { padding:3px 10px; font-size:12px; }
+    .res-op--quit { color:var(--critical); }
     .cc-tile.is-running .cc-ico { animation:cc-pulse 1s ease-in-out infinite; }
     @keyframes cc-pulse { 50% { transform:scale(.88); opacity:.7; } }
     @media (prefers-reduced-motion:reduce) { .cc-tile.is-running .cc-ico { animation:none; } .cc-tile { transition:none; } }
@@ -719,6 +740,14 @@
   // Page language: uk (default) or en. Ukrainian phrases are translated with the I18N_EN dictionary.
   // Numbers in keys are replaced with #: “Port 7717: 26 errors” is looked up as “Port #: # errors”.
   const I18N_EN = {
+ "Повторити": "Run again",
+ "Закрити": "Close",
+ "Результати": "Results",
+ "Сирий вивід": "Raw output",
+ "усе гаразд": "all good",
+ "є що перевірити": "worth a look",
+ "потрібна увага": "needs attention",
+ "Завершити цей процес?": "Quit this process?",
  "# % · Підключено до живлення": "# % · Connected to power",
  "# / # мАг": "# / # mAh",
  "# В": "# V",
@@ -2602,7 +2631,8 @@
     };
     let actionBusy = false;
     let actionRunning = null;   // id of the running action
-    let actionResult = null;    // {id, ok, text} of the last run, shown under the tiles
+    const actionResults = {};   // id -> {ok, text, result, at}: every run keeps its own result, a new run does not close the others
+    let actionOrder = [];       // ids with a result, the latest run first
     let actionAvail = null;     // id -> available on this Mac; null until the app answers
     const actionDone = {};      // id -> {ok, brief}: the tile remembers how its last run ended
 
@@ -2613,19 +2643,53 @@
       const done = actionDone[a.id];
       const running = actionRunning === a.id;
       const sub = running ? 'Виконується…' : missing ? 'Немає на цьому Mac' : !actionApi() ? 'Доступно лише в застосунку MacSafe' : done ? done.brief : a.desc;
-      const cls = `cc-tile cc-tile--${a.level}${running ? ' is-running' : ''}${done && !running ? (done.ok ? ' is-done' : ' is-error') : ''}`;
+      const cls = `cc-tile cc-tile--${a.level}${running ? ' is-running' : ''}${done && !running ? (!done.ok ? ' is-error' : done.status === 'warning' ? ' is-warn' : done.status === 'critical' ? ' is-error' : ' is-done') : ''}`;
       return `<button class="${cls}" type="button" data-run="${esc(a.id)}" ${disabled ? 'disabled' : ''} title="${esc(a.cmd)}">
         <span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${ACTION_ICONS[a.id] || ''}</svg></span>
         <span class="cc-txt"><b>${esc(a.title)}</b><small>${esc(sub)}</small></span></button>`;
     }
 
+    const ROW_ICONS = {
+      good: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+      warning: '<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/>',
+      critical: '<path d="M6 6l12 12M18 6L6 18"/>',
+      info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'
+    };
+    const RES_LABEL = { good: 'усе гаразд', info: 'готово', warning: 'є що перевірити', critical: 'потрібна увага' };
+
+    function resultRow(id, row, i) {
+      const ops = row.ops.map(o => `<button class="btn res-op${o.op === 'quit' ? ' res-op--quit' : ''}" type="button" data-row="${esc(id)}" data-i="${i}" data-op="${esc(o.op)}">${esc(o.label)}</button>`).join('');
+      return `<div class="res-row res-row--${esc(row.status)}"><span class="res-st"><svg viewBox="0 0 24 24" aria-hidden="true">${ROW_ICONS[row.status] || ROW_ICONS.info}</svg></span>
+        <div class="res-txt"><b>${esc(row.title)}</b>${row.value ? `<small>${esc(row.value)}</small>` : ''}</div>
+        <div class="res-ops">${ops}${copyBtn(parts(row.title, row.value))}</div></div>`;
+    }
+
+    // The result of one action: its own card with the rows, what can be done next and the raw output folded away
+    function resultCard(id) {
+      const a = ACTION_CMDS.find(x => x.id === id), r = actionResults[id];
+      if (!a || !r) return '';
+      const res = r.result;
+      const kind = !r.ok ? 'critical' : res ? res.status : 'good';
+      const label = !r.ok ? 'помилка' : RES_LABEL[kind];
+      const time = new Date(r.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const raw = `<pre class="cmd" style="white-space:pre-wrap">${esc(r.text)}</pre>`;
+      const body = res
+        ? `<div class="res-rows">${res.rows.map((row, i) => resultRow(id, row, i)).join('')}</div><details class="more-details"><summary>Сирий вивід</summary>${raw}</details>`
+        : raw;
+      return `<div class="card act-result" id="res-${esc(id)}">
+        <div class="res-head"><span class="cc-ico res-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${ACTION_ICONS[id] || ''}</svg></span>
+          <div class="res-title"><b>${esc(a.title)}</b><small>${esc(res ? res.summary : a.cmd)} · ${esc(time)}</small></div>
+          ${badge(kind === 'info' ? 'good' : kind, label)}
+          <button class="btn" type="button" data-rerun="${esc(id)}" ${actionBusy ? 'disabled' : ''}>Повторити</button>
+          ${copyBtn(r.text)}
+          <button class="btn res-close" type="button" data-close="${esc(id)}" aria-label="Закрити">×</button></div>
+        ${body}</div>`;
+    }
+
     function renderActions() {
       const groups = Object.keys(ACTION_GROUPS).map(g => `<h4>${esc(ACTION_GROUPS[g])}</h4><div class="cc-grid">${ACTION_CMDS.filter(a => a.group === g).map(actionTile).join('')}</div>`).join('');
-      const r = actionResult;
-      const res = r ? (() => {
-        const a = ACTION_CMDS.find(x => x.id === r.id);
-        return `<div class="card act-result"><p><b>${esc(a.title)}</b> ${badge(r.ok ? 'good' : 'critical', r.ok ? 'готово' : 'помилка')} ${copyBtn(a.cmd)}</p><pre class="cmd" style="white-space:pre-wrap">${esc(r.text)}</pre></div>` })() : '';
-      $('#actions-body').innerHTML = `${groups}${res}`;
+      const res = actionOrder.map(resultCard).join('');
+      $('#actions-body').innerHTML = `${groups}${res ? `<h4>Результати</h4>${res}` : ''}`;
       renderQuick();
     }
 
@@ -2673,8 +2737,7 @@
       if (!box) return;
       const tiles = QUICK_IDS.map(id => ACTION_CMDS.find(a => a.id === id)).filter(Boolean).map(actionTile).join('');
       const clean = `<a class="cc-tile cc-tile--read" href="#cleanup" style="text-decoration:none"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${ACTION_ICONS.empty_trash}</svg></span><span class="cc-txt"><b>Очищення</b><small>Кеші, великі файли, LLM</small></span></a>`;
-      const r = actionResult && QUICK_IDS.includes(actionResult.id) ? actionResult : null;
-      const res = r ? `<div class="card act-result"><p><b>${esc(ACTION_CMDS.find(x => x.id === r.id).title)}</b> ${badge(r.ok ? 'good' : 'critical', r.ok ? 'готово' : 'помилка')}</p><pre class="cmd" style="white-space:pre-wrap">${esc(r.text)}</pre></div>` : '';
+      const res = actionOrder.filter(id => QUICK_IDS.includes(id)).map(resultCard).join('');
       box.innerHTML = `<h4>Швидкі дії</h4><div class="cc-grid">${tiles}${clean}</div>${res}`;
     }
 
@@ -2693,7 +2756,8 @@
       const a = ACTION_CMDS.find(x => x.id === id);
       if (!api || !a || actionBusy) return;
       if (a.level !== 'read' && !window.confirm(`${a.title}\n\n${a.cmd}\n\n` + (a.level === 'destructive' ? 'Це видаляє дані без швидкого відкату. Продовжити?' : 'Це перезапустить частину системи. Продовжити?'))) return;
-      actionBusy = true; actionRunning = id; actionResult = null;
+      actionBusy = true; actionRunning = id;
+      let outcome = null;
       renderActions();
       try {
         const start = await api.action_run(id, a.level !== 'read');
@@ -2703,23 +2767,54 @@
           await new Promise(resolve => setTimeout(resolve, 500));
           st = await api.action_status();
         } while (st && st.state === 'running');
-        actionResult = { id, ok: st.state === 'done', text: st.output || (st.state === 'done' ? 'Готово' : `Код ${st.code}`) };
+        const ok = st.state === 'done';
+        outcome = { id, ok, text: st.output || (ok ? 'Готово' : `Код ${st.code}`), result: st.result || null, at: Date.now() };
         const one = (st.output || '').trim();
-        const brief = one && !one.includes('\n') && one.length <= 60 ? one : (st.state === 'done' ? 'Готово, деталі нижче' : 'Помилка, деталі нижче');
-        actionDone[id] = { ok: st.state === 'done', brief: (st.state === 'done' ? '✓ ' : '✗ ') + brief };
+        const brief = st.result ? st.result.summary : one && !one.includes('\n') && one.length <= 60 ? one : (ok ? 'Готово, деталі нижче' : 'Помилка, деталі нижче');
+        actionDone[id] = { ok, status: st.result && st.result.status, brief: (ok ? '✓ ' : '✗ ') + brief };
       } catch (error) {
-        actionResult = { id, ok: false, text: String(error && error.message || error || 'Невідома помилка') };
-        actionDone[id] = { ok: false, brief: '✗ ' + actionResult.text.slice(0, 50) };
+        outcome = { id, ok: false, text: String(error && error.message || error || 'Невідома помилка'), result: null, at: Date.now() };
+        actionDone[id] = { ok: false, brief: '✗ ' + outcome.text.slice(0, 50) };
       } finally {
         actionBusy = false; actionRunning = null;
+        if (outcome) { actionResults[id] = outcome; actionOrder = [id, ...actionOrder.filter(x => x !== id)]; }
         renderActions();
+        const card = outcome && document.getElementById('res-' + id);
+        if (card && card.scrollIntoView) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
-      return actionResult;
+      return outcome;
     }
 
-    document.addEventListener('click', event => {
-      const btn = event.target.closest && event.target.closest('.cc-tile');
-      if (btn) runAction(btn.dataset.run);
+    document.addEventListener('click', async event => {
+      const target = event.target.closest ? event.target : event.target.parentElement;
+      const tile = target.closest('.cc-tile');
+      if (tile && tile.dataset.run) { runAction(tile.dataset.run); return; }
+      const again = target.closest('[data-rerun]');
+      if (again) { runAction(again.dataset.rerun); return; }
+      const close = target.closest('[data-close]');
+      if (close) {
+        actionOrder = actionOrder.filter(x => x !== close.dataset.close);
+        delete actionResults[close.dataset.close];
+        renderActions();
+        return;
+      }
+      const op = target.closest('[data-row]');
+      if (!op) return;
+      const api = actionApi();
+      if (!api || typeof api.action_row !== 'function') return;
+      const id = op.dataset.row, i = Number(op.dataset.i), name = op.dataset.op;
+      const row = actionResults[id] && actionResults[id].result && actionResults[id].result.rows[i];
+      if (!row) return;
+      if (name === 'quit' && !window.confirm(`${row.title}\n${row.value}\n\nЗавершити цей процес?`)) return;
+      op.disabled = true;
+      try {
+        const res = await api.action_row(id, i, name, name === 'quit');
+        toast(res && res.ok ? (res.message || 'Готово') : (res && res.error || 'Не вдалося'));
+        // A quit process leaves the list: the check runs again after it had time to exit
+        if (res && res.ok && name === 'quit') { await new Promise(resolve => setTimeout(resolve, 900)); runAction(id); }
+      } catch (error) {
+        toast(String(error && error.message || error));
+      } finally { op.disabled = false; }
     });
     window.addEventListener('pywebviewready', refreshActionAvailability);
 

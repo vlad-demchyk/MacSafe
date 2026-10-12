@@ -101,7 +101,8 @@ ACTIONS = [
 BY_ID = {a["id"]: a for a in ACTIONS}
 
 _lock = threading.Lock()
-_state = {"id": None, "state": "idle", "output": "", "code": None, "startedAt": None, "finishedAt": None}
+_state = {"id": None, "state": "idle", "output": "", "code": None, "startedAt": None, "finishedAt": None, "result": None}
+_results = {}   # action id -> the last parsed result with the operation arguments; they never go to the page
 
 
 def _resolve(argv):
@@ -122,9 +123,77 @@ def listing():
     return out
 
 
+def _public(result):
+    """The parsed result without the arguments of its operations: the page gets only the operation names."""
+    if not result:
+        return None
+    rows = [dict(r, ops=[{"op": o["op"], "label": o["label"]} for o in r["ops"]]) for r in result["rows"]]
+    return {"summary": result["summary"], "status": result["status"], "rows": rows}
+
+
 def status():
     with _lock:
-        return dict(_state)
+        state = dict(_state)
+        state["result"] = _public(_results.get(state["id"]) if state["state"] != "running" else None)
+        return state
+
+
+def _pid_name(pid):
+    """(uid, command name) of a process, or None when it is gone."""
+    try:
+        r = subprocess.run(["/bin/ps", "-p", str(pid), "-o", "uid=,comm="], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    parts = r.stdout.strip().split(None, 1)
+    if r.returncode != 0 or len(parts) != 2 or not parts[0].isdigit():
+        return None
+    return int(parts[0]), os.path.basename(parts[1].strip())
+
+
+def row_action(action_id, index, op, confirm):
+    """Runs one operation of one row of the last result: quit its process, show its file, open a Settings pane.
+
+    The page sends only the action id, the row index and the operation name; the pid, path or pane come from the result
+    kept here. A process is quit only when it is the current user's, is not this app and still has the same name.
+    """
+    with _lock:
+        result = _results.get(action_id)
+    rows = result["rows"] if result else []
+    if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(rows):
+        return {"ok": False, "error": T("Рядок застарів: запустіть дію ще раз")}
+    chosen = next((o for o in rows[index]["ops"] if o["op"] == op), None)
+    if chosen is None:
+        return {"ok": False, "error": T("Невідома дія")}
+    arg = chosen["arg"]
+    if op == "quit":
+        if confirm is not True:
+            return {"ok": False, "error": T("Потрібне підтвердження")}
+        pid = arg["pid"]
+        found = _pid_name(pid)
+        if pid <= 1 or pid == os.getpid() or found is None:
+            return {"ok": False, "error": T("{name} вже не працює", name=arg["name"])}
+        if found[0] != os.getuid() or found[1] != os.path.basename(arg["name"]) and found[1][:15] != arg["name"][:15]:
+            return {"ok": False, "error": T("Немає доступу, щоб завершити {name}", name=arg["name"])}
+        try:
+            os.kill(pid, 15)
+        except ProcessLookupError:
+            return {"ok": False, "error": T("{name} вже не працює", name=arg["name"])}
+        except PermissionError:
+            return {"ok": False, "error": T("Немає доступу, щоб завершити {name}", name=arg["name"])}
+        return {"ok": True, "message": T("Завершено: {name}", name=arg["name"])}
+    if op == "reveal":
+        if not os.path.exists(arg["path"]):
+            return {"ok": False, "error": T("Файл не знайдено")}
+        subprocess.Popen(["/usr/bin/open", "-R", arg["path"]])
+        return {"ok": True}
+    if op == "pane":
+        import action_results
+        url = action_results.PANES.get(arg["key"])
+        if url is None:
+            return {"ok": False, "error": T("Невідома дія")}
+        subprocess.Popen(["/usr/bin/open", url])
+        return {"ok": True}
+    return {"ok": False, "error": T("Невідома дія")}
 
 
 def _tail(text, max_lines):
@@ -165,11 +234,14 @@ def start(action_id, confirm):
     with _lock:
         if _state["state"] == "running":
             return {"ok": False, "error": T("Інша дія ще виконується")}
-        _state.update(id=action_id, state="running", output="", code=None, startedAt=time.time(), finishedAt=None)
+        _state.update(id=action_id, state="running", output="", code=None, startedAt=time.time(), finishedAt=None, result=None)
 
     def work():
         code, text = _execute(action)
+        import action_results
+        parsed = action_results.parse(action_id, text, code == 0)
         with _lock:
+            _results[action_id] = parsed
             _state.update(state="done" if code == 0 else "error", output=text, code=code, finishedAt=time.time())
 
     threading.Thread(target=work, daemon=True).start()

@@ -59,7 +59,14 @@ def open_window(section=None):
     """Starts the report window as a separate process. If the window is already open, does nothing."""
     global _window_proc
     if _window_proc is not None and _window_proc.poll() is None:
+        # The window may be minimized or behind others: the window process restores itself on this request
+        os.makedirs(os.path.dirname(engine.WINDOW_REQUEST), exist_ok=True)
+        open(engine.WINDOW_REQUEST, "w").close()
         return
+    try:
+        os.remove(engine.WINDOW_REQUEST)
+    except OSError:
+        pass
     cmd = [sys.executable, engine.APP_PY, "--window"]
     if section:
         cmd += ["--section", section]

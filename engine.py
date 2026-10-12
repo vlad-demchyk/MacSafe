@@ -47,6 +47,7 @@ LOCK_DIR = os.path.join(DATA_DIR, "дані", ".lock")
 LAUNCH_ARGS = [os.environ["MACSAFE_LAUNCHER"]] if os.environ.get("MACSAFE_LAUNCHER") else [autostart.PYTHON, AGENT_PY]
 APP_LOCK = os.path.join(DATA_REPORTS, "дані", ".app.lock")          # one instance of the app
 SHOW_REQUEST = os.path.join(DATA_REPORTS, "дані", ".show-request")  # a second launch's request: show the window
+WINDOW_REQUEST = os.path.join(DATA_REPORTS, "дані", ".window-request")  # the agent asks the open window to come back
 LANG_REQUEST = os.path.join(DATA_REPORTS, "дані", ".lang-request")   # the window's language choice, applied by the agent
 AGENT_LOG = os.path.join(DATA_REPORTS, "дані", "автозапуск.log")
 PERSIST_FILE = os.path.join(DATA_REPORTS, "дані", "автозапуск-знімок.json")   # the baseline list of system login items
@@ -386,6 +387,10 @@ class Api:
     def action_run(self, action_id, confirm):
         """Starts one action by id in the background. mild and destructive ones need confirm=True."""
         return actions.start(action_id, confirm)
+
+    def action_row(self, action_id, index, op, confirm):
+        """One operation of one result row (quit a process, show a file, open a Settings pane): the page sends only indexes and names."""
+        return actions.row_action(action_id, index, op, confirm)
 
     def action_status(self):
         """State and output of the running or last action."""
