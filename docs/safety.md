@@ -61,3 +61,7 @@ Security checks read only what macOS exposes without root. Values that need root
 ## Disk map
 
 The map only reads sizes (`du` and a directory listing) and never leaves the home folder: a path outside it, a link or a file is refused. Symbolic links are not followed, so a link cannot make a folder look bigger or lead out of the home folder. Moving a block to the Trash uses the same rules as large files.
+
+## Duplicates
+
+The search chooses only among folders found directly in your home folder (not Library, not hidden ones), skips links, app bundles, `node_modules` and `.git`, and changes nothing. Before moving a copy to the Trash MacSafe checks again that it belongs to the last result, that at least one other copy of its group still exists with the same size, and that the file still has the same content as that copy (a file edited since the search is refused). Copies go to the Trash and can be restored.

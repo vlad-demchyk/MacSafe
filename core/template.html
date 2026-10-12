@@ -79,6 +79,13 @@
     .dm-block small { color:var(--muted); }
     .dm-info { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:12px; min-height:34px; }
     .dm-pending { margin-top:8px; color:var(--muted); font-size:12px; }
+    .dp-roots { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:12px; border:0; padding:0; }
+    .dp-roots label { display:flex; align-items:center; gap:5px; font-size:13px; }
+    .dp-group { border:1px solid var(--line); border-radius:12px; padding:10px 12px; background:var(--card2); display:grid; gap:6px; }
+    .dp-group h4 { margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--ink); }
+    .dp-file { display:flex; align-items:center; gap:8px; font-size:12px; }
+    .dp-file span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left; }
+    .dp-file.is-keep span { color:var(--good); }
     .cache-list { display:grid; gap:8px; margin:14px 0; }
     .cache-item { display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--card2); cursor:pointer; }
     .metric__ico { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; vertical-align:-2px; margin-right:5px; }
@@ -533,6 +540,7 @@
             <button class="cc-tile cc-tile--read" type="button" data-panel="llm-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></span><span class="cc-txt"><b>Локальні LLM</b><small id="ct-llm-sub">Не перевірено</small></span></button>
             <button class="cc-tile cc-tile--read" type="button" data-panel="apps-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg></span><span class="cc-txt"><b>Програми</b><small id="ct-apps-sub">Не перевірено</small></span></button>
             <button class="cc-tile cc-tile--read" type="button" data-panel="map-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="11" height="10" rx="1.5"/><rect x="16" y="3" width="5" height="10" rx="1.5"/><rect x="3" y="15" width="6" height="6" rx="1.5"/><rect x="11" y="15" width="10" height="6" rx="1.5"/></svg></span><span class="cc-txt"><b>Карта диска</b><small id="ct-map-sub">Не перевірено</small></span></button>
+            <button class="cc-tile cc-tile--read" type="button" data-panel="dup-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></span><span class="cc-txt"><b>Дублікати</b><small id="ct-dup-sub">Не перевірено</small></span></button>
           </div>
           <article class="card cache-panel" id="cache-panel" aria-labelledby="cache-heading" aria-busy="false">
             <h3 id="cache-heading">Кеші застосунків</h3>
@@ -611,6 +619,21 @@
             <div class="dm-map" id="map-view" role="group" aria-label="Карта диска"></div>
             <div class="dm-info" id="map-info"></div>
             <p class="dm-pending" id="map-pending"></p>
+          </article>
+          <article class="card cache-panel" id="dup-panel" hidden aria-labelledby="dup-heading" aria-busy="false">
+            <h3 id="dup-heading">Дублікати файлів</h3>
+            <p class="hint">Файли з однаковим вмістом у вибраних папках. Копії йдуть у кошик, в кожній групі лишається хоча б одна.</p>
+            <fieldset class="dp-roots" id="dup-roots"><legend>Де шукати</legend></fieldset>
+            <div class="cache-actions">
+              <button class="btn" id="dup-scan" type="button" disabled>Шукати дублікати</button>
+              <button class="btn" id="dup-stop" type="button" hidden>Зупинити</button>
+              <label class="cache-days">Від
+                <select id="dup-min" disabled><option value="1" selected>1 МБ</option><option value="5">5 МБ</option><option value="50">50 МБ</option><option value="200">200 МБ</option></select>
+              </label>
+              <button class="btn btn--danger" id="dup-trash" type="button" disabled>У кошик вибране</button>
+            </div>
+            <p class="hint" id="dup-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
+            <div class="cache-list" id="dup-list"></div>
           </article>
           <details class="card more-details"><summary>Рекомендації зі звіту</summary>
             <p id="cleanup-summary"></p>
@@ -1057,6 +1080,21 @@
  "Разом": "Total",
  "Рахую": "Counting",
  "Рахую…": "Counting…",
+ "Дублікати": "Duplicates",
+ "Дублікати файлів": "Duplicate files",
+ "Файли з однаковим вмістом у вибраних папках. Копії йдуть у кошик, в кожній групі лишається хоча б одна.": "Files with identical content in the chosen folders. Copies go to the Trash, and at least one stays in every group.",
+ "Де шукати": "Where to look",
+ "Шукати дублікати": "Find duplicates",
+ "Зупинити": "Stop",
+ "можна звільнити": "can be freed",
+ "Залиште хоча б одну копію": "Keep at least one copy",
+ "Збираю файли…": "Collecting files…",
+ "Порівнюю": "Comparing",
+ "Зупинено.": "Stopped.",
+ "Груп": "Groups",
+ "Перевірте позначене.": "Check what is marked.",
+ "Дублікатів не знайдено.": "No duplicates found.",
+ "Немає": "None",
  "Знайти великі файли": "Find large files",
  "Знайти залишки": "Find leftovers",
  "Значення в момент звіту.": "Value at the time of the report.",
@@ -3896,12 +3934,154 @@
       window.addEventListener('pywebviewready', sync);
       sync();
     })();
+    // Duplicate files: groups of identical files; every group keeps at least one copy
+    (() => {
+      const rootsBox = document.getElementById('dup-roots');
+      const scanBtn = document.getElementById('dup-scan');
+      const stopBtn = document.getElementById('dup-stop');
+      const minSel = document.getElementById('dup-min');
+      const trashBtn = document.getElementById('dup-trash');
+      const st = document.getElementById('dup-status');
+      const out = document.getElementById('dup-list');
+      const tr_ = t => (window.MacSafeI18n ? window.MacSafeI18n.tr(t) : t);
+      let groups = [], doomed = new Set(), timer = null, rootsLoaded = false, shown = 20;
+      const api = () => {
+        const a = window.pywebview && window.pywebview.api;
+        return a && typeof a.dupes_start === 'function' ? a : null;
+      };
+      const sizeText = v => v >= 1024 ? `${(v / 1024).toLocaleString('uk-UA', { maximumFractionDigits:1 })} ГБ` : `${v.toLocaleString('uk-UA', { maximumFractionDigits:1 })} МБ`;
+      // A group is valid for removal when at least one of its files is not marked
+      const groupOk = g => g.files.some(f => !doomed.has(f.path));
+      const doomedList = () => groups.flatMap(g => g.files.filter(f => doomed.has(f.path)).map(f => ({ f, g })));
+      const sync = () => {
+        const on = !!api();
+        scanBtn.disabled = !on;
+        minSel.disabled = !on;
+        const list = doomedList();
+        trashBtn.disabled = !on || !list.length || groups.some(g => !groupOk(g));
+        trashBtn.textContent = list.length ? `${tr_('У кошик вибране')} (${list.length}, ${sizeText(list.reduce((n, x) => n + x.g.sizeMb, 0))})` : tr_('У кошик вибране');
+        if (!on) st.textContent = unavailable;
+        else if (st.textContent === unavailable) st.textContent = '';
+      };
+      async function loadRoots() {
+        const a = api();
+        if (!a || rootsLoaded) return;
+        rootsLoaded = true;
+        const r = await a.dupes_roots();
+        (r.items || []).forEach(item => {
+          const label = document.createElement('label');
+          const box = document.createElement('input');
+          box.type = 'checkbox'; box.value = item.id; box.checked = !!item.standard;
+          label.append(box, document.createTextNode(item.id));
+          rootsBox.append(label);
+        });
+      }
+      function draw() {
+        out.replaceChildren();
+        groups.slice(0, shown).forEach(g => {
+          const box = document.createElement('div');
+          box.className = 'dp-group';
+          const head = document.createElement('h4');
+          head.textContent = `${g.files.length} × ${sizeText(g.sizeMb)} · ${tr_('можна звільнити')} ${sizeText(g.wastedMb)}`;
+          box.append(head);
+          g.files.forEach((f, i) => {
+            const row = document.createElement('label');
+            row.className = 'dp-file' + (doomed.has(f.path) ? '' : ' is-keep');
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.checked = doomed.has(f.path);
+            cb.addEventListener('change', () => { if (cb.checked) doomed.add(f.path); else doomed.delete(f.path); draw(); });
+            const path = document.createElement('span');
+            path.textContent = '‎' + f.path.replace(/^\/Users\/[^/]+/, '~');
+            path.title = f.path;
+            row.append(cb, path);
+            const show = document.createElement('button');
+            show.type = 'button'; show.className = 'btn'; show.textContent = tr_('Показати у Finder');
+            show.addEventListener('click', e => { e.preventDefault(); const a = api(); if (a) a.reveal_file(f.path); });
+            row.append(show);
+            box.append(row);
+          });
+          if (!groupOk(g)) {
+            const warn = document.createElement('p');
+            warn.className = 'hint'; warn.textContent = tr_('Залиште хоча б одну копію');
+            box.append(warn);
+          }
+          out.append(box);
+        });
+        if (groups.length > shown) {
+          const more = document.createElement('button');
+          more.type = 'button'; more.className = 'btn list-more';
+          more.textContent = `${tr_('Показати ще')} (${groups.length - shown})`;
+          more.addEventListener('click', () => { shown += 20; draw(); });
+          out.append(more);
+        }
+        sync();
+      }
+      async function poll() {
+        const a = api();
+        if (!a) return;
+        try {
+          const r = await a.dupes_poll();
+          if (!r || !r.ok) throw new Error(r && r.error || tr_('Помилка'));
+          if (r.error) throw new Error(r.error);
+          if (!r.done) {
+            st.textContent = r.stage === 'walk' ? tr_('Збираю файли…') : `${tr_('Порівнюю')}: ${r.counted}/${r.total}…`;
+            timer = setTimeout(poll, 1000);
+            return;
+          }
+          stopBtn.hidden = true; scanBtn.disabled = false;
+          groups = (r.result && r.result.groups) || [];
+          doomed = new Set();
+          groups.forEach(g => g.files.slice(1).forEach(f => doomed.add(f.path)));   // the oldest copy stays by default
+          const wasted = (r.result && r.result.wastedMb) || 0;
+          st.textContent = r.cancelled ? tr_('Зупинено.') : groups.length ? `${tr_('Груп')}: ${groups.length}, ${tr_('можна звільнити')} ${sizeText(wasted)}. ${tr_('Перевірте позначене.')}` : tr_('Дублікатів не знайдено.');
+          window.setTileSub('ct-dup-sub', groups.length ? `${groups.length} · ${sizeText(wasted)}` : tr_('Немає'));
+          shown = 20; draw();
+        } catch (e) { stopBtn.hidden = true; scanBtn.disabled = false; st.textContent = `${tr_('Помилка')}: ${errorText(e)}`; }
+      }
+      async function find() {
+        const a = api();
+        if (!a) { sync(); return; }
+        const roots = [...rootsBox.querySelectorAll('input:checked')].map(b => b.value);
+        if (!roots.length) { st.textContent = tr_('Нічого не вибрано'); return; }
+        scanBtn.disabled = true; stopBtn.hidden = false; groups = []; doomed = new Set(); draw();
+        st.textContent = tr_('Збираю файли…');
+        try {
+          const r = await a.dupes_start(roots, Number(minSel.value));
+          if (!r || !r.ok) throw new Error(r && r.error || tr_('Помилка'));
+          clearTimeout(timer); poll();
+        } catch (e) { stopBtn.hidden = true; scanBtn.disabled = false; st.textContent = `${tr_('Помилка')}: ${errorText(e)}`; }
+      }
+      scanBtn.addEventListener('click', find);
+      stopBtn.addEventListener('click', async () => { const a = api(); if (a) await a.dupes_cancel(); });
+      trashBtn.addEventListener('click', async () => {
+        const a = api();
+        const list = doomedList();
+        if (!a || !list.length) return;
+        if (!window.confirm(`${tr_('Перемістити в кошик')}: ${list.length}?\n${tr_('Його можна повернути з кошика.')}`)) return;
+        trashBtn.disabled = true; st.textContent = tr_('Переміщую…');
+        try {
+          const r = await a.dupes_trash(list.map(x => x.f.path), true);
+          if (!r || !r.ok) throw new Error(r && r.error || tr_('Помилка'));
+          const failed = r.results.filter(x => !x.ok).length;
+          st.textContent = `${tr_('Звільнено близько')} ${sizeText(r.freedMb)}` + (failed ? `; ${tr_('не вдалося')}: ${failed}` : '') + '.';
+          const done = new Set(r.results.filter(x => x.ok).map(x => x.path));
+          groups.forEach(g => { g.files = g.files.filter(f => !done.has(f.path)); });
+          groups = groups.filter(g => g.files.length > 1);
+          done.forEach(p => doomed.delete(p));
+          draw();
+        } catch (e) { st.textContent = `${tr_('Помилка')}: ${errorText(e)}`; }
+        finally { sync(); }
+      });
+      (window.cleanupScans = window.cleanupScans || {}).dup = loadRoots;
+      window.addEventListener('pywebviewready', () => { sync(); loadRoots(); });
+      sync();
+    })();
     (window.cleanupScans = window.cleanupScans || {}).cache = scanCaches;
     document.querySelectorAll('#cleanup-tiles .cc-tile').forEach(tile_ => tile_.addEventListener('click', () => {
       document.querySelectorAll('#cleanup-tiles .cc-tile').forEach(t => t.classList.toggle('is-active', t === tile_));
       document.querySelectorAll('#cleanup .cache-panel').forEach(panel => { panel.hidden = panel.id !== tile_.dataset.panel; });
       // The first time a type is opened, its own check runs
-      const kind = { 'cache-panel': 'cache', 'big-panel': 'big', 'left-panel': 'left', 'llm-panel': 'llm', 'apps-panel': 'apps', 'map-panel': 'map' }[tile_.dataset.panel];
+      const kind = { 'cache-panel': 'cache', 'big-panel': 'big', 'left-panel': 'left', 'llm-panel': 'llm', 'apps-panel': 'apps', 'map-panel': 'map', 'dup-panel': 'dup' }[tile_.dataset.panel];
       const run = window.cleanupScans && window.cleanupScans[kind];
       if (run && !tile_.dataset.scanned && cacheApi()) run();
     }));
