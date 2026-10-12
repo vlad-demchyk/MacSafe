@@ -420,6 +420,18 @@ class Monitor:
                 self._power_last = None
         return getattr(self, "_power_last", None)
 
+    def _netinfo(self, detail):
+        """Address and Wi-Fi quality, read every 10 seconds and only while the panel is open."""
+        now = time.time()
+        if detail and now - getattr(self, "_net_at", 0) >= 10:
+            self._net_at = now
+            try:
+                import netinfo
+                self._net_last = netinfo.read()
+            except Exception:
+                self._net_last = None
+        return getattr(self, "_net_last", None)
+
     def start(self):
         # Priming the system CPU: the first cpu_percent is always 0, so we make a call before the first cycle
         psutil.cpu_percent(interval=None)
@@ -506,6 +518,7 @@ class Monitor:
                     snap["procReady"] = ready
                     snap["temp"] = self._temperature()
                     snap["power"] = self._power()
+                    snap["netinfo"] = self._netinfo(detail)
                     self._latest = snap
             except Exception:
                 pass

@@ -313,6 +313,21 @@ def _rate(bytes_per_s):
     return T("{v:.1f} МБ/с", v=kb / 1024) if kb >= 1024 else T("{v:.0f} КБ/с", v=kb)
 
 
+def _net_tip(info):
+    """Tooltip of the network card: the local address and, on Wi-Fi, the signal, rate and channel."""
+    if not info:
+        return ""
+    lines = []
+    if info.get("ip"):
+        lines.append(T("Адреса: {ip}", ip=info["ip"]))
+    wifi = info.get("wifi")
+    if wifi:
+        words = {"excellent": T("відмінний"), "good": T("добрий"), "fair": T("посередній"), "weak": T("слабкий")}
+        lines.append(T("Wi-Fi: сигнал {rssi} дБм ({word}), шум {noise} дБм", rssi=wifi["rssi"], word=words.get(wifi["quality"], ""), noise=wifi["noise"]))
+        lines.append(T("Швидкість лінку {rate:.0f} Мбіт/с, канал {channel}", rate=wifi["rate"], channel=wifi["channel"] or "—"))
+    return "\n".join(lines)
+
+
 def _pct(value):
     return "—" if value is None else f"{value:.0f}%"
 
@@ -1140,6 +1155,9 @@ class _PopoverPanel:
         top, sub = self.infos["net"]
         top.setStringValue_("—" if not net else "↓ " + _rate(net[0]))
         sub.setStringValue_("" if not net else "↑ " + _rate(net[1]))
+        tip = _net_tip(snap.get("netinfo"))
+        top.setToolTip_(tip)
+        sub.setToolTip_(tip)
         top, sub = self.infos["battery"]
         top.setStringValue_("—" if not bat else f"{bat['percent']:.0f}%")
         sub.setStringValue_(T("немає батареї") if not bat else (T("від мережі") if bat["plugged"] else T("від батареї")))

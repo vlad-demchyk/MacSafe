@@ -28,7 +28,7 @@ rm -rf "$APP" "$TMP"
 mkdir -p "$APP/Contents/MacOS" "$RES/core" "$TMP"
 
 # 1. App code and generator (without service files)
-for f in agent.py history.py thermal_hid.py actions.py alerts.py apps.py bigfiles.py diskmap.py duplicates.py zones.py persistence.py trash.py leftovers.py llm.py engine.py app.py i18n.py metrics.py gpu_iokit.py menubar.py prefs.py autostart.py cleanup.py diff.py bar.js app.html requirements.txt; do
+for f in agent.py history.py thermal_hid.py actions.py alerts.py apps.py bigfiles.py diskmap.py duplicates.py zones.py persistence.py trash.py leftovers.py llm.py engine.py app.py i18n.py metrics.py gpu_iokit.py netinfo.py menubar.py prefs.py autostart.py cleanup.py diff.py bar.js app.html requirements.txt; do
   cp "$HERE/$f" "$RES/" || fail "copying $f"
 done
 cp "$HERE/core/generate-report.sh" "$HERE/core/template.html" "$RES/core/" || fail "copying core/"

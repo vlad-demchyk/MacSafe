@@ -1610,6 +1610,23 @@ class ZonesTests(unittest.TestCase):
             duplicates.MIN_WASTED = saved
 
 
+class NetInfoTests(unittest.TestCase):
+    def test_quality_words(self):
+        import netinfo
+        self.assertEqual([netinfo.quality(v) for v in (-40, -60, -70, -90, None)], ["excellent", "good", "fair", "weak", None])
+
+    def test_local_ip_is_an_address_or_none(self):
+        import netinfo
+        ip = netinfo.local_ip()
+        self.assertTrue(ip is None or ip.count(".") == 3)
+
+    def test_read_never_raises(self):
+        import netinfo
+        info = netinfo.read()
+        self.assertIn("ip", info)
+        self.assertTrue(info["wifi"] is None or info["wifi"]["rssi"] < 0)
+
+
 class BigFilesTests(unittest.TestCase):
     def setUp(self):
         import bigfiles
