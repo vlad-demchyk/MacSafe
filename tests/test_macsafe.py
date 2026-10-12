@@ -257,6 +257,61 @@ class CleanupTests(unittest.TestCase):
         self.assertFalse(self.cleanup.clean([])["ok"])
         self.assertFalse(self.cleanup.clean("cache:testapp")["ok"])
 
+    def _make_cache(self, name):
+        path = os.path.join(self.caches, name)
+        os.makedirs(path)
+        old = os.path.join(path, "old.bin")
+        with open(old, "wb") as fh:
+            fh.write(b"x" * 100_000)
+        stamp = time.time() - 90 * 86400
+        os.utime(old, (stamp, stamp))
+        return old
+
+    def test_running_app_cache_is_not_cleaned(self):
+        old = self._make_cache("com.vendor.Editor")
+        self.cleanup.running_apps = lambda: ({"com.vendor.editor"}, set())
+        item = next(i for i in self.cleanup.scan()["items"] if i["id"] == "cache:com.vendor.Editor")
+        self.assertTrue(item["blocked"])
+        r = self.cleanup.clean(["cache:com.vendor.Editor"])["results"][0]
+        self.assertTrue(r.get("skipped"))
+        self.assertTrue(os.path.isfile(old))
+
+    def test_running_app_by_name_is_not_cleaned(self):
+        old = self._make_cache("Figma")
+        self.cleanup.running_apps = lambda: (set(), {"figma"})
+        r = self.cleanup.clean(["cache:Figma"])["results"][0]
+        self.assertTrue(r.get("skipped"))
+        self.assertTrue(os.path.isfile(old))
+
+    def test_cache_named_by_vendor_or_bundle_tail_is_matched_to_running_app(self):
+        self.cleanup.running_apps = lambda: (set(), {"google chrome", "codex"})
+        self.assertTrue(self.cleanup.blocked_reason("cache:Google"))
+        self.assertTrue(self.cleanup.blocked_reason("cache:com.openai.codex"))
+        self.assertIsNone(self.cleanup.blocked_reason("cache:Goo"))
+        self.assertIsNone(self.cleanup.blocked_reason("cache:com.vendor.other"))
+
+    def test_protected_cache_is_never_cleaned(self):
+        old = self._make_cache("com.spotify.client")
+        self.cleanup.running_apps = lambda: (set(), set())
+        item = next(i for i in self.cleanup.scan()["items"] if i["id"] == "cache:com.spotify.client")
+        self.assertTrue(item["blocked"])
+        r = self.cleanup.clean(["cache:com.spotify.client"])["results"][0]
+        self.assertTrue(r.get("skipped"))
+        self.assertTrue(os.path.isfile(old))
+
+    def test_idle_app_cache_is_cleaned_and_scan_counts_files(self):
+        self.cleanup.running_apps = lambda: (set(), set())
+        item = next(i for i in self.cleanup.scan()["items"] if i["id"] == "cache:testapp")
+        self.assertIsNone(item["blocked"])
+        self.assertEqual(item["files"], 2)
+        self.assertGreater(self.cleanup.clean(["cache:testapp"])["freedMb"], 0.4)
+
+    def test_xcode_cache_blocked_while_xcode_runs(self):
+        self.cleanup.running_apps = lambda: ({"com.apple.dt.xcode"}, set())
+        self.assertTrue(self.cleanup.blocked_reason("xcode"))
+        self.cleanup.running_apps = lambda: (set(), set())
+        self.assertIsNone(self.cleanup.blocked_reason("xcode"))
+
 
 class SecuritySummaryTests(unittest.TestCase):
     def setUp(self):
@@ -617,9 +672,12 @@ class OldCacheCleanTests(unittest.TestCase):
         os.symlink(self.old, self.link)
         self._orig_target = cleanup._target
         cleanup._target = lambda cid: self.root
+        self._orig_running = cleanup.running_apps
+        cleanup.running_apps = lambda: (set(), set())   # the real running apps must not decide the test
 
     def tearDown(self):
         self.cleanup._target = self._orig_target
+        self.cleanup.running_apps = self._orig_running
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_only_old_files_removed(self):

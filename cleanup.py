@@ -1,5 +1,6 @@
 """Cache cleaning: only folders selected by the user from the list, after confirmation in the interface.
 
+A cache of a running app or of a protected app (offline media, sync state, VM images) is shown but skipped.
 The folder's contents are deleted, the folder itself stays. Candidates only from allowed roots:
 ~/.npm, ~/Library/Caches, ~/Library/Logs, ~/Library/Developer/Xcode. Symbolic links and folders outside the roots
 are skipped. com.apple.* folders are never touched. Close the app whose cache you clean.
@@ -37,6 +38,70 @@ CACHE_PREFIX = "cache:"
 SAFE_NAME = re.compile(r"^[^/\\\0]+$")
 MAX_IDS = 60
 OLD_DAYS = 30   # quick clean touches only files not changed for this many days
+
+
+# Caches that hold data an app cannot quickly rebuild (offline media, sync state, VM images, messages). Matched by
+# a part of the folder name, case-insensitive. Such folders are shown but never selectable.
+PROTECTED_WORDS = (
+    "spotify", "dropbox", "googledrive", "google drive", "drivefs", "onedrive", "pcloud", "syncthing", "icloud",
+    "cloudkit", "1password", "bitwarden", "keepass", "signal", "telegram", "whatsapp", "docker", "parallels",
+    "vmware", "virtualbox", "utm", "mail", "photos", "music", "podcasts", "tv", "backup", "timemachine",
+)
+# Fixed caches that belong to a tool: the clean is skipped while the tool runs (process name or bundle id).
+FIXED_BUSY = {
+    "npm": {"names": {"npm"}, "bundles": set()},
+    "pip": {"names": {"pip", "pip3"}, "bundles": set()},
+    "brew": {"names": {"brew"}, "bundles": set()},
+    "xcode": {"names": {"xcode", "xcodebuild"}, "bundles": {"com.apple.dt.xcode"}},
+}
+
+
+def running_apps():
+    """(bundle ids, names) of running apps and processes, lower-case. Empty sets when they cannot be read."""
+    bundles, names = set(), set()
+    try:
+        from AppKit import NSWorkspace
+        for app in NSWorkspace.sharedWorkspace().runningApplications():
+            if app.bundleIdentifier():
+                bundles.add(str(app.bundleIdentifier()).lower())
+            if app.localizedName():
+                names.add(str(app.localizedName()).lower())
+    except Exception:
+        pass
+    try:
+        import psutil
+        for proc in psutil.process_iter(["name"]):
+            if proc.info.get("name"):
+                names.add(proc.info["name"].lower())
+    except Exception:
+        pass
+    return bundles, names
+
+
+def blocked_reason(cid, running=None):
+    """Why this cache must not be cleaned right now: protected data or a running app. None when it is safe."""
+    bundles, names = running if running is not None else running_apps()
+    if cid in FIXED_BUSY:
+        spec = FIXED_BUSY[cid]
+        if (spec["names"] & names) or (spec["bundles"] & bundles):
+            return T("Запущено. Закрийте і повторіть.")
+        return None
+    if not isinstance(cid, str) or not cid.startswith(CACHE_PREFIX):
+        return None
+    low = cid[len(CACHE_PREFIX):].lower()
+    if any(word in low for word in PROTECTED_WORDS):
+        return T("Захищено: тут можуть бути дані, які важко відновити.")
+    for bid in bundles:
+        if low == bid or bid.startswith(low + ".") or low.startswith(bid + "."):
+            return T("Застосунок запущено. Закрийте його і повторіть.")
+    tail = low.rsplit(".", 1)[-1]   # com.openai.codex -> codex
+    for name in names:
+        squeezed = name.replace(" ", "")
+        if len(low) >= 4 and (low == name or low == squeezed or name.startswith(low + " ")):   # "google" for "google chrome"
+            return T("Застосунок запущено. Закрийте його і повторіть.")
+        if "." in low and len(tail) >= 4 and tail in (name, squeezed):
+            return T("Застосунок запущено. Закрийте його і повторіть.")
+    return None
 
 
 def category_of(cid):
@@ -133,20 +198,27 @@ def _drop_empty_dirs(root):
             pass
 
 
-def _old_mb(path, days=OLD_DAYS):
-    """The size of files in path older than days days, in MB: this is exactly what cleaning deletes."""
+def _old_stats(path, days=OLD_DAYS):
+    """(size in MB, file count) of files in path older than days days: this is exactly what cleaning deletes."""
     cutoff = time.time() - days * 86400
-    return round(sum(size for _, size in _walk_old(path, cutoff)) / (1024 * 1024), 1)
+    found = _walk_old(path, cutoff)
+    return round(sum(size for _, size in found) / (1024 * 1024), 1), len(found)
+
+
+def _old_mb(path, days=OLD_DAYS):
+    return _old_stats(path, days)[0]
 
 
 def scan_fixed(days=OLD_DAYS):
     """Fixed safe caches (npm, pip, Homebrew, Xcode, logs) with the size of files older than days days."""
     days = _valid_days(days)
     items = []
+    running = running_apps()
     for cid, (title, path, note) in FIXED.items():
         if os.path.isdir(path) and not os.path.islink(path):
+            size, count = _old_stats(path, days)
             items.append({"id": cid, "title": T(title), "note": T(note), "category": FIXED_CATEGORY[cid],
-                          "sizeMb": _old_mb(path, days)})
+                          "sizeMb": size, "files": count, "blocked": blocked_reason(cid, running)})
     return items
 
 
@@ -174,6 +246,10 @@ def clean_old(ids, days=OLD_DAYS, categories=None):
         root = _target(cid)
         if root is None or os.path.islink(root):
             results.append({"id": cid, "error": T("Недозволена або відсутня папка")})
+            continue
+        reason = blocked_reason(cid)
+        if reason:
+            results.append({"id": cid, "error": reason, "skipped": True})
             continue
         real_root = os.path.realpath(root)
         removed = 0
@@ -208,14 +284,17 @@ def scan(days=OLD_DAYS):
         names = []
     skip = {os.path.basename(p) for _, p, _ in FIXED.values()}
     app_items = []
+    running = running_apps()
     for name in names:
         if name.startswith(".") or name.startswith("com.apple.") or name in skip:
             continue
         cid = CACHE_PREFIX + name
         if _target(cid) is None:
             continue
+        size, count = _old_stats(os.path.join(CACHE_ROOT, name), days)
         app_items.append({"id": cid, "title": name, "note": T("Кеш застосунку. Закрийте його перед очищенням."),
-                          "category": "apps", "sizeMb": _old_mb(os.path.join(CACHE_ROOT, name), days)})
+                          "category": "apps", "sizeMb": size, "files": count,
+                          "blocked": blocked_reason(cid, running)})
     app_items.sort(key=lambda it: -(it["sizeMb"] or 0))
     items += app_items[:40]
     totals = {key: round(sum(i["sizeMb"] or 0 for i in items if i["category"] == key), 1) for key in CATEGORIES}

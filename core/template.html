@@ -71,6 +71,7 @@
     .cache-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:14px; }
     .cache-list { display:grid; gap:8px; margin:14px 0; }
     .cache-item { display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--card2); cursor:pointer; }
+    .cache-item--blocked { opacity:.6; cursor:not-allowed; }
     .cache-item input, .cache-confirm input { flex:none; margin:4px 0 0; accent-color:var(--blue); }
     .cache-copy { flex:1; min-width:0; overflow-wrap:anywhere; }
     .cache-title { display:block; font-weight:600; }
@@ -915,6 +916,8 @@
  "Кеш pip": "pip cache",
  "Кеш відновлюється сам. Закрийте застосунок перед очищенням.": "The cache rebuilds itself. Close the app before cleaning.",
  "Кеш застосунку": "App cache",
+ "пропущено.": "skipped.",
+ "файлів": "files",
  "Кеш пакетів Python.": "Python package cache.",
  "Кеш пакетів npm. Завантажується заново за потреби.": "npm package cache. Downloaded again when needed.",
  "Кеші відновлюються самі, тож їх видалення звільняє місце без ризику.": "Caches rebuild themselves, so deleting them frees space without risk.",
@@ -2630,7 +2633,7 @@
 
     function updateCacheControls() {
       const available = !!cacheApi();
-      const chosen = visible().filter(item => selected.has(item.id));
+      const chosen = visible().filter(item => selected.has(item.id) && !item.blocked);
       const total = chosen.reduce((sum, item) => sum + (knownSize(item.sizeMb) ? item.sizeMb : 0), 0);
       const unknown = chosen.filter(item => !knownSize(item.sizeMb)).length;
       summary.textContent = `Вибрано: ${mb(total)} МБ` + (unknown ? ` · розмір н/д: ${unknown}` : '');
@@ -2638,7 +2641,7 @@
       confirmation.disabled = busy || !available || !items.length;
       daysSelect.disabled = busy || !available;
       cleanButton.disabled = busy || !available || !chosen.length || !confirmation.checked;
-      list.querySelectorAll('input').forEach(input => { input.disabled = busy || !available; });
+      list.querySelectorAll('input').forEach((input, i) => { const it = visible()[i]; input.disabled = busy || !available || !!(it && it.blocked); });
       filters.querySelectorAll('input').forEach(input => { input.disabled = busy || !available; });
       panel.setAttribute('aria-busy', String(busy));
     }
@@ -2650,7 +2653,9 @@
         label.className = 'cache-item';
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
-        checkbox.checked = selected.has(item.id);
+        checkbox.checked = selected.has(item.id) && !item.blocked;
+        checkbox.disabled = !!item.blocked;
+        if (item.blocked) label.classList.add('cache-item--blocked');
         checkbox.addEventListener('change', () => {
           if (busy) return;
           if (checkbox.checked) selected.add(item.id);
@@ -2664,7 +2669,8 @@
         title.textContent = item.title;
         const note = document.createElement('span');
         note.className = 'cache-note';
-        note.textContent = item.note;
+        const files = Number(item.files) > 0 ? ` · ${item.files} ${window.MacSafeI18n ? window.MacSafeI18n.tr('файлів') : 'файлів'}` : '';
+        note.textContent = item.blocked ? item.blocked : `${item.note}${files}`;
         copy.append(title, note);
         const size = document.createElement('span');
         size.className = 'cache-size';
@@ -2722,6 +2728,7 @@
         const count = Math.max(Number(result.errorCount) || 0, errors.length);
         const title = titles.get(result.id);
         const name = title ? `${title} (${result.id})` : String(result.id);
+        if (result.skipped) { row.textContent = `${name}: пропущено. ${errorText(result.error)}`; results.append(row); return; }
         row.textContent = `${name}: ` + (count ? `помилок: ${count}; звільнено ${mb(result.freedMb)} МБ` : `звільнено ${mb(result.freedMb)} МБ`);
         results.append(row);
         if (errors.length) {
@@ -2751,7 +2758,7 @@
       if (busy) return;
       const api = cacheApi();
       if (!api) { status.textContent = unavailable; updateCacheControls(); return; }
-      const ids = visible().filter(item => selected.has(item.id)).map(item => item.id);
+      const ids = visible().filter(item => selected.has(item.id) && !item.blocked).map(item => item.id);
       if (!ids.length || !confirmation.checked) return;
       const titles = new Map(items.map(item => [item.id, item.title]));
       busy = true;
