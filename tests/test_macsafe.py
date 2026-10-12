@@ -744,6 +744,31 @@ class ThermalHidTests(unittest.TestCase):
         self.assertNotIn("sudo powermetrics", script)
 
 
+class LauncherTests(unittest.TestCase):
+    """The menu bar icon must appear when the app is opened by Launch Services."""
+
+    def setUp(self):
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(here, "build_app.sh"), encoding="utf-8") as fh:
+            self.build = fh.read()
+        start = self.build.index("<<'LAUNCHER'")
+        self.launcher = self.build[start:self.build.index("\nLAUNCHER\n", start)]
+
+    def test_python_is_a_child_not_an_exec(self):
+        # exec into Python.app made the status item disappear when the app was started with `open`
+        self.assertNotIn("exec ", self.launcher)
+        self.assertIn('"$PY" "$HERE/Contents/Resources/agent.py" "$@" &', self.launcher)
+
+    def test_launcher_stops_its_child_and_waits_for_it(self):
+        self.assertIn("trap 'kill \"$CHILD\" 2>/dev/null' TERM INT HUP", self.launcher)
+        self.assertIn('wait "$CHILD"', self.launcher)
+
+    def test_launcher_script_is_valid_bash(self):
+        body = self.launcher.split("\n", 1)[1]
+        r = subprocess.run(["/bin/bash", "-n"], input=body, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+
 class ScoreModelTests(unittest.TestCase):
     """The score: critical problems count, warnings are capped, recommendations and the daemon do not."""
 

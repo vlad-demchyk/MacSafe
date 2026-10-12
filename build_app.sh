@@ -74,7 +74,14 @@ HERE="$(cd "$(dirname "$0")/../.." && pwd)"
 export MACSAFE_LAUNCHER="$HERE/Contents/MacOS/launcher"
 export PYTHONPATH="$HERE/Contents/Resources/site-packages:$HERE/Contents/Resources"
 export PYTHONNOUSERSITE=1
-exec "$HERE/Contents/Frameworks/Python3.framework/Versions/3.9/Resources/Python.app/Contents/MacOS/Python" "$HERE/Contents/Resources/agent.py" "$@"
+# Python runs as a child, not through exec: when the app is opened by Launch Services, a process that replaces itself with the
+# executable of another bundle (Python.app) loses its place in the menu bar and its status item never appears.
+PY="$HERE/Contents/Frameworks/Python3.framework/Versions/3.9/Resources/Python.app/Contents/MacOS/Python"
+"$PY" "$HERE/Contents/Resources/agent.py" "$@" &
+CHILD=$!
+trap 'kill "$CHILD" 2>/dev/null' TERM INT HUP
+wait "$CHILD"
+exit $?
 LAUNCHER
 chmod +x "$LAUNCH"
 
