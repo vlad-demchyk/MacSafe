@@ -585,8 +585,16 @@ class _PopoverPanel:
         # Status line in one row: long text is truncated instead of taking a second row at the bottom
         self.note = _label(root, "", PANEL_PAD, 0, INNER_W, 10, True, height=14)
         self.note.cell().setLineBreakMode_(AppKit.NSLineBreakByTruncatingTail)
+        # The panel scrolls when it is taller than the screen
+        self.scroll = AppKit.NSScrollView.alloc().initWithFrame_(NSMakeRect(0, 0, PANEL_W, 300))
+        self.scroll.setHasVerticalScroller_(True)
+        self.scroll.setAutohidesScrollers_(True)
+        self.scroll.setScrollerStyle_(AppKit.NSScrollerStyleOverlay)
+        self.scroll.setDrawsBackground_(False)
+        self.scroll.setBorderType_(AppKit.NSNoBorder)
+        self.scroll.setDocumentView_(root)
         self.controller = AppKit.NSViewController.alloc().init()
-        self.controller.setView_(root)
+        self.controller.setView_(self.scroll)
         self.popover = AppKit.NSPopover.alloc().init()
         self.popover.setContentViewController_(self.controller)
         self.popover.setBehavior_(AppKit.NSPopoverBehaviorTransient)
@@ -653,12 +661,22 @@ class _PopoverPanel:
         self.footer_quit.setFrame_(NSMakeRect(PANEL_W - PANEL_PAD - quit_w, y + 8, quit_w, 22))
         y += 8 + 22 + 10
         self.root.setFrame_(NSMakeRect(0, 0, PANEL_W, y))
+        y = min(y, self._max_height())
         # Resizing an open NSPopover shifts its content, so we call it only when the height really changed
         if (PANEL_W, y) != getattr(self, "_size", None):
             self._size = (PANEL_W, y)
             # Per-second height changes from the process lists are without animation, otherwise the panel would sway side to side
             self.popover.setAnimates_(animate and not _reduce_motion())
             self.popover.setContentSize_(NSMakeSize(PANEL_W, y))
+
+    def _max_height(self):
+        """The tallest the panel may be: the visible height of the screen under the menu bar icon minus the arrow and margins."""
+        button = getattr(self.owner, "_button", None)
+        window = button.window() if button is not None else None
+        screen = (window.screen() if window is not None else None) or AppKit.NSScreen.mainScreen()
+        if screen is None:
+            return 10000
+        return max(300, screen.visibleFrame().size.height - 40)
 
     def freeze(self):
         """Pins the rows as they are visible now: positions do not change while there is no selection or “Sure?”."""
