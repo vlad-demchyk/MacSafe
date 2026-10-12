@@ -27,6 +27,7 @@ import engine
 import history
 import i18n
 import menubar
+import metrics
 from i18n import T
 from metrics import Monitor
 from prefs import Prefs
@@ -129,7 +130,17 @@ def main():
             bar["ctrl"].set_note(T("Записано, але launchd не запустив зараз: {err}. Діє з наступного входу.", err=err))
         return autostart.is_enabled()
 
-    rules = alerts.Alerts()
+    def busiest_app():
+        # Two scans a second apart give real CPU values; the closed agent does not scan processes otherwise
+        try:
+            metrics.take_processes()
+            time.sleep(1)
+            top = metrics.take_processes()[0]
+            return top[0]["name"] if top and top[0]["cpu"] >= 30 else None
+        except Exception:
+            return None
+
+    rules = alerts.Alerts(culprit=busiest_app)
     daily = {"at": -3600.0}
 
     def notify(title, text):

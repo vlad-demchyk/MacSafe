@@ -12,6 +12,9 @@ PRESSURE_WARN = 2       # kern.memorystatus_vm_pressure_level: 1 normal, 2 warni
 DISK_FREE_GB = 10       # the least free disk space that is always fine, GB
 DISK_MAX_GB = 30        # the threshold never rises above this
 BATTERY_LOW = 15        # charge percentage when not on power
+HEAT_C = 90             # processor temperature, °C (history.HOT_C)
+CPU_BUSY = 90           # system CPU load, percent
+LONG_HOLD = 300.0       # heat and load are alerted only when they last this long
 HOLD = 60.0             # how many seconds the condition must last
 COOLDOWN = 3600.0       # the pause between repeats of the same notification
 
@@ -22,8 +25,9 @@ def disk_threshold(total_gb):
 
 
 class Alerts:
-    def __init__(self, clock=time.monotonic):
+    def __init__(self, clock=time.monotonic, culprit=None):
         self._clock = clock
+        self._culprit = culprit   # () -> name of the app using the most CPU, or None; called only when the alert fires
         self._since = {}     # id → since when the condition holds
         self._last = {}      # id → when it was last shown
         self._issues = None  # number of security issues at the previous check
@@ -55,6 +59,19 @@ class Alerts:
         low = disk is not None and disk["freeGb"] < disk_threshold(disk.get("totalGb"))
         self._fire("disk", low, now, out, T("Мало місця на диску"),
                    T("Вільно {free:.1f} ГБ. Спробуйте «Детальне очищення».", free=disk["freeGb"]) if low else "", hold=0)
+        temp = snap.get("temp")
+        self._fire("heat", temp is not None and temp >= HEAT_C, now, out, T("Процесор перегрівається"),
+                   T("Температура {temp:.0f} °C вже кілька хвилин. Закрийте важкі застосунки й дайте Mac охолонути.", temp=temp) if temp else "",
+                   hold=LONG_HOLD)
+        cpu = snap.get("cpu")
+        busy = cpu is not None and cpu >= CPU_BUSY
+        before = len(out)
+        self._fire("cpu", busy, now, out, T("Процесор довго навантажений"), T("Навантаження {cpu:.0f}% кілька хвилин.", cpu=cpu) if cpu else "",
+                   hold=LONG_HOLD)
+        if len(out) > before and self._culprit:
+            name = self._culprit()
+            if name:
+                out[-1] = (out[-1][0], out[-1][1] + " " + T("Найбільше: {name}.", name=name))
         bat = snap.get("battery")
         flat = bat is not None and not bat["plugged"] and bat["percent"] <= BATTERY_LOW
         self._fire("battery", flat, now, out, T("Низький заряд батареї"),

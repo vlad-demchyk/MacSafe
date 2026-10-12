@@ -1236,6 +1236,22 @@ class AlertsTests(unittest.TestCase):
         self.assertEqual(self.alerts.disk_threshold(256), 12.8)
         self.assertEqual(self.alerts.disk_threshold(4000), 30)
 
+    def test_heat_and_busy_cpu_need_five_minutes(self):
+        hot = dict(self.snap(), temp=95, cpu=97)
+        self.assertEqual(self.rules.check(hot), [])
+        self.now[0] = 299
+        self.assertEqual(self.rules.check(hot), [])
+        self.now[0] = 301
+        self.assertEqual(len(self.rules.check(hot)), 2)
+
+    def test_busy_cpu_names_the_culprit(self):
+        rules = self.alerts.Alerts(clock=lambda: self.now[0], culprit=lambda: "Xcode")
+        busy = dict(self.snap(), cpu=99)
+        rules.check(busy)
+        self.now[0] = 301
+        out = rules.check(busy)
+        self.assertIn("Xcode", out[0][1])
+
     def test_charging_battery_silent(self):
         self.assertEqual(self.rules.check(self.snap(bat={"percent": 5.0, "plugged": True})), [])
 
