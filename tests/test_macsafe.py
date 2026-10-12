@@ -1628,6 +1628,84 @@ class NetInfoTests(unittest.TestCase):
         self.assertTrue(info["wifi"] is None or info["wifi"]["rssi"] < 0)
 
 
+class StorageTests(unittest.TestCase):
+    def setUp(self):
+        import storage
+        self.st = storage
+        self.home = os.path.realpath(tempfile.mkdtemp())
+        lib = os.path.join(self.home, "GameHub", "steamapps")
+        os.makedirs(os.path.join(lib, "common", "Cool Game"))
+        os.makedirs(os.path.join(lib, "common", "Steamworks Shared"))
+        os.makedirs(os.path.join(lib, "compatdata", "111"))
+        with open(os.path.join(lib, "common", "Cool Game", "data.bin"), "wb") as fh:
+            fh.write(b"x" * 4096)
+        with open(os.path.join(lib, "compatdata", "111", "reg"), "wb") as fh:
+            fh.write(b"x" * 4096)
+        for appid, name, folder in (("111", "Cool Game", "Cool Game"), ("228980", "Steamworks Common Redistributables", "Steamworks Shared")):
+            with open(os.path.join(lib, f"appmanifest_{appid}.acf"), "w") as fh:
+                fh.write('"AppState"\n{\n\t"appid"\t\t"%s"\n\t"name"\t\t"%s"\n\t"installdir"\t\t"%s"\n}\n' % (appid, name, folder))
+        self.lib = lib
+        bottle = os.path.join(self.home, "Library", "Application Support", "CrossOver", "Bottles", "Win10")
+        os.makedirs(bottle)
+        with open(os.path.join(bottle, "disk.bin"), "wb") as fh:
+            fh.write(b"x" * 4096)
+        self.saved_min = storage.MIN_SHOW_MB
+        storage.MIN_SHOW_MB = 0
+
+    def tearDown(self):
+        self.st.MIN_SHOW_MB = self.saved_min
+        shutil.rmtree(self.home, ignore_errors=True)
+
+    def games(self):
+        return {i["name"]: i for i in self.st.scan("games", self.home, app_dirs=())}
+
+    def test_steam_game_found_with_its_data_and_tools_skipped(self):
+        games = self.games()
+        self.assertIn("Cool Game", games)
+        self.assertNotIn("Steamworks Common Redistributables", games)
+        paths = games["Cool Game"]["paths"]
+        self.assertIn(os.path.join(self.lib, "appmanifest_111.acf"), paths)
+        self.assertIn(os.path.join(self.lib, "compatdata", "111"), paths)
+
+    def test_bottle_is_found_and_removable_launcher_data_is_not(self):
+        games = self.games()
+        self.assertTrue(games["CrossOver: Win10"]["removable"])
+        os.makedirs(os.path.join(self.home, "Library", "Application Support", "OpenEmu"))
+        with open(os.path.join(self.home, "Library", "Application Support", "OpenEmu", "a.rom"), "wb") as fh:
+            fh.write(b"x" * 4096)
+        self.assertFalse(self.games()["OpenEmu"]["removable"])
+
+    def test_remove_trashes_game_manifest_and_data_only_from_a_fresh_scan(self):
+        moved = []
+        gid = self.games()["Cool Game"]["id"]
+        r = self.st.remove([gid, "steam:ghost"], self.home, (), trasher=lambda p: (moved.append(p) or (True, "")))
+        self.assertEqual([x["ok"] for x in r["results"]], [True, False])
+        self.assertEqual(moved[0], os.path.join(self.lib, "common", "Cool Game"))
+        self.assertEqual(len(moved), 3)       # the folder, the manifest and the compatdata
+
+    def test_remove_refuses_data_of_launchers(self):
+        os.makedirs(os.path.join(self.home, "Library", "Application Support", "RetroArch"))
+        with open(os.path.join(self.home, "Library", "Application Support", "RetroArch", "a"), "wb") as fh:
+            fh.write(b"x" * 4096)
+        gid = self.games()["RetroArch"]["id"]
+        r = self.st.remove([gid], self.home, (), trasher=lambda p: (True, ""))
+        self.assertFalse(r["results"][0]["ok"])
+
+    def test_small_data_is_not_shown(self):
+        self.st.MIN_SHOW_MB = 100
+        self.assertNotIn("CrossOver: Win10", self.games())
+        self.assertIn("Cool Game", self.games())      # games are always shown
+
+    def test_overview_lists_only_found_categories(self):
+        found = {c["id"] for c in self.st.overview(self.home, ())}
+        self.assertEqual(found, {"games"})
+
+    def test_known_path_only_for_the_last_scan(self):
+        self.games()
+        self.assertTrue(self.st.known_path("games", os.path.join(self.lib, "common", "Cool Game")))
+        self.assertFalse(self.st.known_path("games", "/etc"))
+
+
 class BigFilesTests(unittest.TestCase):
     def setUp(self):
         import bigfiles

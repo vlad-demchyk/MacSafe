@@ -25,6 +25,7 @@ import actions
 import apps
 import leftovers
 import llm
+import storage
 import trash
 import zones
 from diff import security_changes
@@ -302,6 +303,31 @@ class Api:
     def reveal_folder(self, path):
         """Shows a folder or file of the disk map in Finder."""
         return self.reveal_file(path)
+
+    # ---------- Storage categories: games, virtual machines, developer tools ----------
+    def storage_overview(self):
+        """Which categories exist on this Mac (only the found ones), without counting sizes."""
+        return {"items": storage.overview()}
+
+    def storage_scan(self, category):
+        """The items of one category with sizes. Changes nothing."""
+        return {"items": storage.scan(category) if category in storage.TITLES else []}
+
+    def storage_reveal(self, category, path):
+        """Shows a path of the last scan in Finder."""
+        if not isinstance(path, str) or not storage.known_path(category, path):
+            return {"ok": False, "error": T("Недозволений шлях")}
+        try:
+            subprocess.run(["/usr/bin/open", "-R", path], check=True, timeout=15)
+        except (OSError, subprocess.SubprocessError):
+            return {"ok": False, "error": T("Не вдалося показати у Finder")}
+        return {"ok": True}
+
+    def storage_remove(self, ids, confirm):
+        """Removes games to the Trash (Steam: the folder with its manifest and data). Only with confirmation."""
+        if confirm is not True:
+            return {"ok": False, "error": T("Потрібне підтвердження")}
+        return storage.remove(ids)
 
     # ---------- Duplicate files ----------
     def dupes_roots(self):
