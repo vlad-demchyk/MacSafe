@@ -9,10 +9,16 @@ import time
 
 RAM_PERCENT = 92        # percent of memory in use, used only when the memory pressure is unknown
 PRESSURE_WARN = 2       # kern.memorystatus_vm_pressure_level: 1 normal, 2 warning, 4 critical
-DISK_FREE_GB = 10       # free disk space, GB
+DISK_FREE_GB = 10       # the least free disk space that is always fine, GB
+DISK_MAX_GB = 30        # the threshold never rises above this
 BATTERY_LOW = 15        # charge percentage when not on power
 HOLD = 60.0             # how many seconds the condition must last
 COOLDOWN = 3600.0       # the pause between repeats of the same notification
+
+
+def disk_threshold(total_gb):
+    """Free space (GB) below which to warn: 5% of the disk, at least 10 GB and at most 30 GB."""
+    return min(max(DISK_FREE_GB, 0.05 * (total_gb or 0)), DISK_MAX_GB)
 
 
 class Alerts:
@@ -46,7 +52,7 @@ class Alerts:
         self._fire("ram", tight, now, out,
                    T("Памʼять майже вичерпана"), T("Зайнято {ram:.0f}%. Закрийте важкі застосунки або відкрийте «Процеси».", ram=ram) if ram else "")
         disk = snap.get("disk")
-        low = disk is not None and disk["freeGb"] < DISK_FREE_GB
+        low = disk is not None and disk["freeGb"] < disk_threshold(disk.get("totalGb"))
         self._fire("disk", low, now, out, T("Мало місця на диску"),
                    T("Вільно {free:.1f} ГБ. Спробуйте «Детальне очищення».", free=disk["freeGb"]) if low else "", hold=0)
         bat = snap.get("battery")

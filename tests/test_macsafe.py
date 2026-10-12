@@ -1231,6 +1231,11 @@ class AlertsTests(unittest.TestCase):
         out = self.rules.check(self.snap(free=3, bat={"percent": 10.0, "plugged": False}))
         self.assertEqual(len(out), 2)
 
+    def test_disk_threshold_scales_with_size(self):
+        self.assertEqual(self.alerts.disk_threshold(None), 10)
+        self.assertEqual(self.alerts.disk_threshold(256), 12.8)
+        self.assertEqual(self.alerts.disk_threshold(4000), 30)
+
     def test_charging_battery_silent(self):
         self.assertEqual(self.rules.check(self.snap(bat={"percent": 5.0, "plugged": True})), [])
 
