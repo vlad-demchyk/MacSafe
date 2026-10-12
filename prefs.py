@@ -7,7 +7,7 @@ import json
 import os
 
 DEFAULTS = {"cpu": True, "ram": True, "gpu": True, "style": "both", "interval": 2,
-            "alerts": True, "dailyCheck": True, "language": "en", "graphTemp": True, "graphPower": False}
+            "alerts": True, "dailyCheck": True, "language": "en", "graphTemp": True}
 STYLES = ("both", "icon", "text")   # icon and numbers / icon only / numbers only
 INTERVALS = (1, 2, 5)              # seconds between metric samples
 LANGUAGES = ("uk", "en")   # English is the default
@@ -27,7 +27,7 @@ class Prefs:
             return
         if not isinstance(raw, dict):
             return
-        for key in ("cpu", "ram", "gpu", "alerts", "dailyCheck", "graphTemp", "graphPower"):
+        for key in ("cpu", "ram", "gpu", "alerts", "dailyCheck", "graphTemp"):
             if isinstance(raw.get(key), bool):
                 self._data[key] = raw[key]
         if raw.get("style") in STYLES:
@@ -41,7 +41,7 @@ class Prefs:
         return self._data[key]
 
     def set(self, key, value):
-        if key in ("cpu", "ram", "gpu", "alerts", "dailyCheck", "graphTemp", "graphPower"):
+        if key in ("cpu", "ram", "gpu", "alerts", "dailyCheck", "graphTemp"):
             value = bool(value)
         elif key == "style":
             if value not in STYLES:
