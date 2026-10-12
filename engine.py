@@ -26,6 +26,7 @@ import apps
 import leftovers
 import llm
 import trash
+import zones
 from diff import security_changes
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -259,6 +260,9 @@ class Api:
         """Moves a large file to the Trash (restorable). Only with confirmation and for a path inside the home folder."""
         if confirm is not True:
             return {"ok": False, "error": T("Потрібне підтвердження")}
+        reason = zones.blocked_for_trash(path) if isinstance(path, str) and os.path.exists(path) else None
+        if reason:   # projects, vaults, sync folders and other isolated zones are handled by hand in Finder
+            return {"ok": False, "error": reason}
         ok, error = trash.move_to_trash(path)
         return {"ok": ok, "error": error}
 

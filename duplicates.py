@@ -2,7 +2,8 @@
 
 The search runs in the background (start/poll/cancel). Files are grouped by size, then by a hash of the first 64 KB,
 then by a hash of the whole content, so only files that could really be equal are read in full. Hard links to one
-file are the same file, not a copy, and are not reported. The page chooses among the folders found directly in the home folder (never a free path).
+file are the same file, not a copy, and are not reported. The page chooses among the folders found directly in the home folder (never a free path). Isolated zones (see
+zones.py) are left out, and a group that would free less than MIN_WASTED is not shown: it is noise.
 Removal moves the chosen copies to the Trash, and only if at least one copy of every group stays.
 """
 from i18n import T
@@ -11,11 +12,11 @@ import os
 import threading
 import time
 
+import zones
+
 HOME = os.path.expanduser("~")
-STANDARD = ("Documents", "Downloads", "Desktop", "Pictures", "Movies", "Music")   # ticked by default on the page
-SKIP_DIR_SUFFIX = (".app", ".photoslibrary", ".musiclibrary", ".tvlibrary", ".xcodeproj", ".xcworkspace", ".framework",
-                   ".bundle", ".plugin", ".lproj", ".sparsebundle", ".noindex", ".imovielibrary", ".fcpbundle")
-SKIP_DIR_NAMES = {"node_modules", "Library", ".git", ".Trash", "__pycache__", "venv", ".venv"}
+STANDARD = zones.STANDARD   # ticked by default on the page
+MIN_WASTED = 5 * 1048576    # a group that frees less than this is not worth showing
 HEAD = 64 * 1024
 CHUNK = 1024 * 1024
 MAX_GROUPS = 100
@@ -42,8 +43,13 @@ def _hash(path, limit=None):
     return h.digest()
 
 
-def walk(roots, min_bytes, cancelled=lambda: False):
-    """{size: [(path, mtime, dev, ino)]} for regular files of at least min_bytes. Links and bundles are skipped."""
+def walk(roots, min_bytes, cancelled=lambda: False, skipped=None):
+    """{size: [(path, mtime, dev, ino)]} for regular files of at least min_bytes.
+
+    Links, hidden files and files other programs depend on are skipped, and so is every isolated zone (projects,
+    vaults, sync folders, bundles, dependencies, other tools' stores): duplicates there are normal. The zones
+    that were left out are collected into `skipped` as {path, reason}.
+    """
     by_size = {}
     stack = list(roots)
     while stack and not cancelled():
@@ -57,12 +63,16 @@ def walk(roots, min_bytes, cancelled=lambda: False):
                 if e.is_symlink():
                     continue
                 if e.is_dir(follow_symlinks=False):
-                    if e.name in SKIP_DIR_NAMES or e.name.startswith(".") or e.name.endswith(SKIP_DIR_SUFFIX):
+                    # the chosen folder itself may hold a stray marker; only what is inside it is judged
+                    reason = zones.isolated_dir(e.name, e.path)
+                    if reason:
+                        if skipped is not None and len(skipped) < 30 and not e.name.startswith("."):
+                            skipped.append({"path": e.path, "reason": reason})
                         continue
                     stack.append(e.path)
                 elif e.is_file(follow_symlinks=False):
                     st = e.stat(follow_symlinks=False)
-                    if st.st_size >= min_bytes and not e.name.startswith("."):
+                    if st.st_size >= min_bytes and not zones.isolated_file(e.name):
                         by_size.setdefault(st.st_size, []).append((e.path, st.st_mtime, st.st_dev, st.st_ino))
             except OSError:
                 continue
@@ -103,6 +113,7 @@ def find_groups(by_size, progress=None, cancelled=lambda: False):
         done += len(candidates[size])
         if progress:
             progress(done, total)
+    groups = [g for g in groups if g["size"] * (len(g["files"]) - 1) >= MIN_WASTED]   # small gains are noise
     groups.sort(key=lambda g: -g["size"] * (len(g["files"]) - 1))
     return groups[:MAX_GROUPS]
 
@@ -122,7 +133,7 @@ def available_roots(home=None):
     except OSError:
         return found
     for e in entries:
-        if e.name.startswith(".") or e.name in SKIP_DIR_NAMES or e.name.endswith(SKIP_DIR_SUFFIX):
+        if zones.isolated_dir(e.name, e.path, check_marker=False):   # stores, sync folders, Library and the like
             continue
         if e.is_dir(follow_symlinks=False) and not e.is_symlink():
             found.append({"id": e.name, "standard": e.name in STANDARD})
@@ -137,18 +148,18 @@ def resolve_roots(ids, home=None):
             if isinstance(rid, str) and rid in allowed]
 
 
-def start(root_ids, min_mb=1, home=None):
+def start(root_ids, min_mb=5, home=None):
     """Starts the search in the background. A search already running is not started twice."""
     roots = resolve_roots(root_ids, home)
     if not roots:
         return {"ok": False, "error": T("Нічого не вибрано")}
-    min_bytes = max(1, int(float(min_mb) * 1048576)) if isinstance(min_mb, (int, float)) and min_mb > 0 else 1048576
+    min_bytes = max(1, int(float(min_mb) * 1048576)) if isinstance(min_mb, (int, float)) and min_mb > 0 else 5 * 1048576
     with _LOCK:
         job = _JOB["state"]
         if job and not job["done"]:
             return poll()
         job = {"done": False, "cancel": False, "stage": "walk", "files": 0, "counted": 0, "total": 0, "result": None, "error": None,
-               "roots": roots}
+               "roots": roots, "skipped": []}
         _JOB["state"] = job
     threading.Thread(target=_work, args=(job, min_bytes), daemon=True).start()
     return poll()
@@ -157,7 +168,7 @@ def start(root_ids, min_mb=1, home=None):
 def _work(job, min_bytes):
     cancelled = lambda: job["cancel"]
     try:
-        by_size = walk(job["roots"], min_bytes, cancelled)
+        by_size = walk(job["roots"], min_bytes, cancelled, job["skipped"])
         job["files"] = sum(len(f) for f in by_size.values())
         job["stage"] = "hash"
 
@@ -176,7 +187,8 @@ def poll():
     if job is None:
         return {"ok": False, "error": T("Пошук не запускали")}
     return {"ok": True, "done": job["done"], "stage": job["stage"], "files": job["files"], "counted": job["counted"],
-            "total": job["total"], "result": job["result"], "error": job["error"], "cancelled": job["cancel"]}
+            "total": job["total"], "result": job["result"], "error": job["error"], "cancelled": job["cancel"],
+            "skipped": job["skipped"]}
 
 
 def cancel():
@@ -199,6 +211,10 @@ def trash_copies(paths, trasher=None):
     index = {f["path"]: g for g in groups for f in g["files"]}
     if any(p not in index for p in chosen):
         return {"ok": False, "error": T("Не з результатів пошуку")}
+    for p in sorted(chosen):   # the zones may have changed since the search (a project was cloned in)
+        reason = zones.blocked_for_trash(p, HOME)
+        if reason:
+            return {"ok": False, "error": reason}
     for g in groups:
         paths_in = [f["path"] for f in g["files"]]
         if not any(p in chosen for p in paths_in):

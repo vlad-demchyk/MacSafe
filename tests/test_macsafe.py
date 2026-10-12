@@ -1488,8 +1488,12 @@ class DuplicatesTests(unittest.TestCase):
         os.makedirs(os.path.join(self.docs, "X.app"))
         self.write("X.app/inside.bin", b"A" * 2048)                   # inside a bundle: skipped
         self.d._JOB["state"] = None
+        self.saved_waste, self.saved_home = self.d.MIN_WASTED, self.d.HOME
+        self.d.MIN_WASTED = 0          # the test files are tiny
+        self.d.HOME = self.home
 
     def tearDown(self):
+        self.d.MIN_WASTED, self.d.HOME = self.saved_waste, self.saved_home
         self.d._JOB["state"] = None
         shutil.rmtree(self.home, ignore_errors=True)
 
@@ -1535,6 +1539,75 @@ class DuplicatesTests(unittest.TestCase):
         with open(self.b, "wb") as fh:
             fh.write(b"C" * 2048)                                     # same size, changed content
         self.assertFalse(self.d.trash_copies([self.b], lambda p: (True, ""))["ok"])
+
+
+class ZonesTests(unittest.TestCase):
+    def setUp(self):
+        self.home = os.path.realpath(tempfile.mkdtemp())
+        import zones
+        self.z = zones
+
+    def tearDown(self):
+        shutil.rmtree(self.home, ignore_errors=True)
+
+    def mk(self, rel, marker=None):
+        path = os.path.join(self.home, rel)
+        os.makedirs(path, exist_ok=True)
+        if marker:
+            open(os.path.join(path, marker), "w").close()
+        return path
+
+    def test_hard_zones_are_never_trashable(self):
+        for rel in (".ssh/id_ed25519", "Library/Keychains/login.keychain-db", "Library/Mail/V10", "Library/Mobile Documents/x",
+                    "Library/Preferences/com.apple.finder.plist", "Library/Group Containers/group.com.apple.notes",
+                    "Pictures/Photos Library.photoslibrary/originals/a.heic", ".zshrc", "Library", "Documents"):
+            self.assertIsNotNone(self.z.hard_protected(os.path.join(self.home, rel), self.home), rel)
+        self.assertIsNotNone(self.z.hard_protected(self.home, self.home))
+
+    def test_an_apps_own_leftovers_are_not_hard_protected(self):
+        for rel in ("Library/Caches/com.vendor.demo", "Library/Preferences/com.vendor.demo.plist",
+                    "Library/Application Support/com.vendor.demo", "Downloads/film.mkv"):
+            self.assertIsNone(self.z.hard_protected(os.path.join(self.home, rel), self.home), rel)
+
+    def test_projects_and_sync_folders_are_isolated(self):
+        project = self.mk("repositories/site", "package.json")
+        self.assertIn("package.json", self.z.isolated_dir("site", project))
+        self.assertIsNotNone(self.z.isolated_dir("node_modules", self.mk("repositories/site/node_modules")))
+        self.assertIsNotNone(self.z.isolated_dir("Dropbox", self.mk("Dropbox")))
+        self.assertIsNotNone(self.z.isolated_dir("My.photoslibrary", self.mk("Pictures/My.photoslibrary")))
+        self.assertIsNone(self.z.isolated_dir("Holiday", self.mk("Pictures/Holiday")))
+
+    def test_blocked_for_trash_looks_at_every_parent(self):
+        self.mk("repositories/site", "Cargo.toml")
+        inside = os.path.join(self.mk("repositories/site/data"), "big.bin")
+        open(inside, "w").close()
+        self.assertIsNotNone(self.z.blocked_for_trash(inside, self.home))
+        free = os.path.join(self.mk("Downloads"), "x.zip")
+        open(free, "w").close()
+        self.assertIsNone(self.z.blocked_for_trash(free, self.home))
+        open(os.path.join(self.home, "Downloads", "package.json"), "w").close()   # a stray marker in a content folder
+        self.assertIsNone(self.z.blocked_for_trash(free, self.home))
+
+    def test_skipped_files(self):
+        self.assertIsNotNone(self.z.isolated_file("data.sqlite"))
+        self.assertIsNotNone(self.z.isolated_file(".DS_Store"))
+        self.assertIsNone(self.z.isolated_file("photo.jpg"))
+
+    def test_duplicates_ignore_projects(self):
+        import duplicates
+        saved, duplicates.MIN_WASTED = duplicates.MIN_WASTED, 0
+        try:
+            for folder in ("Downloads", "repositories/a", "repositories/b"):
+                self.mk(folder, "package.json" if folder.startswith("repositories") else None)
+                with open(os.path.join(self.home, folder, "same.bin"), "wb") as fh:
+                    fh.write(b"Z" * 4096)
+            skipped = []
+            by_size = duplicates.walk([os.path.join(self.home, "Downloads"), os.path.join(self.home, "repositories")], 1, skipped=skipped)
+            self.assertEqual([f[0] for f in by_size[4096]], [os.path.join(self.home, "Downloads", "same.bin")])
+            self.assertEqual(len(skipped), 2)
+            self.assertEqual(duplicates.find_groups(by_size), [])
+        finally:
+            duplicates.MIN_WASTED = saved
 
 
 class BigFilesTests(unittest.TestCase):

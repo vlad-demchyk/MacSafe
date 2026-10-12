@@ -1,10 +1,13 @@
 """Moving to the macOS Trash (restorable). Never deletes permanently.
 
-The path must be an existing file or folder inside the home folder, not a symbolic link.
+The path must be an existing file or folder inside the home folder, not a symbolic link, and not in a hard
+protected zone (see zones.py).
 Uses NSFileManager.trashItemAtURL: no request for permission to control Finder.
 """
 from i18n import T
 import os
+
+import zones
 
 HOME = os.path.expanduser("~")
 
@@ -19,7 +22,7 @@ def safe_target(path):
     home = os.path.realpath(HOME)
     if real != os.path.abspath(path) or not real.startswith(home + os.sep):
         return None
-    if real.startswith(os.path.join(home, ".Trash") + os.sep):
+    if zones.hard_protected(real, HOME):   # keys, mail, cloud sync, Apple's data, libraries: never from here
         return None
     return real
 

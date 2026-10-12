@@ -86,6 +86,7 @@
     .dp-file { display:flex; align-items:center; gap:8px; font-size:12px; }
     .dp-file span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left; }
     .dp-file.is-keep span { color:var(--good); }
+    .dp-skipped { margin-top:12px; font-size:13px; color:var(--muted); }
     .cache-list { display:grid; gap:8px; margin:14px 0; }
     .cache-item { display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--card2); cursor:pointer; }
     .metric__ico { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; vertical-align:-2px; margin-right:5px; }
@@ -628,11 +629,12 @@
               <button class="btn" id="dup-scan" type="button" disabled>Шукати дублікати</button>
               <button class="btn" id="dup-stop" type="button" hidden>Зупинити</button>
               <label class="cache-days">Від
-                <select id="dup-min" disabled><option value="1" selected>1 МБ</option><option value="5">5 МБ</option><option value="50">50 МБ</option><option value="200">200 МБ</option></select>
+                <select id="dup-min" disabled><option value="5" selected>5 МБ</option><option value="50">50 МБ</option><option value="200">200 МБ</option></select>
               </label>
               <button class="btn btn--danger" id="dup-trash" type="button" disabled>У кошик вибране</button>
             </div>
             <p class="hint" id="dup-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
+            <details class="dp-skipped" id="dup-skipped" hidden><summary id="dup-skipped-sum"></summary><div id="dup-skipped-list"></div></details>
             <div class="cache-list" id="dup-list"></div>
           </article>
           <details class="card more-details"><summary>Рекомендації зі звіту</summary>
@@ -1095,6 +1097,9 @@
  "Перевірте позначене.": "Check what is marked.",
  "Дублікатів не знайдено.": "No duplicates found.",
  "Немає": "None",
+ "Пропущено зон": "Zones left out",
+ "Дублікати в проєктах, хмарних папках і сховищах програм мають сенс, тому вони виключені.": "Duplicates in projects, cloud folders and app stores are normal, so they are excluded.",
+ "Захищено від видалення": "Protected from removal",
  "Знайти великі файли": "Find large files",
  "Знайти залишки": "Find leftovers",
  "Значення в момент звіту.": "Value at the time of the report.",
@@ -3850,6 +3855,7 @@
         label.textContent = `${selected.name} · ${sizeText(selected.sizeMb)}` + (selected.count ? ` · ${selected.count}` : '');
         info.append(label);
         if (!selected.path) return;
+        if (selected.locked) { const lock = document.createElement('span'); lock.className = 'hint'; lock.textContent = `${tr_('Захищено від видалення')}: ${tr_(selected.locked.replace(/\(.*\)/, '(#)'))}`; info.append(lock); }
         const btn = (text, handler, danger) => {
           const b = document.createElement('button');
           b.type = 'button'; b.className = 'btn' + (danger ? ' btn--danger' : ''); b.textContent = tr_(text);
@@ -3861,7 +3867,7 @@
           const a = api();
           try { const r = await a.reveal_file(selected.path); if (!r || !r.ok) st.textContent = (r && r.error) || tr_('Помилка'); } catch (e) { st.textContent = `${tr_('Помилка')}: ${errorText(e)}`; }
         });
-        btn('У кошик', async () => {
+        if (!selected.locked) btn('У кошик', async () => {
           const a = api();
           const what = selected.dir ? tr_('Папку з усім вмістом') : tr_('Файл');
           if (!a || !window.confirm(`${what}: ${selected.name} (${sizeText(selected.sizeMb)})\n${tr_('Перемістити в кошик? Його можна повернути з кошика.')}`)) return;
@@ -4016,6 +4022,21 @@
         }
         sync();
       }
+      function drawSkipped(list) {
+        const box = document.getElementById('dup-skipped');
+        const sum = document.getElementById('dup-skipped-sum');
+        const body = document.getElementById('dup-skipped-list');
+        body.replaceChildren();
+        box.hidden = !list.length;
+        if (!list.length) return;
+        sum.textContent = `${tr_('Пропущено зон')}: ${list.length}. ${tr_('Дублікати в проєктах, хмарних папках і сховищах програм мають сенс, тому вони виключені.')}`;
+        list.forEach(z => {
+          const line = document.createElement('p');
+          line.className = 'hint';
+          line.textContent = `${z.path.replace(/^\/Users\/[^/]+/, '~')} · ${tr_(z.reason.replace(/\(.*\)/, '(#)'))}`;
+          body.append(line);
+        });
+      }
       async function poll() {
         const a = api();
         if (!a) return;
@@ -4035,6 +4056,7 @@
           const wasted = (r.result && r.result.wastedMb) || 0;
           st.textContent = r.cancelled ? tr_('Зупинено.') : groups.length ? `${tr_('Груп')}: ${groups.length}, ${tr_('можна звільнити')} ${sizeText(wasted)}. ${tr_('Перевірте позначене.')}` : tr_('Дублікатів не знайдено.');
           window.setTileSub('ct-dup-sub', groups.length ? `${groups.length} · ${sizeText(wasted)}` : tr_('Немає'));
+          drawSkipped(r.skipped || []);
           shown = 20; draw();
         } catch (e) { stopBtn.hidden = true; scanBtn.disabled = false; st.textContent = `${tr_('Помилка')}: ${errorText(e)}`; }
       }

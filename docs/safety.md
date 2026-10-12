@@ -65,3 +65,28 @@ The map only reads sizes (`du` and a directory listing) and never leaves the hom
 ## Duplicates
 
 The search chooses only among folders found directly in your home folder (not Library, not hidden ones), skips links, app bundles, `node_modules` and `.git`, and changes nothing. Before moving a copy to the Trash MacSafe checks again that it belongs to the last result, that at least one other copy of its group still exists with the same size, and that the file still has the same content as that copy (a file edited since the search is refused). Copies go to the Trash and can be restored.
+
+## Protected zones
+
+Every removal that starts from the window passes the list in `zones.py`. There are two levels.
+
+**Hard zones** are never moved to the Trash from MacSafe, whatever the page asks (enforced in `trash.py`):
+- the home folder itself, its standard folders (Desktop, Documents, Downloads, Pictures, Movies, Music, Library) and dotfiles in the home folder root,
+- keys and credentials: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.config`, `~/.docker`, Keychains,
+- personal data: Mail, Messages, Safari, Calendars, Contacts, Reminders, Photos, AddressBook, Accounts, iPhone backups (MobileSync),
+- cloud sync: `Library/Mobile Documents` (iCloud Drive) and `Library/CloudStorage`,
+- Apple's own data in Library (anything named `com.apple.*`), fonts, input methods, extensions,
+- libraries and images: Photos, Music, TV, iMovie, Final Cut libraries, sparse bundles, VM bundles, Time Machine backups.
+
+**Isolated zones** are left out of searches and one click removals, because copies there are normal and removing one breaks something:
+- projects: a folder with `.git`, `package.json`, `Cargo.toml`, `pyproject.toml`, `Package.swift`, `go.mod`, `Makefile`, `Dockerfile`, an Xcode project and similar, and WordPress sites (`wp-config.php`),
+- vaults (`.obsidian`, `.brain`, `vault.json`) and game libraries (`steamapps`),
+- dependencies, builds and environments: `node_modules`, `vendor`, `venv`, `Pods`, `build`, `dist`, `target`, `DerivedData`, `site-packages`, caches of package managers,
+- cloud folders (Dropbox, OneDrive, Google Drive, iCloud Drive, Box, Nextcloud, Creative Cloud Files): removing a copy deletes it on every device,
+- stores of other programs: model folders, VM folders, Backups, Parallels, UTM, Docker,
+- app bundles and libraries, hidden folders and files,
+- files other programs keep open or rely on: databases, preferences, keys and certificates, disk images, installers, model weights, logs.
+
+The duplicates search skips isolated zones and tells you which ones it left out. A one click removal of a large file, a disk map block or a duplicate is refused inside an isolated zone: handle those by hand in Finder. A stray marker file directly in Downloads, Documents, Desktop, Pictures, Movies or Music does not isolate that whole folder.
+
+Findings that are not worth attention are not shown: a group of duplicates that would free less than 5 MB is dropped, and the search starts at 5 MB per file.

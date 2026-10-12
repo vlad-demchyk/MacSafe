@@ -5,6 +5,7 @@ while the sizes come in (start/poll) and asks for the next level only when a blo
 inside the home folder (no links), the same boundary as showing a file in Finder or moving it to the Trash.
 """
 from i18n import T
+import zones
 import os
 import subprocess
 import threading
@@ -76,6 +77,8 @@ def build(real, dir_sizes, files, pending=0):
     items = items[:MAX_ITEMS]
     if rest:
         items.append({"name": T("Інше"), "path": None, "sizeMb": round(sum(i["sizeMb"] for i in rest), 1), "dir": False, "count": len(rest)})
+    for item in items:   # a block that must not be removed from here carries the reason, the page hides the Trash button
+        item["locked"] = zones.blocked_for_trash(item["path"], HOME) if item["path"] else None
     home = os.path.realpath(HOME)
     return {"ok": True, "path": real, "parent": None if real == home else os.path.dirname(real),
             "totalMb": round(sum(i["sizeMb"] for i in items), 1), "items": items, "pending": pending}
