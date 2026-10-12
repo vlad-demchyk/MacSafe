@@ -7,9 +7,9 @@
   <title>MacSafe</title>
   <style>
     /* macOS surfaces: white, grey, graphite; blue only for interaction. */
-    :root { color-scheme:light dark; --ink:#242426; --muted:#64646a; --canvas:#f5f5f7; --card:#ffffff; --card2:#ededf0; --line:#d6d6dc; --blue:#0069c7; --good:#267447; --warn:#8a5900; --critical:#b32635; --shadow:none; --ease:cubic-bezier(.2,.8,.2,1); --side:248px; }
+    :root { color-scheme:light dark; --ink:#242426; --muted:#64646a; --canvas:#f5f5f7; --card:#ffffff; --card2:#ededf0; --line:#d6d6dc; --blue:#2563eb; --good:#16a34a; --warn:#f59e0b; --warn-ink:#d97706; --critical:#dc2626; --on-good:#fff; --on-warn:#1f1300; --on-critical:#fff; --on-info:#fff; --shadow:none; --ease:cubic-bezier(.2,.8,.2,1); --side:248px; }
     @media (prefers-color-scheme:dark) {
-      :root { --ink:#ededf0; --muted:#a5a5ad; --canvas:#202022; --card:#29292c; --card2:#333337; --line:#45454b; --blue:#78b7ff; --good:#87c296; --warn:#e2bb72; --critical:#f3949d; }
+      :root { --ink:#ededf0; --muted:#a5a5ad; --canvas:#202022; --card:#29292c; --card2:#333337; --line:#45454b; --blue:#60a5fa; --good:#4ade80; --warn:#fbbf24; --warn-ink:#fbbf24; --critical:#f87171; --on-good:#04200d; --on-warn:#1f1300; --on-critical:#2a0707; --on-info:#06203d; }
     }
     * { box-sizing:border-box; }
     body { margin:0; min-width:320px; font:15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; color:var(--ink); background:var(--canvas); }
@@ -85,6 +85,7 @@
     .cc-txt b { font-size:14px; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
     .cc-txt small { min-height:2.6em; }
     .stages { list-style:none; display:flex; flex-wrap:wrap; gap:6px; padding:0; margin:10px 0 12px; font-size:12.5px; }
+    .stages[hidden] { display:none; }
     .stages li { padding:4px 11px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
     .stages li.is-now { border-color:var(--blue); color:var(--ink); font-weight:600; }
     .stages li.is-now::before { content:''; display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--blue); margin-right:7px; animation:cc-pulse 1s ease-in-out infinite; }
@@ -92,7 +93,7 @@
     .stages li.is-done::before { content:'✓ '; }
     @media (prefers-reduced-motion:reduce) { .stages li.is-now::before { animation:none; } }
     .btn.btn--accent { background:var(--accent); color:var(--on-accent, #fff); border-color:transparent; font-weight:600; }
-    .btn.btn--accent:hover:not(:disabled) { filter:brightness(1.08); }
+    .btn.btn--accent:hover:not(:disabled) { background:var(--accent); filter:brightness(1.08); }
     .btn.btn--accent:disabled { background:var(--card2); color:var(--muted); }
     .cleanup-bar { align-items:center; margin:0 0 12px; }
     #cache-panel .cache-filters legend { display:none; }
@@ -116,7 +117,7 @@
     .cc-tile:disabled { opacity:.55; cursor:default; }
     .cc-ico { flex:none; width:40px; height:40px; border-radius:50%; display:grid; place-items:center; color:#fff; background:var(--accent); }
     .cc-ico svg { width:21px; height:21px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
-    .cc-tile--mild .cc-ico { background:#d98a1f; }
+    .cc-tile--mild .cc-ico { background:var(--warn); color:var(--on-warn); }
     .cc-tile--destructive .cc-ico { background:var(--critical); }
     .cc-txt { display:flex; flex-direction:column; min-width:0; }
     .cc-txt b { font-size:14px; line-height:1.25; }
@@ -158,11 +159,11 @@
 
     /* Badges and bars */
     .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:650; white-space:nowrap; vertical-align:middle; }
-    .badge--good { color:var(--good); background:var(--card2); }
-    .badge--warning { color:var(--warn); background:var(--card2); }
-    .badge--critical { color:var(--critical); background:var(--card2); }
+    .badge--good { color:var(--on-good); background:var(--good); }
+    .badge--warning { color:var(--on-warn); background:var(--warn); }
+    .badge--critical { color:var(--on-critical); background:var(--critical); }
     .badge--unknown { color:var(--muted); background:var(--card2); }
-    .badge--info { color:var(--blue); background:var(--card2); }
+    .badge--info { color:var(--on-info); background:var(--blue); }
     .bar { height:7px; border-radius:999px; background:var(--card2); overflow:hidden; margin-top:10px; }
     .bar--thin { height:5px; }
     .bar__fill { display:block; height:100%; width:0; border-radius:999px; transition:width 1.1s var(--ease); }
@@ -178,7 +179,7 @@
     .score--good .ring__fg { stroke:var(--good); } .score--warning .ring__fg { stroke:var(--warn); }
     .score--critical .ring__fg { stroke:var(--critical); } .score--info .ring__fg { stroke:var(--blue); }
     .score__num { font-size:44px; font-weight:650; letter-spacing:-.05em; margin:0; line-height:1; }
-    .score--good .score__num { color:var(--good); } .score--warning .score__num { color:var(--warn); }
+    .score--good .score__num { color:var(--good); } .score--warning .score__num { color:var(--warn-ink); }
     .score--critical .score__num { color:var(--critical); }
     .score__label { margin:6px 0 4px; font-weight:600; font-size:17px; }
     .score__copy { margin:0; color:var(--muted); font-size:13px; max-width:40ch; }
@@ -298,8 +299,8 @@
     .sec[aria-current="page"] .ico { color:var(--on-accent); }
     .sec__title { flex:1; }
     .sec__n { margin-left:auto; font-size:11px; font-weight:650; min-width:20px; text-align:center; border-radius:999px; padding:1px 7px; background:var(--card2); color:var(--muted); }
-    .sec__n--critical { background:var(--critical); color:#fff; }
-    .sec__n--warning { background:var(--warn); color:#fff; }
+    .sec__n--critical { background:var(--critical); color:var(--on-critical); }
+    .sec__n--warning { background:var(--warn); color:var(--on-warn); }
     .sec[aria-current="page"] .sec__n { background:rgba(255,255,255,.26); color:#fff; }
     .side__foot { display:block; margin-top:auto; color:var(--muted); font-size:11px; padding:0 8px; }
     .content { padding:26px 34px 70px; }
@@ -510,12 +511,11 @@
           </div>
           <article class="card cache-panel" id="cache-panel" aria-labelledby="cache-heading" aria-busy="false">
             <h3 id="cache-heading">Кеші застосунків</h3>
-            <p class="hint">Звільняє місце на SSD, не RAM.</p>
             <ol class="stages" id="cache-stages" aria-label="Етапи"></ol>
             <div class="cache-actions">
               <button class="btn" id="cache-scan" type="button" disabled>Перевірити кеші</button>
-              <button class="btn btn--accent" id="cache-auto" type="button" disabled title="Безпечні кеші розробника й логи старші за вибраний вік, без списку вибору">Авто-очищення</button>
-              <label class="cache-days">Файли старші за
+              <button class="btn btn--accent" id="cache-auto" type="button" disabled title="Безпечні кеші розробника й логи старші за вибраний вік, без списку вибору" hidden>Авто-очищення</button>
+              <label class="cache-days" id="cache-days-label" hidden>Файли старші за
                 <select id="cache-days" disabled><option value="7">7 днів</option><option value="30" selected>30 днів</option><option value="90">90 днів</option></select>
               </label>
             </div>
@@ -1000,7 +1000,6 @@
  "Кеш застосунку": "App cache",
  "Локальні LLM": "Local LLMs",
  "Запустити": "Run",
- "Звільняє місце на SSD, не RAM.": "Frees space on the SSD, not RAM.",
  "Перевірити все": "Check all",
  "Кеші": "Caches",
  "Залишки застосунків": "App leftovers",
@@ -2880,12 +2879,10 @@
     const visible = () => items.filter(item => categoryOn.has(item.category));
     const gb = value => `${(value / 1024).toLocaleString('uk-UA', { maximumFractionDigits:1 })} ГБ`;
     const signed = value => `${value >= 0 ? '+' : '−'}${Math.abs(value).toLocaleString('uk-UA')} МБ`;
-    function renderMemory(snap) {
-      memoryBox.hidden = !snap;
-      if (!snap) return;
-      memoryBox.textContent = `RAM зараз: доступно ${snap.availableMb} МБ, вільна ${snap.freeMb} МБ, неактивна ${snap.inactiveMb} МБ, swap ${snap.swapMb} МБ`;
-    }
+    function renderMemory() { memoryBox.hidden = true; }   // this page is about the SSD: RAM is not shown here
     function renderFilters() {
+      filters.hidden = true;
+      return;
       filters.replaceChildren();
       const legend = document.createElement('legend');
       legend.textContent = 'Що очищати (усе безпечне: кеші й логи, які створяться знову)';
@@ -2932,7 +2929,7 @@
       confirmation.disabled = busy || !available || !items.length;
       const foot_ = document.getElementById('cache-foot');
       if (foot_) foot_.hidden = !chosen.length;
-      confirmation.closest('label').hidden = !chosen.length;
+      confirmation.closest('label').hidden = true;
       daysSelect.disabled = busy || !available;
       cleanButton.disabled = busy || !available || !chosen.length || !confirmation.checked;
       list.querySelectorAll('input').forEach((input, i) => { const it = visible()[i]; input.disabled = busy || !available || !!(it && it.blocked); });
@@ -2988,7 +2985,7 @@
     async function refreshCacheItems(api) {
       // The old selection and confirmation are not carried over to the new list.
       selected.clear();
-      confirmation.checked = false;
+      confirmation.checked = true;
       items = [];
       root.hidden = true;
       root.textContent = '';
@@ -3053,14 +3050,6 @@
       const total = document.createElement('p');
       total.textContent = `Звільнено на диску всього ${mb(outcome.freedMb)} МБ (файли старші за ${outcome.days} дн.)`;
       results.append(total);
-      const mem = outcome.memory;
-      if (mem && mem.before && mem.after && mem.delta) {
-        const note = document.createElement('p');
-        note.textContent = `RAM до і після: доступно ${mem.before.availableMb} → ${mem.after.availableMb} МБ (${signed(mem.delta.availableMb)}), `
-          + `вільна ${signed(mem.delta.freeMb)}, неактивна ${signed(mem.delta.inactiveMb)}, swap ${signed(mem.delta.swapMb)}. `
-          + 'Очищення кешів звільняє місце на SSD, а не RAM: RAM майже не змінюється.';
-        results.append(note);
-      }
     }
 
     // Where the user is: scanning, choosing what to clean (or the auto path), cleaning, done
@@ -3069,7 +3058,8 @@
     const autoButton = document.getElementById('cache-auto');
     function setStage(index) {
       const tr_ = t => (window.MacSafeI18n ? window.MacSafeI18n.tr(t) : t);
-      stageBar.innerHTML = STAGE_NAMES.map((name, i) => `<li class="${index < 0 ? '' : i < index ? 'is-done' : i === index ? 'is-now' : ''}">${tr_(name)}</li>`).join('');
+      stageBar.hidden = index < 0;
+      stageBar.innerHTML = index < 0 ? '' : `<li class="${index === 3 ? 'is-done' : 'is-now'}">${tr_(STAGE_NAMES[index])}</li>`;
     }
     setStage(-1);
     // Auto path: only the fixed developer caches and logs that are not blocked; the same guarded cleaning as the manual one
@@ -3079,6 +3069,9 @@
       const list_ = autoItems();
       const total = list_.reduce((sum, item) => sum + item.sizeMb, 0);
       autoButton.disabled = busy || !cacheApi() || !list_.length;
+      autoButton.hidden = !list_.length;
+      const daysLabel_ = document.getElementById('cache-days-label');
+      if (daysLabel_) daysLabel_.hidden = !items.length;
       autoButton.textContent = list_.length ? `Авто-очищення (${mb(total)} МБ)` : 'Авто-очищення';
     }
     async function cleanAuto() {
@@ -3089,8 +3082,11 @@
       return cleanIds(list_.map(i => i.id));
     }
     async function cleanCaches() {
-      const ids = visible().filter(item => selected.has(item.id) && !item.blocked).map(item => item.id);
-      if (!ids.length || !confirmation.checked) return;
+      const picked = visible().filter(item => selected.has(item.id) && !item.blocked);
+      const ids = picked.map(item => item.id);
+      if (!ids.length) return;
+      const total = picked.reduce((sum, item) => sum + (knownSize(item.sizeMb) ? item.sizeMb : 0), 0);
+      if (!window.confirm(`Очистити вибране: ${picked.length}, близько ${mb(total)} МБ?\nЗакрийте ці застосунки. Вміст папок буде видалено без кошика.`)) return;
       return cleanIds(ids);
     }
     async function cleanIds(ids) {
