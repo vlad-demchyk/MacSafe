@@ -6,7 +6,7 @@ An invalid or damaged file does not break the launch: default values are used.
 import json
 import os
 
-DEFAULTS = {"cpu": True, "ram": True, "gpu": True, "style": "both", "interval": 2,
+DEFAULTS = {"cpu": True, "ram": True, "gpu": True, "temp": False, "style": "both", "interval": 2,
             "alerts": True, "dailyCheck": True, "language": "en", "graphTemp": True,
             "alertMemoryDisk": True, "alertBattery": True, "alertLoad": True}
 ALERT_KINDS = ("alertMemoryDisk", "alertBattery", "alertLoad")   # which notifications are on (the master switch is “alerts”)
@@ -29,7 +29,7 @@ class Prefs:
             return
         if not isinstance(raw, dict):
             return
-        for key in ("cpu", "ram", "gpu", "alerts", "dailyCheck", "graphTemp") + ALERT_KINDS:
+        for key in ("cpu", "ram", "gpu", "temp", "alerts", "dailyCheck", "graphTemp") + ALERT_KINDS:
             if isinstance(raw.get(key), bool):
                 self._data[key] = raw[key]
         if raw.get("style") in STYLES:
@@ -43,7 +43,7 @@ class Prefs:
         return self._data[key]
 
     def set(self, key, value):
-        if key in ("cpu", "ram", "gpu", "alerts", "dailyCheck", "graphTemp") + ALERT_KINDS:
+        if key in ("cpu", "ram", "gpu", "temp", "alerts", "dailyCheck", "graphTemp") + ALERT_KINDS:
             value = bool(value)
         elif key == "style":
             if value not in STYLES:

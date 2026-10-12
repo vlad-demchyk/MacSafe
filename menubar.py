@@ -36,7 +36,7 @@ def style_titles():
 
 
 def metric_titles():
-    return {"cpu": T("Показувати CPU"), "ram": T("Показувати RAM"), "gpu": T("Показувати GPU")}
+    return {"cpu": T("Показувати CPU"), "ram": T("Показувати RAM"), "gpu": T("Показувати GPU"), "temp": T("Показувати температуру")}
 PANEL_W = 340         # narrow panel
 PANEL_PAD = 16        # margin at the edges
 INNER_W = PANEL_W - 2 * PANEL_PAD
@@ -975,7 +975,7 @@ class _PopoverPanel:
         y = 0
         _caption(view, T("Показники в барі"), y)
         y += 22
-        for key, title in (("cpu", "CPU"), ("ram", "RAM"), ("gpu", "GPU")):
+        for key, title in (("cpu", "CPU"), ("ram", "RAM"), ("gpu", "GPU"), ("temp", T("Температура, °C"))):
             _label(view, title, 0, y, 200, 12, height=20)
             sw = _Switch.alloc().initWithFrame_(NSMakeRect(INNER_W - _Switch.WIDTH, y, _Switch.WIDTH, _Switch.HEIGHT))
             sw.on_change = lambda key=key: self.owner.toggle_metric(key)
@@ -1316,6 +1316,9 @@ class _Targets(NSObject):
     def toggleGpu_(self, _sender):
         self.owner.toggle_metric("gpu")
 
+    def toggleTemp_(self, _sender):
+        self.owner.toggle_metric("temp")
+
     def styleBoth_(self, _sender):
         self.owner.set_style("both")
 
@@ -1339,7 +1342,7 @@ class StatusBar:
         self._monitor = monitor
         self.actions = actions
         self._prefs = prefs
-        self._settings = {key: prefs.get(key) for key in ("cpu", "ram", "gpu", "style", "interval", "alerts", "dailyCheck", "graphTemp",
+        self._settings = {key: prefs.get(key) for key in ("cpu", "ram", "gpu", "temp", "style", "interval", "alerts", "dailyCheck", "graphTemp",
                                                                   "alertMemoryDisk", "alertBattery", "alertLoad")}
         self._monitor.set_interval(self._settings["interval"])
         self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="audit-settings")
@@ -1394,7 +1397,7 @@ class StatusBar:
         vsub = AppKit.NSMenu.alloc().initWithTitle_(T("Вигляд"))
         vsub.setAutoenablesItems_(False)
         self._metric_items = {}
-        for key, action in (("cpu", "toggleCpu:"), ("ram", "toggleRam:"), ("gpu", "toggleGpu:")):
+        for key, action in (("cpu", "toggleCpu:"), ("ram", "toggleRam:"), ("gpu", "toggleGpu:"), ("temp", "toggleTemp:")):
             item = self._action(metric_titles()[key], action)
             self._metric_items[key] = item
             vsub.addItem_(item)
@@ -1595,7 +1598,7 @@ class StatusBar:
     def toggle_metric(self, key):
         # The three cannot all be turned off together with visible text: the menu bar would be empty then
         now = self._settings[key]
-        if now and sum(1 for k in ("cpu", "ram", "gpu") if self._settings[k]) == 1:
+        if now and sum(1 for k in ("cpu", "ram", "gpu", "temp") if self._settings[k]) == 1:
             self.set_note(T("Має лишитися увімкненим хоча б один показник"))
             self._sync_view_items()
             return
@@ -1771,12 +1774,13 @@ class StatusBar:
         if self._settings["alerts"]:
             self.actions["alerts"](snap, self._security)
         # We redraw the menu bar only when the rounded value changed: the background needs almost no AppKit work
-        key = (round(cpu), round(ram_pct), None if gpu is None else round(gpu), self._settings["style"],
-               self._settings["cpu"], self._settings["ram"], self._settings["gpu"],
+        temp = snap.get("temp")
+        key = (round(cpu), round(ram_pct), None if gpu is None else round(gpu), None if temp is None else round(temp), self._settings["style"],
+               self._settings["cpu"], self._settings["ram"], self._settings["gpu"], self._settings["temp"],
                (self._security or {}).get("level"))
         if key != self._bar_key:
             self._bar_key = key
-            self._update_bar(cpu, ram_pct, gpu)
+            self._update_bar(cpu, ram_pct, gpu, temp)
 
         # We update the menu items and the panel only when they are open: closed ones do not spend AppKit time
         if self._menu_open:
@@ -1791,7 +1795,7 @@ class StatusBar:
             if not self._note:
                 self._panel.note.setStringValue_("")
 
-    def _update_bar(self, cpu, ram_pct, gpu):
+    def _update_bar(self, cpu, ram_pct, gpu, temp=None):
         """Menu bar: only the selected metrics, in the selected style. Fixed digit width (monospaced)."""
         shown = []
         if self._settings["cpu"]:
@@ -1800,6 +1804,8 @@ class StatusBar:
             shown.append(("ram", ram_pct))
         if self._settings["gpu"]:
             shown.append(("gpu", gpu))
+        if self._settings["temp"]:
+            shown.append(("temp", temp))   # °C, 0–99 fits the two positions
         style = self._settings["style"]
 
         if style in ("both", "icon") or not shown:

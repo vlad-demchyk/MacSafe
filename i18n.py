@@ -191,6 +191,8 @@ EN = {
     "  · памʼять і диск": "  · memory and disk",
     "  · батарея": "  · battery",
     "  · перегрів і навантаження": "  · heat and load",
+    "Показувати температуру": "Show temperature",
+    "Температура, °C": "Temperature, °C",
     "Процесор перегрівається": "The processor is overheating",
     "Температура {temp:.0f} °C вже кілька хвилин. Закрийте важкі застосунки й дайте Mac охолонути.": "{temp:.0f} °C for several minutes. Close heavy apps and let the Mac cool down.",
     "Процесор довго навантажений": "The processor is busy for a long time",
