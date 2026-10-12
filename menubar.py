@@ -232,6 +232,29 @@ class _ZoneTitle(_PanelView):
     opened = False
     on_click = None
     textInset = 12
+    t = 0.0          # chevron turn: 0 closed (points right), 1 open (points down)
+    _timer = None
+
+    def set_opened(self, flag, animate=True):
+        """Sets the open state; the chevron turns over a short time instead of jumping."""
+        self.opened = flag
+        target = 1.0 if flag else 0.0
+        if self._timer is not None:
+            self._timer.invalidate()
+            self._timer = None
+        if not animate or _reduce_motion() or self.t == target:
+            self.t = target
+            self.setNeedsDisplay_(True)
+            return
+
+        def step(timer):
+            direction = 1.0 if target > self.t else -1.0
+            self.t = target if abs(target - self.t) <= 0.14 else self.t + 0.14 * direction
+            self.setNeedsDisplay_(True)
+            if self.t == target:
+                timer.invalidate()
+                self._timer = None
+        self._timer = AppKit.NSTimer.scheduledTimerWithTimeInterval_repeats_block_(1 / 60, True, step)
 
     def drawRect_(self, _rect):
         b = self.bounds()
@@ -252,14 +275,12 @@ class _ZoneTitle(_PanelView):
         text.drawAtPoint_((self.textInset, (b.size.height - text.size().height) / 2))
         cx, cy = b.size.width - 14, b.size.height / 2
         chevron = AppKit.NSBezierPath.bezierPath()
-        if self.opened:
-            chevron.moveToPoint_((cx - 4, cy - 2))
-            chevron.lineToPoint_((cx, cy + 2))
-            chevron.lineToPoint_((cx + 4, cy - 2))
-        else:
-            chevron.moveToPoint_((cx - 2, cy - 4))
-            chevron.lineToPoint_((cx + 2, cy))
-            chevron.lineToPoint_((cx - 2, cy + 4))
+        closed = ((cx - 2, cy - 4), (cx + 2, cy), (cx - 2, cy + 4))
+        opened = ((cx - 4, cy - 2), (cx, cy + 2), (cx + 4, cy - 2))
+        points = [(a[0] + (o[0] - a[0]) * self.t, a[1] + (o[1] - a[1]) * self.t) for a, o in zip(closed, opened)]
+        chevron.moveToPoint_(points[0])
+        chevron.lineToPoint_(points[1])
+        chevron.lineToPoint_(points[2])
         chevron.setLineWidth_(1.6)
         chevron.setLineCapStyle_(AppKit.NSLineCapStyleRound)
         AppKit.NSColor.secondaryLabelColor().setStroke()
@@ -792,7 +813,7 @@ class _PopoverPanel:
         y = self.zones_top
         for zone in self.zones:
             zone["head"].setFrame_(NSMakeRect(PANEL_PAD, y, INNER_W, ZONE_H))
-            zone["head"].opened = zone["open"]
+            zone["head"].set_opened(zone["open"], animate)
             zone["head"].setNeedsDisplay_(True)
             y += ZONE_H
             if zone["open"]:

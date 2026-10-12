@@ -406,6 +406,8 @@
     @keyframes row-in { from { opacity:0; transform:translateX(-10px); } to { opacity:1; transform:none; } }
     @keyframes pop { from { transform:scale(0); } to { transform:scale(1); } }
     .toast { transition:transform .5s cubic-bezier(.34,1.56,.64,1); }
+    .pop-in { animation:pop-text .55s cubic-bezier(.34,1.56,.64,1) backwards; transform-origin:left center; font-weight:600; }
+    @keyframes pop-text { from { opacity:0; transform:scale(.9); } to { opacity:1; transform:none; } }
     .score__num [data-count] { font-variant-numeric:tabular-nums; }
     @media (prefers-reduced-motion:reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } .chart__line { stroke-dashoffset:0; } }
     @media print {
@@ -3357,8 +3359,20 @@
         }
       });
       const total = document.createElement('p');
-      total.textContent = `Звільнено на диску всього ${mb(outcome.freedMb)} МБ (файли старші за ${outcome.days} дн.)`;
+      const line = value => `Звільнено на диску всього ${mb(value)} МБ (файли старші за ${outcome.days} дн.)`;
+      total.textContent = line(outcome.freedMb);
+      total.classList.add('pop-in');
       results.append(total);
+      // the freed size counts up to the final value
+      if (knownSize(outcome.freedMb) && !REDUCED) {
+        const t0 = performance.now(), dur = 1100, to = Number(outcome.freedMb);
+        const step = now => {
+          const k = Math.min(1, (now - t0) / dur);
+          total.textContent = line(k < 1 ? Math.round(to * (1 - Math.pow(1 - k, 3)) * 100) / 100 : outcome.freedMb);
+          if (k < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }
     }
 
     // Where the user is: scanning, choosing what to clean (or the auto path), cleaning, done
