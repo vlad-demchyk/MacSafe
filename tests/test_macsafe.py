@@ -653,6 +653,58 @@ class QuickMetricsTests(unittest.TestCase):
 
 
 
+class ScoreModelTests(unittest.TestCase):
+    """The score: critical problems count, warnings are capped, recommendations and the daemon do not."""
+
+    def setUp(self):
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(here, "core", "generate-report.sh"), encoding="utf-8") as fh:
+            self.script = fh.read()
+        start = self.script.index("compute_penalty() {")
+        end = self.script.index("\n}\n", start) + 3
+        self.func = self.script[start:end]
+
+    def penalty(self, lines):
+        r = subprocess.run(["/bin/bash", "-c", self.func + '\ncompute_penalty'], input="", capture_output=True, text=True,
+                           env=dict(os.environ, PEN_LINES="".join(l + "\n" for l in lines)))
+        return int(r.stdout.strip())
+
+    def test_recommendations_cost_nothing(self):
+        self.assertEqual(self.penalty(["info|Безпека"] * 12), 0)
+
+    def test_a_critical_costs_15_and_all_criticals_stop_at_45(self):
+        self.assertEqual(self.penalty(["critical|Безпека"]), 15)
+        self.assertEqual(self.penalty(["critical|Безпека"] * 6), 45)
+
+    def test_warnings_are_capped_per_category_and_in_total(self):
+        self.assertEqual(self.penalty(["warning|Памʼять"]), 4)
+        self.assertEqual(self.penalty(["warning|Памʼять"] * 5), 8)
+        many = [f"warning|Категорія{i}" for i in range(10)]
+        self.assertEqual(self.penalty(many), 20)
+
+    def test_the_old_seven_warnings_no_longer_read_as_a_bad_mac(self):
+        old_case = ["warning|Безпека", "warning|Резервні копії", "warning|Стабільність", "warning|Памʼять"] + ["warning|XBrain daemon"] * 3
+        self.assertGreaterEqual(100 - self.penalty([l for l in old_case if "XBrain" not in l]), 80)
+
+    def test_daemon_issues_do_not_enter_the_penalty(self):
+        self.assertIn('[ "$cat" = "XBrain daemon" ] || PEN_LINES=', self.script)
+
+    def test_facts_to_review_are_not_security_warnings(self):
+        for kind in ("STEALTH_KIND", "EXT_KIND", "LAUNCH_KIND", "LISTEN_KIND"):
+            self.assertNotRegex(self.script, kind + r'="warning"')
+            self.assertNotRegex(self.script, kind + r'="critical"')
+        self.assertIn('info) status="до відома"', self.script)
+
+    def test_a_one_moment_cpu_spike_is_not_a_warning(self):
+        line = next(l for l in self.script.splitlines() if "Процес навантажує CPU: ${sname}" in l)
+        self.assertIn("add_issue info", line)
+
+    def test_recommendations_are_not_warnings(self):
+        for title in ("Брандмауер macOS вимкнено", "Резервні копії не налаштовано", "Доступні оновлення macOS"):
+            line = next(l for l in self.script.splitlines() if title in l and "add_issue" in l)
+            self.assertIn("add_issue info", line, title)
+
+
 class BatteryHealthSourceTests(unittest.TestCase):
     """The report takes the battery health that macOS itself shows, not the raw FullChargeCapacity ratio."""
 

@@ -72,7 +72,18 @@
     .cache-list { display:grid; gap:8px; margin:14px 0; }
     .cache-item { display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--card2); cursor:pointer; }
     .metric__ico { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; vertical-align:-2px; margin-right:5px; }
-    .metric__detail { color:var(--muted); font-size:11.5px; line-height:1.35; margin-top:6px; min-height:2.7em; }
+    .metric__detail { color:var(--muted); font-size:11.5px; line-height:1.35; margin:6px 0 10px; min-height:2.7em; }
+    /* Equal cards: every card has the same rows in the same places, whatever the text length */
+    .tiles { grid-auto-rows:1fr; }
+    .metric { display:flex; flex-direction:column; }
+    .metric__value { min-height:1.2em; }
+    .metric__label { min-height:2.9em; font-size:13px; line-height:1.4; }
+    .metric__detail { min-height:4.1em; }
+    .metric > .bar { margin-top:auto; }
+    .cc-grid { grid-auto-rows:1fr; }
+    .cc-tile { min-height:76px; }
+    .cc-txt b { font-size:14px; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .cc-txt small { min-height:2.6em; }
     .more-details { margin-top:14px; } .more-details > summary { cursor:pointer; font-weight:600; }
     .cc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px; margin:6px 0 16px; }
     .cc-tile { display:flex; align-items:center; gap:12px; text-align:left; padding:12px 14px; border:1px solid var(--line); border-radius:18px; background:var(--card); color:var(--ink); cursor:pointer; font:inherit; box-shadow:var(--shadow); transition:transform .15s var(--ease), background .15s var(--ease); }
@@ -147,7 +158,7 @@
     .score--critical .score__num { color:var(--critical); }
     .score__label { margin:6px 0 4px; font-weight:600; font-size:17px; }
     .score__copy { margin:0; color:var(--muted); font-size:13px; max-width:40ch; }
-    .tiles { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .tiles { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
     .metric { padding:13px 14px; background:var(--card2); box-shadow:none; }
     .metric__value { font-size:22px; font-weight:650; letter-spacing:-.03em; line-height:1.15; }
     .metric__label { color:var(--muted); font-size:12px; margin-top:2px; }
@@ -952,6 +963,12 @@
  "Кеш застосунку": "App cache",
  "Локальні LLM": "Local LLMs",
  "Запустити": "Run",
+ "Рекомендація": "Recommendation",
+ "Штраф": "Penalty",
+ "критичні": "critical",
+ "попередження": "warnings",
+ "рекомендації": "recommendations",
+ "навантаження": "load",
  "ядер": "cores",
  "процесів": "processes",
  "хв": "min",
@@ -1663,7 +1680,7 @@
     const selectData = id => (MULTI ? { ...RAW.snapshotsById[id], history: RAW.history, systems: RAW.systems } : RAW);
     let DATA = selectData(MULTI ? RAW.latestId : null);
     const NA = 'Немає даних';
-    const KIND_TEXT = { critical: 'Терміново', warning: 'Увага', info: 'До відома', good: 'Норма' };
+    const KIND_TEXT = { critical: 'Терміново', warning: 'Увага', info: 'Рекомендація', good: 'Норма' };
     const RISK_TEXT = { safe: 'Безпечно', review: 'Перевірити', keep: 'Не чіпати' };
     const RISK_KIND = { safe: 'good', review: 'warning', keep: 'info' };
     const SEV_ORDER = { critical: 0, warning: 1, info: 2, good: 3 };
@@ -1802,7 +1819,7 @@
       const loadKind = !has(loadPct) ? 'info' : loadPct >= 150 ? 'critical' : loadPct >= 100 ? 'warning' : 'good';
       const diskKind = !has(s.pct) ? 'info' : s.pct >= 90 ? 'critical' : s.pct >= 85 ? 'warning' : 'good';
       const batKind = !has(b.healthPct) ? 'info' : b.healthPct < 80 ? 'critical' : b.healthPct < 85 ? 'warning' : 'good';
-      const swapKind = !has(m.swapMb) ? 'info' : m.swapMb >= 2048 ? 'critical' : m.swapMb >= 1024 ? 'warning' : 'good';
+      const swapKind = !has(m.swapMb) ? 'info' : m.swapMb >= 8192 ? 'critical' : m.swapMb >= 4096 ? 'warning' : 'good';   // as in the report: macOS uses swap even with free memory
       const tempKind = !has(t.cpuTemp) ? 'info' : t.cpuTemp >= 95 ? 'critical' : t.cpuTemp >= 80 ? 'warning' : 'good';
       const batValue = b.present === false ? 'Немає батареї' : fmt(b.healthPct, '%');
       $('#hero').innerHTML = `
@@ -1814,18 +1831,17 @@
           <div>
             <p class="score__num">${esc(clamp(h.score))}<small class="score__of"> /100</small></p>
             <p class="score__label">${esc(h.text || NA)}</p>
-            <p class="score__copy">${esc(h.summary || '')} Штрафи: ${esc(h.penalty ?? 0)}.</p>
+            <p class="score__copy">${esc(h.summary || '')}</p>
+            <p class="score__copy">${esc(tt('Штраф'))}: −${esc(h.penalty ?? 0)} · ${esc(tt('критичні'))} ${esc((h.counts || {}).critical ?? 0)} · ${esc(tt('попередження'))} ${esc((h.counts || {}).warning ?? 0)} · ${esc(tt('рекомендації'))} ${esc((h.counts || {}).info ?? 0)} (0)</p>
           </div>
         </article>
         <div class="tiles">
-          ${tile('CPU зараз', fmt(l.cpuTotal, '%'), cpuKind, l.cpuTotal, parts(has(l.ncpu) && `${l.ncpu} ${tt('ядер')}`, has(l.cpuUser) && `user ${l.cpuUser}%`, has(l.cpuSys) && `sys ${l.cpuSys}%`, has(l.processCount) && `${l.processCount} ${tt('процесів')}`), 'cpu')}
-          ${tile('Навантаження на ядро (5 хв)', fmt(l.perCore5), loadKind, loadPct, has(l.l1) ? `1 · 5 · 15 ${tt('хв')}: ${l.l1} · ${l.l5} · ${l.l15}` : '', 'load')}
+          ${tile('CPU зараз', fmt(l.cpuTotal, '%'), cpuKind, l.cpuTotal, parts(has(l.ncpu) && `${l.ncpu} ${tt('ядер')}`, has(l.cpuUser) && `user ${l.cpuUser}%`, has(l.cpuSys) && `sys ${l.cpuSys}%`, has(l.l1) && `${tt('навантаження')} ${l.l1} · ${l.l5} · ${l.l15}`), 'cpu')}
           ${tile('Вільна памʼять (memory_pressure)', fmt(m.freePct, '%'), memKind, m.freePct, parts(m.usedText, has(m.compressorMb) && `${tt('стиснуто')} ${m.compressorMb} ${tt('МБ')}`, m.pressure && `${tt('тиск')}: ${m.pressure}`), 'ram')}
           ${tile('Swap', has(m.swapMb) ? `${esc(m.swapMb)} МБ` : NA, swapKind, has(m.swapMb) ? m.swapMb / 20 : null, has(m.swapoutsIn5s) ? `${tt('запис у swap за 5 с')}: ${m.swapoutsIn5s}` : '', 'swap')}
-          ${tile('Диск заповнено', fmt(s.pct, '%'), diskKind, s.pct, parts(has(s.usedGb) && has(s.totalGb) && `${s.usedGb} ${tt('з')} ${s.totalGb} ${tt('ГБ')}`, s.smart && `SMART: ${s.smart}`), 'disk_free')}
+          ${tile('Диск заповнено', fmt(s.pct, '%'), diskKind, s.pct, parts(has(s.usedGb) && has(s.totalGb) && `${s.usedGb} ${tt('з')} ${s.totalGb} ${tt('ГБ')}`, has(s.availGb) && `${s.availGb} ${tt('ГБ')} ${tt('вільно')}`, s.smart && `SMART: ${s.smart}`), 'disk_free')}
           ${tile('Ємність батареї', batValue, batKind, b.healthPct, b.present === false ? '' : parts(has(b.cycles) && `${b.cycles} ${tt('циклів')}`, b.state, b.remain && `${tt('залишилось')} ${b.remain}`, has(b.tempC) && `${b.tempC}°C`), 'battery')}
           ${tile('Температура CPU', fmt(t.cpuTemp, '°C'), tempKind, t.cpuTemp, parts(has(t.gpuTemp) && `GPU ${t.gpuTemp}°C`, has(t.ssdTemp) && `SSD ${t.ssdTemp}°C`, has(t.fans) && `${tt('вентилятори')}: ${t.fans}`, t.pmsetPressure && `pmset: ${t.pmsetPressure}`), 'thermal')}
-          ${tile('Вільно на диску', fmt(s.availGb, 'ГБ'), diskKind, has(s.pct) ? 100 - s.pct : null, has(s.localSnapshots) ? `${tt('локальних знімків')}: ${s.localSnapshots}` : '', 'disk_free')}
         </div>`;
       const ring = $('.ring__fg');
       requestAnimationFrame(() => { ring.style.strokeDashoffset = ring.dataset.off; });

@@ -145,6 +145,7 @@ add_security() { # name kind value command advice
   local kind="$2" value="$3" advice="$5" status
   case "$kind" in
     good) status="ок" ;;
+    info) status="до відома" ;;
     warning) status="увага" ;;
     critical) status="критично" ;;
     *) kind="unknown"; status="немає даних"; value="немає даних"
@@ -421,7 +422,7 @@ esac
 STEALTH_RAW="$(read_security /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode || true)"
 case "$STEALTH_RAW" in
   "Firewall stealth mode is on") STEALTH_KIND="good"; STEALTH_TEXT="Увімкнено" ;;
-  "Firewall stealth mode is off") STEALTH_KIND="warning"; STEALTH_TEXT="Вимкнено" ;;
+  "Firewall stealth mode is off") STEALTH_KIND="info"; STEALTH_TEXT="Вимкнено" ;;
   *) STEALTH_KIND="unknown"; STEALTH_TEXT="" ;;
 esac
 SIP_RAW="$(read_security csrutil status || true)"
@@ -452,7 +453,7 @@ if printf '%s\n' "$EXT_RAW" | awk '
     EXT_THIRD_JSON+=("$(jstr "$ext")")
   done < <(printf '%s\n' "$EXT_RAW" | awk '{ for(i=1; i<NF; i++) if ($i ~ /^[A-Za-z0-9_-]+$/ && $(i+1) ~ /^[A-Za-z0-9_-]+[.][A-Za-z0-9_.-]+$/) { if ($(i+1) !~ /^com[.]apple[.]/) print; break } }')
   EXT_KIND="good"; EXT_TEXT="Записів: $EXT_COUNT; без префікса com.apple: ${#EXT_THIRD_JSON[@]}"
-  [ "${#EXT_THIRD_JSON[@]}" -eq 0 ] || EXT_KIND="warning"
+  [ "${#EXT_THIRD_JSON[@]}" -eq 0 ] || EXT_KIND="info"   # third-party entries are facts to review, not warnings
 fi
 XPROTECT_PLIST="/Library/Apple/System/Library/CoreServices/XProtect.bundle/Contents/Info.plist"
 XPROTECT_VERSION=""; XPROTECT_KIND="unknown"
@@ -518,7 +519,7 @@ if [ -n "$LISTEN_RAW" ] && printf '%s\n' "$LISTEN_RAW" | awk '
   awk -F'\t' '$4 !~ /^127[.]/ && $4 != "[::1]" && $4 != "localhost" { print $1 "\t" $3 "\t" $4 }' "$LISTEN_FILE" | sort -u > "$EXPOSED_FILE"
   EXPOSED_COUNT="$(wc -l < "$EXPOSED_FILE" | tr -d ' ')"
   LISTEN_KIND="good"; LISTEN_TEXT="Видимих слухачів: $(wc -l < "$LISTEN_FILE" | tr -d ' '); поза localhost: $EXPOSED_COUNT"
-  [ "$EXPOSED_COUNT" -eq 0 ] || LISTEN_KIND="warning"
+  [ "$EXPOSED_COUNT" -eq 0 ] || LISTEN_KIND="info"
 else
   : > "$LISTEN_FILE"
 fi
@@ -603,7 +604,7 @@ done
 LAUNCH_KIND="unknown"; LAUNCH_TEXT=""
 if [ "$LAUNCH_COMPLETE" = true ]; then
   LAUNCH_KIND="good"; LAUNCH_TEXT="Файлів: $LAUNCH_TOTAL; без префікса com.apple: $LAUNCH_THIRD"
-  [ "$LAUNCH_THIRD" -eq 0 ] || LAUNCH_KIND="warning"
+  [ "$LAUNCH_THIRD" -eq 0 ] || LAUNCH_KIND="info"
 fi
 LAUNCH_THIRD_KNOWN="$LAUNCH_THIRD"
 [ "$LAUNCH_COMPLETE" = true ] || LAUNCH_THIRD_KNOWN=""
@@ -688,16 +689,32 @@ fi
 # add_issue <critical|warning|info> <category> <title> <details> <evidence> <why it matters> <check> <action risk> [steps...]
 ISSUES=()
 N_CRIT=0; N_WARN=0; N_INFO=0; PENALTY=0
+# Score model (version 2): a critical problem costs 15 (at most 45 in total), a warning costs 4 (at most 8 per category and
+# 20 in total), a recommendation (info) costs nothing. Issues of the XBrain daemon concern that tool, not the health of the Mac,
+# so they do not change the score. The score is computed once, after all issues are known.
+PEN_LINES=""
 add_issue() {
   local sev="$1" cat="$2" title="$3" detail="$4" evidence="$5" why="$6" verify="$7" risk="$8" step fix=""
   shift 8
   for step in "$@"; do fix="${fix:+$fix,}$(jstr "$step")"; done
   ISSUES+=("$(obj "$(kv sev "$sev")" "$(kv cat "$cat")" "$(kv title "$title")" "$(kv detail "$detail")" "$(kv evidence "$evidence")" "$(kv why "$why")" "$(kv verify "$verify")" "$(kv risk "$risk")" "$(kr fix "[$fix]")")")
   case "$sev" in
-    critical) N_CRIT=$((N_CRIT + 1)); PENALTY=$((PENALTY + 15)) ;;
-    warning)  N_WARN=$((N_WARN + 1)); PENALTY=$((PENALTY + 6)) ;;
-    *)        N_INFO=$((N_INFO + 1)); PENALTY=$((PENALTY + 2)) ;;
+    critical) N_CRIT=$((N_CRIT + 1)) ;;
+    warning)  N_WARN=$((N_WARN + 1)) ;;
+    *)        N_INFO=$((N_INFO + 1)) ;;
   esac
+  [ "$cat" = "XBrain daemon" ] || PEN_LINES="${PEN_LINES}${sev}|${cat}"$'\n'
+}
+compute_penalty() {
+  printf '%s' "$PEN_LINES" | awk -F'|' '
+    $1 == "critical" { c += 15 }
+    $1 == "warning"  { w[$2] += 4 }
+    END {
+      if (c > 45) c = 45
+      t = 0; for (k in w) { t += (w[k] > 8 ? 8 : w[k]) }
+      if (t > 20) t = 20
+      print c + t
+    }'
 }
 
 # Security
@@ -726,7 +743,7 @@ if [ "$GK_KIND" = critical ]; then
     "Не вимикайте Gatekeeper для обходу попереджень. Перевіряйте джерело застосунку."
 fi
 if [ "$FW_KIND" = warning ]; then
-  add_issue warning "Безпека" "Брандмауер macOS вимкнено" "Вхідні з'єднання не фільтруються системним брандмауером." \
+  add_issue info "Безпека" "Брандмауер macOS вимкнено" "Вхідні з'єднання не фільтруються системним брандмауером." \
     "socketfilterfw: disabled" \
     "Служби, що слухають мережу, доступні з локальної мережі без фільтрації." \
     "/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate" "низький" \
@@ -753,7 +770,7 @@ if [ "${#SECRET_JSON[@]}" -gt 0 ]; then
     "Значення секрету в звіті не показується. Ротуйте його, якщо plist читався іншими."
 fi
 if [ "$BACKUP_KIND" = warning ]; then
-  add_issue warning "Резервні копії" "Резервні копії не налаштовано або копій немає" "$BACKUP_TEXT" \
+  add_issue info "Резервні копії" "Резервні копії не налаштовано або копій немає" "$BACKUP_TEXT" \
     "tmutil destinationinfo: $([ "$BACKUP_DEST" -eq 0 ] && echo 'немає призначення' || echo 'призначення є, копій немає')" \
     "Без копії втрата диска означає втрату даних." \
     "tmutil latestbackup" "низький" \
@@ -771,14 +788,14 @@ if is_number "$PANIC_30" && [ "$PANIC_30" -ge 1 ]; then
     "Оновіть macOS і драйвери, від'єднайте нову периферію, запустіть Діагностику Apple." \
     "Якщо паніки повторюються, зверніться в сервіс Apple."
 fi
-if is_number "$CRASH_IPS" && [ "$CRASH_IPS" -ge 6 ]; then
+if is_number "$CRASH_IPS" && [ "$CRASH_IPS" -ge 20 ]; then
   add_issue warning "Стабільність" "Багато аварійних звітів застосунків за тиждень" "Знайдено ${CRASH_IPS} звітів .ips за ${REPORT_PERIOD_DAYS} днів." \
     "Розподіл за застосунками є в розділі «Збої» звіту." \
     "Часті збої псують роботу й можуть вказувати на несумісну версію." \
     "ls ~/Library/Logs/DiagnosticReports" "низький" \
     "Оновіть застосунки з найбільшою кількістю звітів." \
     "Якщо збій повторюється, перевстановіть застосунок або перевірте його журнал."
-elif is_number "$CRASH_IPS" && [ "$CRASH_IPS" -ge 3 ]; then
+elif is_number "$CRASH_IPS" && [ "$CRASH_IPS" -ge 8 ]; then
   add_issue info "Стабільність" "Повторювані аварійні звіти" "Знайдено ${CRASH_IPS} звітів .ips за ${REPORT_PERIOD_DAYS} днів." \
     "Перевірте, чи повторюється назва застосунку." \
     "Одиничні збої є нормою, повторювані — ні." \
@@ -803,17 +820,17 @@ if [ "$MEM_PRESSURE_LEVEL" = critical ] || [ "$MEM_PRESSURE_LEVEL" = warning ]; 
     "Перезапустіть найбільші Electron-застосунки (Claude, Codex, Code, ChatGPT)." \
     "Якщо нестача повторюється щодня, розгляньте більше памʼяті для цього Mac."
 fi
-if is_number "${SWAP_MB:-}" && [ "$SWAP_MB" -ge 2048 ]; then
+if is_number "${SWAP_MB:-}" && [ "$SWAP_MB" -ge 4096 ] && [ "$MEM_PRESSURE_LEVEL" != ok ]; then
   add_issue warning "Памʼять" "Великий swap: ${SWAP_MB} МБ" "Система активно використовує диск як памʼять." \
     "vm.swapusage: used ${SWAP_MB} МБ" \
     "Swap на SSD повільніший за памʼять. Велике використання означає, що памʼяті не вистачає." \
     "sysctl vm.swapusage" "низький" \
     "Закрийте важкі застосунки. Перезавантаження очищає swap." \
     "Оцініть, що саме займає памʼять (таблиця «Памʼять» нижче)."
-elif is_number "${SWAP_MB:-}" && [ "$SWAP_MB" -ge 1024 ]; then
+elif is_number "${SWAP_MB:-}" && [ "$SWAP_MB" -ge 2048 ]; then
   add_issue info "Памʼять" "Помітний swap: ${SWAP_MB} МБ" "Система частково використовує swap." \
     "vm.swapusage: used ${SWAP_MB} МБ" \
-    "Одиничні значення нормальні, стійко великі — ні." \
+    "macOS користується swap і за вільної памʼяті. Це рекомендація: варто стежити, лише якщо значення росте з дня в день." \
     "sysctl vm.swapusage" "низький" \
     "Стежте за значенням у наступних звітах."
 fi
@@ -831,7 +848,7 @@ elif is_number "${SWAPOUT_5S:-}" && [ "$SWAPOUT_5S" -ge 20 ]; then
     "Стежте за значенням у наступних звітах."
 fi
 if is_number "${FINDER_RSS_MB:-}" && [ "$FINDER_RSS_MB" -ge 800 ]; then
-  add_issue warning "Графіка і Finder" "Finder займає ${FINDER_RSS_MB} МБ памʼяті" \
+  add_issue info "Графіка і Finder" "Finder займає ${FINDER_RSS_MB} МБ памʼяті" \
     "Finder зазвичай тримає 100–300 МБ. Велике значення означає роздуття, часто через FinderSync-розширення." \
     "RSS Finder: ${FINDER_RSS_MB} МБ; FinderSync: ${FINDERSYNC_LIST:-не визначено}" \
     "Роздутий Finder гальмує відкриття папок і діалогів збереження." \
@@ -840,7 +857,7 @@ if is_number "${FINDER_RSS_MB:-}" && [ "$FINDER_RSS_MB" -ge 800 ]; then
     "Вимкніть FinderSync-розширення, які не потрібні: Системні налаштування → Загальні → Розширення."
 fi
 if is_number "${PANEL_RSS_MB:-}" && { [ "$PANEL_RSS_MB" -ge 300 ] || [ "${PANEL_CPU%.*}" -ge 50 ] 2>/dev/null; }; then
-  add_issue warning "Графіка і Finder" "Панель відкриття/збереження споживає ресурси" \
+  add_issue info "Графіка і Finder" "Панель відкриття/збереження споживає ресурси" \
     "Процес Open and Save Panel Service: ${PANEL_RSS_MB} МБ памʼяті, CPU ${PANEL_CPU}%." \
     "com.apple.appkit.xpc.openAndSavePanelService" \
     "Діалог відкриття файлів сканує папку і метадані хмарних дисків. У папках з тисячами файлів або на Google Drive і iCloud він може довго працювати на повну потужність." \
@@ -889,9 +906,9 @@ while IFS=$'\t' read -r spid set_ sct scpu srss sname; do
       "Повторіть звіт за кілька хвилин. Якщо сплеск повторюється, дивіться лог daemon." \
       "Не змінюйте процес, поки не побачите повторення."
   else
-    add_issue warning "Процесор" "Процес навантажує CPU: ${sname}" "Зараз ${scpu}% (100% — одне ядро)." \
+    add_issue info "Процесор" "Процес навантажує CPU: ${sname}" "Зараз ${scpu}% (100% — одне ядро)." \
       "pid ${spid}, RSS $(div "$srss" 1024 '%.0f') МБ, категорія $(category_of "$sname")" \
-      "Тривалий сплеск сповільнює систему і нагріває Mac." \
+      "Це знімок одного моменту: сплеск може бути короткочасним. Тривалий сплеск сповільнює систему і нагріває Mac." \
       "ps -o pid,%cpu,rss,etime,comm -p ${spid}" "низький" \
       "Перевірте процес в Activity Monitor (CPU, сортування за %CPU)." \
       "Якщо процес не потрібен, закрийте його. Якщо він фоновий, перевірте його автозапуск."
@@ -1027,7 +1044,7 @@ if [ "$LAUNCH_THIRD" -ge 20 ]; then
     "Перегляньте список і вимкніть непотрібні агенти."
 fi
 if [ "$UPDATES_CHECKED" = true ] && is_number "${UPDATES_PENDING:-}" && [ "$UPDATES_PENDING" -ge 1 ]; then
-  add_issue warning "Оновлення" "Доступні оновлення macOS: ${UPDATES_PENDING}" "Знайдено через softwareupdate -l." \
+  add_issue info "Оновлення" "Доступні оновлення macOS: ${UPDATES_PENDING}" "Знайдено через softwareupdate -l." \
     "softwareupdate -l" "Оновлення містять виправлення безпеки." "softwareupdate -l" "низький" \
     "Системні налаштування → Загальні → Оновлення ПЗ."
 fi
@@ -1078,11 +1095,11 @@ fi
 if [ "${#ISSUES[@]}" -eq 0 ]; then
   ISSUES=()
 fi
+PENALTY="$(compute_penalty)"; PENALTY="${PENALTY:-0}"
 SCORE=$((100 - PENALTY)); [ "$SCORE" -lt 0 ] && SCORE=0
-if [ "$SCORE" -ge 85 ]; then HEALTH_KIND="good"; HEALTH_TEXT="Добрий"; HEALTH_SUMMARY="Добрий загальний стан за доступними сигналами."
-elif [ "$SCORE" -ge 65 ]; then HEALTH_KIND="warning"; HEALTH_TEXT="Потребує уваги"; HEALTH_SUMMARY="Є сигнали, які варто виправити або відстежити."
-else HEALTH_KIND="warning"; HEALTH_TEXT="Потребує уваги"; HEALTH_SUMMARY="Багато попереджень знижують бал. Почніть з розділу «Проблеми»."; fi
-# The status “Needs action” only when there is a critical issue, regardless of the score
+if [ "$SCORE" -ge 80 ]; then HEALTH_KIND="good"; HEALTH_TEXT="Добрий"; HEALTH_SUMMARY="Добрий загальний стан. Рекомендацій, що не знімають бал: ${N_INFO}."
+elif [ "$SCORE" -ge 60 ]; then HEALTH_KIND="info"; HEALTH_TEXT="Є що покращити"; HEALTH_SUMMARY="Є кілька попереджень, але нічого термінового. Рекомендацій, що не знімають бал: ${N_INFO}."
+else HEALTH_KIND="warning"; HEALTH_TEXT="Потребує уваги"; HEALTH_SUMMARY="Є кілька попереджень, почніть з розділу «Проблеми»."; fi
 if [ "$N_CRIT" -gt 0 ]; then HEALTH_KIND="critical"; HEALTH_TEXT="Потребує дій"; HEALTH_SUMMARY="Є критичні проблеми. Почніть з розділу «Проблеми»."; fi
 
 # ---------- Assembling JSON ----------
