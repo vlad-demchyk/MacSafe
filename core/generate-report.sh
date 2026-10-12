@@ -391,7 +391,7 @@ if [ -z "$CPU_TEMP_C" ] && [ -n "${MACSAFE_PYTHON:-}" ] && [ -f "${MACSAFE_HELPE
   [ -n "$BATT_TEMP_C" ] || BATT_TEMP_C="$(hid_temp battery)"
 fi
 # History of the last 24 hours (history.py): how high and how long the processor was hot, and the points for the charts
-H_MAX=""; H_HOT=""; H_EXT=""; H_AVGW=""; H_VERDICT=""; H_SAMPLES=""; HIST_SERIES="[]"
+H_MAX=""; H_HOT=""; H_EXT=""; H_AVGW=""; H_VERDICT=""; H_SAMPLES=""; HIST_SERIES="[]"; HIST_WEEK="[]"
 if [ -n "${MACSAFE_PYTHON:-}" ] && [ -f "${MACSAFE_HELPERS:-}/history.py" ]; then
   HIST_OUT="$("$MACSAFE_PYTHON" "$MACSAFE_HELPERS/history.py" summary 24 2>/dev/null || true)"
   hist_value() { printf '%s\n' "$HIST_OUT" | sed -nE "s/^$1=(.*)$/\1/p" | head -1; }
@@ -399,6 +399,8 @@ if [ -n "${MACSAFE_PYTHON:-}" ] && [ -f "${MACSAFE_HELPERS:-}/history.py" ]; the
   H_AVGW="$(hist_value avgW)"; H_VERDICT="$(hist_value verdict)"; H_SAMPLES="$(hist_value samples)"
   HIST_SERIES="$("$MACSAFE_PYTHON" "$MACSAFE_HELPERS/history.py" series 24 2>/dev/null || true)"
   [ -n "$HIST_SERIES" ] || HIST_SERIES="[]"
+  HIST_WEEK="$("$MACSAFE_PYTHON" "$MACSAFE_HELPERS/history.py" series 168 1800 2>/dev/null || true)"   # 30-minute points for the week chart
+  [ -n "$HIST_WEEK" ] || HIST_WEEK="[]"
 fi
 FAN_COUNT="$(printf '%s\n' "$IOREG_ALL" | awk -F= '/"Fan.*Count"/ { gsub(/[^0-9]/,"",$2); print $2; exit }')"
 FAN_SPEED="$(printf '%s\n' "$IOREG_ALL" | awk -F= '/"Fan.*CurrentSpeed"/ { gsub(/[^0-9]/,"",$2); printf "%s ", $2 }' | sed 's/ *$//')"
@@ -1147,7 +1149,7 @@ BATTERY_OBJ="$(obj "$(kb present "$BATT_PRESENT")" "$(kn pct "$BATT_PCT")" "$(kv
   "$(kn tempC "$BATT_TEMP_C")" "$(kn voltageV "$BATT_VOLT_V")" "$(kv condition "$BATT_CONDITION")")"
 STORAGE_OBJ="$(obj "$(kv device "$STORAGE_DEVICE")" "$(kv smart "$SMART_STATUS")" "$(kn usedGb "$DISK_USED_GB")" \
   "$(kn totalGb "$DISK_TOTAL_GB")" "$(kn availGb "$DISK_AVAIL_GB")" "$(kn pct "$DISK_PCT")" "$(kn localSnapshots "$LOCAL_SNAPS")")"
-THERMAL_OBJ="$(obj "$(kn maxCpu24h "$H_MAX")" "$(kn hotMinutes24h "$H_HOT")" "$(kn extremeMinutes24h "$H_EXT")" "$(kn avgPowerW "$H_AVGW")" "$(kn historySamples "$H_SAMPLES")" "$(kr series "$HIST_SERIES")" "$(kv pmsetPressure "$THERM_LEVEL")" "$(kn cpuTemp "$CPU_TEMP_C")" "$(kn gpuTemp "$GPU_TEMP_C")" "$(kn ssdTemp "$SSD_TEMP_C")" \
+THERMAL_OBJ="$(obj "$(kn maxCpu24h "$H_MAX")" "$(kn hotMinutes24h "$H_HOT")" "$(kn extremeMinutes24h "$H_EXT")" "$(kn avgPowerW "$H_AVGW")" "$(kn historySamples "$H_SAMPLES")" "$(kr series "$HIST_SERIES")" "$(kr seriesWeek "$HIST_WEEK")" "$(kv pmsetPressure "$THERM_LEVEL")" "$(kn cpuTemp "$CPU_TEMP_C")" "$(kn gpuTemp "$GPU_TEMP_C")" "$(kn ssdTemp "$SSD_TEMP_C")" \
   "$(kn batteryTemp "$BATT_TEMP_C")" "$(kn fans "$FAN_COUNT")" "$(kv fanSpeed "$FAN_SPEED")" "$(kv throttle "$THROTTLE_STATUS")" "$(kv throttleKind "$THROTTLE_KIND")")"
 GPU_OBJ="$(obj "$(kv model "$GPU_MODEL")" "$(kv vram "$GPU_VRAM")" "$(kv metal "$GPU_METAL")" "$(kv resolution "$GPU_RESOLUTION")" "$(kv displayType "$GPU_DISPLAY_TYPE")")"
 SECURITY_ARR=()

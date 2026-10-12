@@ -681,10 +681,11 @@ class HistoryTests(unittest.TestCase):
     def test_old_samples_are_trimmed_when_the_file_is_large(self):
         old = {"t": 10, "cpu": 40.0, "pad": "x" * 200}
         with open(self.path, "w") as fh:
-            for _ in range(8000):
+            for _ in range(30000):
                 fh.write(json.dumps(old) + "\n")
-        self.h.append({"t": 1_000_000, "cpu": 41.0}, self.path, now=1_000_000)
-        self.assertEqual([r["t"] for r in self.h.load(0, self.path)], [1_000_000])
+        now = 100_000_000   # far enough from the old samples for any keep period
+        self.h.append({"t": now, "cpu": 41.0}, self.path, now=now)
+        self.assertEqual([r["t"] for r in self.h.load(0, self.path)], [now])
 
     def test_one_peak_is_only_info_and_a_long_hot_period_is_a_warning(self):
         peak = self.h.summarize(self._rows([60] * 30 + [97] + [60] * 30))

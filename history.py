@@ -1,4 +1,4 @@
-"""History of temperatures and power: one sample a minute, kept for a week, summarised for the report.
+"""History of temperatures and power: one sample a minute, kept for a month, summarised for the report.
 
 A sample is one line of JSON in history.jsonl (next to the other app data):
     {"t": epoch, "cpu": °C, "ssd": °C, "bat": battery °C, "pct": battery %, "sysW": system power in W, "batW": battery power in W
@@ -6,7 +6,7 @@ A sample is one line of JSON in history.jsonl (next to the other app data):
 Only the fields that could be read are present. Nothing here needs root.
 
     python3 history.py summary [hours]     prints key=value lines for the report script
-    python3 history.py series [hours]      prints a JSON array of 5-minute points for the charts
+    python3 history.py series [hours] [bucket]   prints a JSON array of points for the charts (default 5-minute buckets)
 """
 import json
 import os
@@ -17,7 +17,7 @@ import time
 
 DATA_DIR = os.environ.get("AUDIT_DATA_DIR") or os.path.join(os.path.expanduser("~"), "Library", "Application Support", "MacSafe")
 FILE = os.path.join(DATA_DIR, "history.jsonl")
-KEEP_SECONDS = 7 * 86400
+KEEP_SECONDS = 30 * 86400
 SAMPLE_EVERY = 60
 HOT_C = 90            # a die temperature that counts as hot
 EXTREME_C = 100       # close to the point where Apple Silicon throttles
@@ -79,13 +79,13 @@ def take_sample(now=None):
 
 
 def append(sample, path=FILE, now=None):
-    """Adds the sample and drops what is older than a week (only when the file grows past a day's worth of margin)."""
+    """Adds the sample and drops what is older than the keep period (only when the file grows past a margin)."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(sample, separators=(",", ":")) + "\n")
     cutoff = (now if now is not None else time.time()) - KEEP_SECONDS
     try:
-        if os.path.getsize(path) > 1_500_000:   # ~10 000 samples; trimmed rarely, not on every write
+        if os.path.getsize(path) > 6_500_000:   # ~45 000 samples, a bit over a month; trimmed rarely, not on every write
             rows = [r for r in load(0, path) if r.get("t", 0) >= cutoff]
             tmp = path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as fh:
@@ -167,7 +167,8 @@ def _main(argv):
     hours = float(argv[2]) if len(argv) > 2 else 24
     rows = load(hours)
     if command == "series":
-        print(json.dumps(series(rows), separators=(",", ":")))
+        bucket = int(argv[3]) if len(argv) > 3 else 300
+        print(json.dumps(series(rows, bucket), separators=(",", ":")))
         return
     s = summarize(rows)
     for key, value in s.items():

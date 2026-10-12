@@ -1100,6 +1100,7 @@
  "Пропущено зон": "Zones left out",
  "Дублікати в проєктах, хмарних папках і сховищах програм мають сенс, тому вони виключені.": "Duplicates in projects, cloud folders and app stores are normal, so they are excluded.",
  "Захищено від видалення": "Protected from removal",
+ "Температура і потужність за тиждень": "Temperature and power over the week",
  "Знайти великі файли": "Find large files",
  "Знайти залишки": "Find leftovers",
  "Значення в момент звіту.": "Value at the time of the report.",
@@ -2462,6 +2463,13 @@
         <div class="trend-legend">${legend}${dual ? '' : `<span class="trend-range">${esc(lo.toFixed(0))}–${esc(hi.toFixed(0))}</span>`}</div>`;
     }
 
+    // The week chart appears once the history covers more than a day and a half; before that the day chart is enough
+    function weekChart(t) {
+      const w = list(t.seriesWeek);
+      if (w.length < 2 || (w[w.length - 1].t - w[0].t) < 36 * 3600) return '';
+      return card('Температура і потужність за тиждень', trendChart(w, [{ key: 'cpu', cls: 'tr-cpu', label: 'CPU', unit: '°C' }, { key: 'w', cls: 'tr-w', label: 'Система', unit: ' W' }], null, true));
+    }
+
     function renderThermal() {
       const t = DATA.thermal || {}, g = DATA.gpu || {};
       const note = has(t.cpuTemp) ? '' : '<p class="muted" style="margin-bottom:12px">Сенсори температури CPU і GPU не знайдено. Через ioreg на Apple Silicon їх зазвичай не видно без додаткових інструментів.</p>';
@@ -2472,6 +2480,7 @@
         ]))}
         ${card('Температура і потужність за добу', trendChart(t.series, [{ key: 'cpu', cls: 'tr-cpu', label: 'CPU', unit: '°C' }, { key: 'w', cls: 'tr-w', label: 'Система', unit: ' W' }], null, true)
           + (has(t.hotMinutes24h) ? rows([['Пік CPU', fmt(t.maxCpu24h, '°C')], ['Довше 90 °C', fmt(t.hotMinutes24h, 'хв')], ['Довше 100 °C', fmt(t.extremeMinutes24h, 'хв')], ['Середня потужність', fmt(t.avgPowerW, 'W')]]) : ''))}
+        ${weekChart(t)}
         ${card('Охолодження', rows([
           ['Тепловий тиск (pmset -g therm)', esc(t.pmsetPressure || NA)],
           ['Вентилятори', fmt(t.fans)], ['Обороти', fmt(t.fanSpeed, 'RPM')],
