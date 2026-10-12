@@ -1323,6 +1323,89 @@ class AdaptiveIntervalTests(unittest.TestCase):
         self.assertEqual(m.interval, 5.0)
 
 
+class AppsTests(unittest.TestCase):
+    def setUp(self):
+        import apps
+        import plistlib
+        self.apps = apps
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.appdir = os.path.join(self.tmp, "Applications")
+        self.lib = os.path.join(self.tmp, "Library")
+        self.make_app("Demo", "com.vendor.demo")
+        self.make_app("Safari", "com.apple.Safari")
+        for rel in ("Application Support/com.vendor.demo", "Caches/com.vendor.demo", "Preferences/com.vendor.demo.plist",
+                    "Application Support/Demo", "Group Containers/ABCDE.com.vendor.demo", "Caches/com.other.app"):
+            path = os.path.join(self.lib, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as fh:
+                fh.write("x")
+
+    def make_app(self, name, bundle_id):
+        import plistlib
+        contents = os.path.join(self.appdir, name + ".app", "Contents")
+        os.makedirs(contents)
+        with open(os.path.join(contents, "Info.plist"), "wb") as fh:
+            plistlib.dump({"CFBundleIdentifier": bundle_id, "CFBundleName": name, "CFBundleShortVersionString": "1.2"}, fh)
+
+    def test_listing_skips_apple_apps(self):
+        found = self.apps.installed_apps((self.appdir,), with_sizes=False)
+        self.assertEqual([a["name"] for a in found], ["Demo"])
+        self.assertEqual(found[0]["version"], "1.2")
+
+    def test_related_files_exact_and_weak(self):
+        app = os.path.join(self.appdir, "Demo.app")
+        found = {f["path"].replace(self.lib + os.sep, ""): f["weak"] for f in self.apps.related_files(app, self.lib)}
+        self.assertEqual(found["Application Support/com.vendor.demo"], False)
+        self.assertEqual(found["Group Containers/ABCDE.com.vendor.demo"], False)
+        self.assertEqual(found["Application Support/Demo"], True)       # by name only: unchecked by default
+        self.assertNotIn("Caches/com.other.app", found)
+
+    def test_apple_app_has_no_related_files(self):
+        self.assertEqual(self.apps.related_files(os.path.join(self.appdir, "Safari.app"), self.lib), [])
+
+    def test_safe_app_path_only_in_app_folders(self):
+        self.assertIsNotNone(self.apps.safe_app_path(os.path.join(self.appdir, "Demo.app"), (self.appdir,)))
+        self.assertIsNone(self.apps.safe_app_path(os.path.join(self.appdir, "Demo.app", "Contents"), (self.appdir,)))
+        self.assertIsNone(self.apps.safe_app_path(os.path.join(self.tmp, "Demo.app"), (self.appdir,)))
+        self.assertIsNone(self.apps.safe_app_path("../x.app", (self.appdir,)))
+
+    def test_uninstall_trashes_app_and_only_own_related(self):
+        moved = []
+        trasher = lambda path: (moved.append(path) or (True, ""))
+        own = os.path.join(self.lib, "Caches", "com.vendor.demo")
+        foreign = os.path.join(self.lib, "Caches", "com.other.app")
+        r = self.apps.uninstall_app(os.path.join(self.appdir, "Demo.app"), [own, foreign], (self.appdir,), self.lib,
+                                    app_trasher=trasher, file_trasher=trasher)
+        self.assertTrue(r["ok"])
+        self.assertEqual(moved, [os.path.join(self.appdir, "Demo.app"), own])
+        self.assertFalse(r["results"][2]["ok"])
+
+    def test_uninstall_unknown_app_refused(self):
+        r = self.apps.uninstall_app(os.path.join(self.appdir, "Safari.app"), [], (self.appdir,), self.lib,
+                                    app_trasher=lambda p: (True, ""), file_trasher=lambda p: (True, ""))
+        self.assertFalse(r["ok"])
+
+    def test_parsers(self):
+        brew = self.apps.parse_brew_versions("git 2.45.1\nnode 22.1.0 21.0.0\n", "formula", {"node"})
+        self.assertEqual([(i["name"], i["version"], i["leaf"]) for i in brew], [("git", "2.45.1", False), ("node", "21.0.0", True)])
+        npm = self.apps.parse_npm('{"dependencies": {"npm": {"version": "10"}, "left-pad": {"version": "1.3.0"}}}')
+        self.assertEqual([i["name"] for i in npm], ["left-pad"])
+        cargo = self.apps.parse_cargo("ripgrep v14.1.0:\n    rg\nfd-find v10.0.0:\n    fd\n")
+        self.assertEqual([i["name"] for i in cargo], ["ripgrep", "fd-find"])
+        self.assertEqual(self.apps.parse_npm("not json"), [])
+
+    def test_remove_packages_checks_listing_and_dependents(self):
+        listing = [{"id": "brew:formula:git", "manager": "brew", "kind": "formula", "name": "git", "sizeMb": 10.0, "leaf": False},
+                   {"id": "npm:left-pad", "manager": "npm", "kind": "global", "name": "left-pad", "sizeMb": 1.0, "leaf": True},
+                   {"id": "npm:--bad", "manager": "npm", "kind": "global", "name": "--bad", "sizeMb": 1.0, "leaf": True}]
+        calls = []
+        runner = lambda argv, timeout: (calls.append(argv) or (0, "", ""))
+        r = self.apps.remove_packages(["brew:formula:git", "npm:left-pad", "npm:--bad", "npm:ghost"], listing, runner)
+        self.assertEqual(calls, [["npm", "uninstall", "-g", "left-pad"]])
+        self.assertEqual([x["ok"] for x in r["results"]], [False, True, False, False])
+        self.assertFalse(self.apps.remove_packages([], listing, runner)["ok"])
+
+
 class BigFilesTests(unittest.TestCase):
     def setUp(self):
         import bigfiles

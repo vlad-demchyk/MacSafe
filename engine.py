@@ -20,6 +20,7 @@ import autostart
 import bigfiles
 import cleanup
 import actions
+import apps
 import leftovers
 import llm
 import trash
@@ -282,6 +283,32 @@ class Api:
             if ok:
                 freed += item["sizeMb"]
         return {"ok": True, "results": results, "freedMb": round(freed, 1)}
+
+    # ---------- Programs: apps and command line packages ----------
+    def apps_list(self):
+        """Installed apps with size, version and last use. Changes nothing."""
+        return {"items": apps.installed_apps()}
+
+    def app_related(self, path):
+        """Files in ~/Library that belong to one app, for the removal dialog. Changes nothing."""
+        real = apps.safe_app_path(path)
+        return {"items": apps.related_files(real) if real else []}
+
+    def app_uninstall(self, path, related, confirm):
+        """Moves an app and the chosen related files to the Trash. Only with confirmation, never a running app."""
+        if confirm is not True:
+            return {"ok": False, "error": T("Потрібне підтвердження")}
+        return apps.uninstall_app(path, related)
+
+    def packages_list(self):
+        """Homebrew, npm, cargo and pipx packages found on this Mac. Changes nothing."""
+        return apps.packages()
+
+    def packages_remove(self, ids, confirm):
+        """Removes command line packages with the manager's own command, only ids from a fresh listing."""
+        if confirm is not True:
+            return {"ok": False, "error": T("Потрібне підтвердження")}
+        return apps.remove_packages(ids)
 
     # ---------- Action buttons: fixed commands run from the window, not from Terminal ----------
     def actions_list(self):

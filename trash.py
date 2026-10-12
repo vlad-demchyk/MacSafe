@@ -29,6 +29,17 @@ def move_to_trash(path):
     real = safe_target(path)
     if real is None:
         return False, T("Недозволений шлях")
+    return _trash(real)
+
+
+def move_app_to_trash(path):
+    """(ok, explanation) for an .app that sits directly in /Applications or ~/Applications (checked by apps.py)."""
+    if not isinstance(path, str) or not path.endswith(".app") or os.path.islink(path) or not os.path.isdir(path):
+        return False, T("Недозволений шлях")
+    return _trash(os.path.realpath(path))
+
+
+def _trash(real):
     try:
         from Foundation import NSFileManager, NSURL
     except ImportError:
