@@ -71,16 +71,23 @@
     .cache-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:14px; }
     .cache-list { display:grid; gap:8px; margin:14px 0; }
     .cache-item { display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--card2); cursor:pointer; }
-    .act-grid { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
-    .act-btn { position:relative; padding-left:26px; }
-    .act-btn::before, .act-dot { content:''; width:8px; height:8px; border-radius:50%; background:var(--good); }
-    .act-btn::before { position:absolute; left:11px; top:50%; margin-top:-4px; }
-    .act-btn--mild::before, .act-dot--mild { background:var(--warn); }
-    .act-btn--destructive::before, .act-dot--destructive { background:var(--critical); }
-    .act-btn.is-running { opacity:.7; }
-    .act-dot { display:inline-block; margin:0 4px 0 12px; }
-    .act-dot--read { background:var(--good); }
-    .act-legend { margin:0 0 4px; }
+    .cc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px; margin:6px 0 16px; }
+    .cc-tile { display:flex; align-items:center; gap:12px; text-align:left; padding:12px 14px; border:1px solid var(--line); border-radius:18px; background:var(--card); color:var(--ink); cursor:pointer; font:inherit; box-shadow:var(--shadow); transition:transform .15s var(--ease), background .15s var(--ease); }
+    .cc-tile:hover:not(:disabled) { background:var(--card2); }
+    .cc-tile:active:not(:disabled) { transform:scale(.98); }
+    .cc-tile:disabled { opacity:.55; cursor:default; }
+    .cc-ico { flex:none; width:40px; height:40px; border-radius:50%; display:grid; place-items:center; color:#fff; background:var(--accent); }
+    .cc-ico svg { width:21px; height:21px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+    .cc-tile--mild .cc-ico { background:#d98a1f; }
+    .cc-tile--destructive .cc-ico { background:var(--critical); }
+    .cc-txt { display:flex; flex-direction:column; min-width:0; }
+    .cc-txt b { font-size:14px; line-height:1.25; }
+    .cc-txt small { color:var(--muted); font-size:12px; line-height:1.3; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+    .cc-tile.is-done .cc-txt small { color:var(--good); }
+    .cc-tile.is-error .cc-txt small { color:var(--critical); }
+    .cc-tile.is-running .cc-ico { animation:cc-pulse 1s ease-in-out infinite; }
+    @keyframes cc-pulse { 50% { transform:scale(.88); opacity:.7; } }
+    @media (prefers-reduced-motion:reduce) { .cc-tile.is-running .cc-ico { animation:none; } .cc-tile { transition:none; } }
     .list-more { margin:8px 0 0; }
     .cache-item--blocked { opacity:.6; cursor:not-allowed; }
     .cache-item input, .cache-confirm input { flex:none; margin:4px 0 0; accent-color:var(--blue); }
@@ -939,6 +946,31 @@
  "Кеш застосунку": "App cache",
  "Локальні LLM": "Local LLMs",
  "Запустити": "Run",
+ "Що не дає Mac заснути": "What keeps the Mac awake",
+ "Чи не перегрівається процесор": "Is the processor overheating",
+ "Заряд і живлення": "Charge and power",
+ "Скільки вільно на диску": "How much disk space is free",
+ "Куди йдуть резервні копії": "Where backups go",
+ "Чи керує Mac організація": "Is the Mac managed by an organization",
+ "20 процесів, що найбільше вантажать CPU": "The 20 processes using the most CPU",
+ "Шукає оновлення macOS, до хвилини": "Looks for macOS updates, up to a minute",
+ "Захист системи від змін": "System protection against changes",
+ "Чи зашифровано диск": "Is the disk encrypted",
+ "Перевірка підпису програм": "App signature check",
+ "Чи ввімкнений брандмауер": "Is the firewall on",
+ "Чи йде трафік через проксі": "Is traffic going through a proxy",
+ "Які програми слухають мережу": "Which apps listen on the network",
+ "Лікує зависання Finder": "Fixes a stuck Finder",
+ "Лікує Dock і Mission Control": "Fixes Dock and Mission Control",
+ "Лікує вікно відкриття і збереження": "Fixes the open and save window",
+ "Запускає Time Machine зараз": "Starts Time Machine now",
+ "Кеш npm, завантажиться знову": "npm cache, downloaded again",
+ "Старі версії пакетів і кеш Homebrew": "Old package versions and the Homebrew cache",
+ "Старі файли збірок Xcode (30+ днів)": "Old Xcode build files (30+ days)",
+ "Остаточно очищає кошик": "Empties the Trash for good",
+ "Немає на цьому Mac": "Not on this Mac",
+ "Готово, деталі нижче": "Done, details below",
+ "Помилка, деталі нижче": "Error, details below",
  "читання": "read only",
  "легка дія": "light action",
  "видаляє дані (питає підтвердження)": "deletes data (asks to confirm)",
@@ -2197,28 +2229,28 @@
     // ---------- Actions: buttons that run fixed commands in the app; the page sends only an id ----------
     // id and cmd must match actions.py (a test checks it)
     const ACTION_CMDS = [
-      { id: 'sleep_blockers', group: 'check', level: 'read', title: 'Хто блокує сон', cmd: 'pmset -g assertions' },
-      { id: 'thermal', group: 'check', level: 'read', title: 'Тепловий стан', cmd: 'pmset -g therm' },
-      { id: 'battery', group: 'check', level: 'read', title: 'Батарея', cmd: 'pmset -g batt' },
-      { id: 'disk_free', group: 'check', level: 'read', title: 'Вільне місце на диску', cmd: 'df -h /' },
-      { id: 'tm_destination', group: 'check', level: 'read', title: 'Призначення Time Machine', cmd: 'tmutil destinationinfo' },
-      { id: 'mdm', group: 'check', level: 'read', title: 'Керування пристроєм (MDM/DEP)', cmd: 'profiles status -type enrollment' },
-      { id: 'top_cpu', group: 'check', level: 'read', title: 'Топ процесів за CPU', cmd: 'ps -Ao pid,%cpu,rss,comm -r | head -20' },
-      { id: 'updates', group: 'check', level: 'read', title: 'Оновлення macOS', cmd: 'softwareupdate -l' },
-      { id: 'sip', group: 'security', level: 'read', title: 'Статус SIP', cmd: 'csrutil status' },
-      { id: 'filevault', group: 'security', level: 'read', title: 'FileVault', cmd: 'fdesetup status' },
-      { id: 'gatekeeper', group: 'security', level: 'read', title: 'Gatekeeper', cmd: 'spctl --status' },
-      { id: 'firewall', group: 'security', level: 'read', title: 'Брандмауер', cmd: 'socketfilterfw --getglobalstate' },
-      { id: 'proxy', group: 'security', level: 'read', title: 'Системні проксі', cmd: 'scutil --proxy' },
-      { id: 'ports', group: 'security', level: 'read', title: 'Порти, що слухають', cmd: 'lsof -nP -iTCP -sTCP:LISTEN' },
-      { id: 'restart_finder', group: 'fix', level: 'mild', title: 'Перезапустити Finder', cmd: 'killall Finder' },
-      { id: 'restart_dock', group: 'fix', level: 'mild', title: 'Перезапустити Dock', cmd: 'killall Dock' },
-      { id: 'restart_panel', group: 'fix', level: 'mild', title: 'Перезапустити панель відкриття/збереження', cmd: 'killall com.apple.appkit.xpc.openAndSavePanelService' },
-      { id: 'backup_now', group: 'fix', level: 'mild', title: 'Запустити резервну копію Time Machine', cmd: 'tmutil startbackup' },
-      { id: 'npm_cache', group: 'clean', level: 'destructive', title: 'Очистити кеш npm', cmd: 'npm cache clean --force' },
-      { id: 'brew_cleanup', group: 'clean', level: 'destructive', title: 'Очистити кеш Homebrew', cmd: 'brew cleanup -s' },
-      { id: 'xcode_derived', group: 'clean', level: 'destructive', title: 'Очистити Xcode DerivedData', cmd: 'Xcode DerivedData' },
-      { id: 'empty_trash', group: 'clean', level: 'destructive', title: 'Очистити кошик Finder', cmd: `osascript -e 'tell application "Finder" to empty the trash'` },
+      { id: 'sleep_blockers', group: 'check', level: 'read', title: 'Хто блокує сон', cmd: 'pmset -g assertions', desc: 'Що не дає Mac заснути' },
+      { id: 'thermal', group: 'check', level: 'read', title: 'Тепловий стан', cmd: 'pmset -g therm', desc: 'Чи не перегрівається процесор' },
+      { id: 'battery', group: 'check', level: 'read', title: 'Батарея', cmd: 'pmset -g batt', desc: 'Заряд і живлення' },
+      { id: 'disk_free', group: 'check', level: 'read', title: 'Вільне місце на диску', cmd: 'df -h /', desc: 'Скільки вільно на диску' },
+      { id: 'tm_destination', group: 'check', level: 'read', title: 'Призначення Time Machine', cmd: 'tmutil destinationinfo', desc: 'Куди йдуть резервні копії' },
+      { id: 'mdm', group: 'check', level: 'read', title: 'Керування пристроєм (MDM/DEP)', cmd: 'profiles status -type enrollment', desc: 'Чи керує Mac організація' },
+      { id: 'top_cpu', group: 'check', level: 'read', title: 'Топ процесів за CPU', cmd: 'ps -Ao pid,%cpu,rss,comm -r | head -20', desc: '20 процесів, що найбільше вантажать CPU' },
+      { id: 'updates', group: 'check', level: 'read', title: 'Оновлення macOS', cmd: 'softwareupdate -l', desc: 'Шукає оновлення macOS, до хвилини' },
+      { id: 'sip', group: 'security', level: 'read', title: 'Статус SIP', cmd: 'csrutil status', desc: 'Захист системи від змін' },
+      { id: 'filevault', group: 'security', level: 'read', title: 'FileVault', cmd: 'fdesetup status', desc: 'Чи зашифровано диск' },
+      { id: 'gatekeeper', group: 'security', level: 'read', title: 'Gatekeeper', cmd: 'spctl --status', desc: 'Перевірка підпису програм' },
+      { id: 'firewall', group: 'security', level: 'read', title: 'Брандмауер', cmd: 'socketfilterfw --getglobalstate', desc: 'Чи ввімкнений брандмауер' },
+      { id: 'proxy', group: 'security', level: 'read', title: 'Системні проксі', cmd: 'scutil --proxy', desc: 'Чи йде трафік через проксі' },
+      { id: 'ports', group: 'security', level: 'read', title: 'Порти, що слухають', cmd: 'lsof -nP -iTCP -sTCP:LISTEN', desc: 'Які програми слухають мережу' },
+      { id: 'restart_finder', group: 'fix', level: 'mild', title: 'Перезапустити Finder', cmd: 'killall Finder', desc: 'Лікує зависання Finder' },
+      { id: 'restart_dock', group: 'fix', level: 'mild', title: 'Перезапустити Dock', cmd: 'killall Dock', desc: 'Лікує Dock і Mission Control' },
+      { id: 'restart_panel', group: 'fix', level: 'mild', title: 'Перезапустити панель відкриття/збереження', cmd: 'killall com.apple.appkit.xpc.openAndSavePanelService', desc: 'Лікує вікно відкриття і збереження' },
+      { id: 'backup_now', group: 'fix', level: 'mild', title: 'Запустити резервну копію Time Machine', cmd: 'tmutil startbackup', desc: 'Запускає Time Machine зараз' },
+      { id: 'npm_cache', group: 'clean', level: 'destructive', title: 'Очистити кеш npm', cmd: 'npm cache clean --force', desc: 'Кеш npm, завантажиться знову' },
+      { id: 'brew_cleanup', group: 'clean', level: 'destructive', title: 'Очистити кеш Homebrew', cmd: 'brew cleanup -s', desc: 'Старі версії пакетів і кеш Homebrew' },
+      { id: 'xcode_derived', group: 'clean', level: 'destructive', title: 'Очистити Xcode DerivedData', cmd: 'Xcode DerivedData', desc: 'Старі файли збірок Xcode (30+ днів)' },
+      { id: 'empty_trash', group: 'clean', level: 'destructive', title: 'Очистити кошик Finder', cmd: `osascript -e 'tell application "Finder" to empty the trash'`, desc: 'Остаточно очищає кошик' },
     ];
     const ACTION_GROUPS = { check: 'Перевірки', security: 'Безпека', fix: 'Виправлення', clean: 'Очищення' };
     const LEVEL_TEXT = { read: 'Читання', mild: 'Легка дія', destructive: 'Руйнівна дія' };
@@ -2227,28 +2259,56 @@
       const a = window.pywebview && window.pywebview.api;
       return a && typeof a.action_run === 'function' ? a : null;
     };
+    const ACTION_ICONS = {
+      sleep_blockers: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+      thermal: '<path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0z"/>',
+      battery: '<rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 11v2"/>',
+      disk_free: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/>',
+      tm_destination: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+      mdm: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+      top_cpu: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+      updates: '<path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
+      sip: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+      filevault: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+      gatekeeper: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+      firewall: '<path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-6 1-9z"/>',
+      proxy: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+      ports: '<circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v5M12 12l-6 5M12 12l6 5"/>',
+      restart_finder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+      restart_dock: '<rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 10h.01M12 10h.01M17 10h.01"/>',
+      restart_panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>',
+      backup_now: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/>',
+      npm_cache: '<path d="M21 8l-9-5-9 5 9 5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/>',
+      brew_cleanup: '<path d="M5 8h11v7a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z"/><path d="M16 10h2a2 2 0 0 1 0 5h-2"/>',
+      xcode_derived: '<path d="M13 5l6 6-3 3-6-6z"/><path d="M14 7l3 3M4 20l9-9"/>',
+      empty_trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'
+    };
     let actionBusy = false;
     let actionRunning = null;   // id of the running action
-    let actionResult = null;    // {id, ok, text} of the last run: one shared result panel instead of a long list
-    let actionAvail = null;   // id -> available on this Mac; null until the app answers
+    let actionResult = null;    // {id, ok, text} of the last run, shown under the tiles
+    let actionAvail = null;     // id -> available on this Mac; null until the app answers
+    const actionDone = {};      // id -> {ok, brief}: the tile remembers how its last run ended
 
-    function actionButton(a) {
+    // Control Center tile: icon, name and one line that says what it does, or how the last run ended
+    function actionTile(a) {
       const missing = actionAvail && actionAvail[a.id] === false;
       const disabled = !actionApi() || missing || actionBusy;
-      const hint = missing ? 'Немає на цьому Mac' : (!actionApi() ? 'Доступно лише в застосунку MacSafe' : a.cmd);
-      const label = actionRunning === a.id ? 'Виконується…' : a.title;
-      return `<button class="btn act-btn act-btn--${esc(a.level)}${actionRunning === a.id ? ' is-running' : ''}" type="button" data-run="${esc(a.id)}" ${disabled ? 'disabled' : ''} title="${esc(hint)}">${esc(label)}</button>`;
+      const done = actionDone[a.id];
+      const running = actionRunning === a.id;
+      const sub = running ? 'Виконується…' : missing ? 'Немає на цьому Mac' : !actionApi() ? 'Доступно лише в застосунку MacSafe' : done ? done.brief : a.desc;
+      const cls = `cc-tile cc-tile--${a.level}${running ? ' is-running' : ''}${done && !running ? (done.ok ? ' is-done' : ' is-error') : ''}`;
+      return `<button class="${cls}" type="button" data-run="${esc(a.id)}" ${disabled ? 'disabled' : ''} title="${esc(a.cmd)}">
+        <span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${ACTION_ICONS[a.id] || ''}</svg></span>
+        <span class="cc-txt"><b>${esc(a.title)}</b><small>${esc(sub)}</small></span></button>`;
     }
 
     function renderActions() {
-      const groups = Object.keys(ACTION_GROUPS).map(g => `<h4>${esc(ACTION_GROUPS[g])}</h4><div class="act-grid">${ACTION_CMDS.filter(a => a.group === g).map(actionButton).join('')}</div>`).join('');
+      const groups = Object.keys(ACTION_GROUPS).map(g => `<h4>${esc(ACTION_GROUPS[g])}</h4><div class="cc-grid">${ACTION_CMDS.filter(a => a.group === g).map(actionTile).join('')}</div>`).join('');
       const r = actionResult;
       const res = r ? (() => {
         const a = ACTION_CMDS.find(x => x.id === r.id);
         return `<div class="card act-result"><p><b>${esc(a.title)}</b> ${badge(r.ok ? 'good' : 'critical', r.ok ? 'готово' : 'помилка')} ${copyBtn(a.cmd)}</p><pre class="cmd" style="white-space:pre-wrap">${esc(r.text)}</pre></div>` })() : '';
-      $('#actions-body').innerHTML = `
-        <p class="muted act-legend"><span class="act-dot act-dot--read"></span>читання <span class="act-dot act-dot--mild"></span>легка дія <span class="act-dot act-dot--destructive"></span>видаляє дані (питає підтвердження)</p>
-        ${groups}${res}`;
+      $('#actions-body').innerHTML = `${groups}${res}`;
     }
 
     async function refreshActionAvailability() {
@@ -2277,8 +2337,12 @@
           st = await api.action_status();
         } while (st && st.state === 'running');
         actionResult = { id, ok: st.state === 'done', text: st.output || (st.state === 'done' ? 'Готово' : `Код ${st.code}`) };
+        const one = (st.output || '').trim();
+        const brief = one && !one.includes('\n') && one.length <= 60 ? one : (st.state === 'done' ? 'Готово, деталі нижче' : 'Помилка, деталі нижче');
+        actionDone[id] = { ok: st.state === 'done', brief: (st.state === 'done' ? '✓ ' : '✗ ') + brief };
       } catch (error) {
         actionResult = { id, ok: false, text: String(error && error.message || error || 'Невідома помилка') };
+        actionDone[id] = { ok: false, brief: '✗ ' + actionResult.text.slice(0, 50) };
       } finally {
         actionBusy = false; actionRunning = null;
         renderActions();
@@ -2286,7 +2350,7 @@
     }
 
     document.addEventListener('click', event => {
-      const btn = event.target.closest && event.target.closest('.act-btn');
+      const btn = event.target.closest && event.target.closest('.cc-tile');
       if (btn) runAction(btn.dataset.run);
     });
     window.addEventListener('pywebviewready', refreshActionAvailability);
