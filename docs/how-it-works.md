@@ -73,3 +73,5 @@ Measured with `tools/bench.py` on Apple Silicon. Idle agent: about 1% CPU, 106 M
 | Temperature sensors | 51 ms every cycle | 22 ms every 3 s |
 | Process scan (panel open) | 47 ms | 9 ms (name, path and owner cached per process) |
 | Battery power | 15 ms (fork of `ioreg`) | 0.04 ms (IOKit) |
+
+Disk speed (read and write) comes from `psutil.disk_io_counters` and is almost free. It replaces the size line of the disk card while the disk moves more than 100 KB/s. Per-process network speed was measured and left out: `nettop` costs about 1.3 s of CPU per 5 s, around a quarter of a core.
