@@ -113,7 +113,7 @@ def main():
                 AppHelper.callAfter(bar["ctrl"].set_note, T("Перевірка: {msg}", msg=msg))
             time.sleep(1)
         done = s["status"] == "done"
-        AppHelper.callAfter(bar["ctrl"].set_note, T("Перевірку завершено, звіт оновлено") if done else T("Перевірка не вдалась"))
+        AppHelper.callAfter(bar["ctrl"].set_note, "" if done else T("Перевірка не вдалась"))
         AppHelper.callAfter(bar["ctrl"].refresh_security)
 
     def purge():

@@ -229,7 +229,6 @@ EN = {
     "Новий елемент автозапуску": "New login item",
     "Перевірка не вдалась": "Check failed",
     "Перевірка: {msg}": "Check: {msg}",
-    "Перевірку завершено, звіт оновлено": "Check finished, report updated",
     "Вільно {free:.1f} ГБ. Спробуйте «Детальне очищення».": "{free:.1f} GB free. Try “Detailed clean”.",
     "Зайнято {ram:.0f}%. Закрийте важкі застосунки або відкрийте «Процеси».": "{ram:.0f}% in use. Close heavy apps or open “Processes”.",
     "Залишилось {pct:.0f}%.": "{pct:.0f}% left.",

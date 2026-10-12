@@ -376,7 +376,16 @@ class _BarFill(_PanelView):
 
 
 class _MeterView(_PanelView):
-    """A flat bar and a time scale 0–100%, with gaps for unavailable samples."""
+    """A flat bar and a time scale 0–100%, with gaps for unavailable samples. A click opens the zone of the same kind."""
+    on_click = None
+
+    def mouseDown_(self, _event):
+        if self.on_click is not None:
+            self.on_click()
+
+    def resetCursorRects(self):
+        if self.on_click is not None:
+            self.addCursorRect_cursor_(self.bounds(), AppKit.NSCursor.pointingHandCursor())
 
     def drawRect_(self, _rect):
         width = self.bounds().size.width
@@ -448,6 +457,15 @@ class _CoresView(_PanelView):
     """Load of each core: a column per core across the full width, filled from the bottom according to the percentage."""
     loads = ()
     kinds = ()   # “P” or “E” for each core
+    on_click = None
+
+    def mouseDown_(self, _event):
+        if self.on_click is not None:
+            self.on_click()
+
+    def resetCursorRects(self):
+        if self.on_click is not None:
+            self.addCursorRect_cursor_(self.bounds(), AppKit.NSCursor.pointingHandCursor())
 
     def setLoads_(self, loads):
         self.loads = list(loads)
@@ -587,10 +605,12 @@ class _PopoverPanel:
             graph.setAccessibilityLabel_(key.upper() + ": " + T("історія за 60 секунд"))
             root.addSubview_(graph)
             self.meters[key] = (value, detail, graph)
+            graph.on_click = lambda key=key: self.open_zone(self._block_zone[key])
             if key == "cpu":
                 self.cores = _CoresView.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, y + 50, INNER_W, 42))
                 self.cores.setKinds_(core_types())
                 self.cores.setToolTip_(T("Ядра: синє — продуктивні (P), бірюзове — економні (E)"))
+                self.cores.on_click = lambda: self.open_zone(self._block_zone["cpu"])
                 root.addSubview_(self.cores)
                 y += 44
             y += 58
@@ -759,6 +779,14 @@ class _PopoverPanel:
         for i, zone in enumerate(self.zones):
             zone["open"] = i == index and not zone["open"]
         self._layout()
+
+    def open_zone(self, index):
+        """A click on a graph: the zone of that kind opens (a second click closes it) and is scrolled into view."""
+        self.toggle_zone(index)
+        zone = self.zones[index]
+        if zone["open"]:
+            head = zone["head"].frame()
+            self.root.scrollRectToVisible_(NSMakeRect(0, head.origin.y, PANEL_W, ZONE_H + 6 + zone["height"] + 18))
 
     def _layout(self, animate=True):
         y = self.zones_top
