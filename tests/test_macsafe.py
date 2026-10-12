@@ -653,6 +653,70 @@ class QuickMetricsTests(unittest.TestCase):
 
 
 
+class HistoryTests(unittest.TestCase):
+    def setUp(self):
+        import history
+        self.h = history
+        self.tmp = tempfile.mkdtemp(prefix="macsafe-hist-")
+        self.path = os.path.join(self.tmp, "history.jsonl")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _rows(self, temps, start=1_000_000):
+        return [{"t": start + i * 60, "cpu": c} for i, c in enumerate(temps)]
+
+    def test_append_and_load_roundtrip_and_skip_broken_lines(self):
+        self.h.append({"t": 100, "cpu": 50.0}, self.path, now=100)
+        with open(self.path, "a") as fh:
+            fh.write("not json\n")
+        self.h.append({"t": 160, "cpu": 51.0}, self.path, now=160)
+        self.assertEqual([r["cpu"] for r in self.h.load(0, self.path)], [50.0, 51.0])
+
+    def test_load_returns_only_the_requested_window(self):
+        for t in (1000, 5000, 90000):
+            self.h.append({"t": t, "cpu": 40.0}, self.path, now=90000)
+        self.assertEqual([r["t"] for r in self.h.load(1, self.path, now=90000)], [90000])
+
+    def test_old_samples_are_trimmed_when_the_file_is_large(self):
+        old = {"t": 10, "cpu": 40.0, "pad": "x" * 200}
+        with open(self.path, "w") as fh:
+            for _ in range(8000):
+                fh.write(json.dumps(old) + "\n")
+        self.h.append({"t": 1_000_000, "cpu": 41.0}, self.path, now=1_000_000)
+        self.assertEqual([r["t"] for r in self.h.load(0, self.path)], [1_000_000])
+
+    def test_one_peak_is_only_info_and_a_long_hot_period_is_a_warning(self):
+        peak = self.h.summarize(self._rows([60] * 30 + [97] + [60] * 30))
+        self.assertEqual(self.h.verdict(peak), "info")
+        long_hot = self.h.summarize(self._rows([92] * 50 + [60] * 10))
+        self.assertEqual(long_hot["hotMinutes"], 50)
+        self.assertEqual(self.h.verdict(long_hot), "warning")
+
+    def test_extreme_temperature_for_minutes_is_critical(self):
+        s = self.h.summarize(self._rows([101] * 6 + [60] * 10))
+        self.assertEqual(self.h.verdict(s), "critical")
+
+    def test_cool_history_gives_no_verdict_and_empty_gives_nothing(self):
+        self.assertEqual(self.h.verdict(self.h.summarize(self._rows([55] * 100))), "")
+        self.assertEqual(self.h.summarize([]), {})
+        self.assertEqual(self.h.verdict({}), "")
+
+    def test_series_averages_each_bucket(self):
+        rows = [{"t": 0, "cpu": 40, "sysW": 2}, {"t": 60, "cpu": 60, "sysW": 4}, {"t": 400, "cpu": 50}]
+        pts = self.h.series(rows, bucket=300)
+        self.assertEqual(pts[0], {"t": 0, "cpu": 50.0, "w": 3.0})
+        self.assertEqual(pts[1]["cpu"], 50.0)
+
+    def test_the_report_uses_the_history_not_a_single_reading_for_the_score(self):
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(here, "core", "generate-report.sh"), encoding="utf-8") as fh:
+            script = fh.read()
+        self.assertIn("history.py", script)
+        line = next(l for l in script.splitlines() if "Температура CPU зараз висока" in l)
+        self.assertIn("add_issue info", line)
+
+
 class ThermalHidTests(unittest.TestCase):
     def setUp(self):
         import thermal_hid

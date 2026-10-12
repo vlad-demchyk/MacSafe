@@ -110,6 +110,15 @@
     .sec-row .sec-link { flex:1; min-width:0; }
     .fix-btn { white-space:nowrap; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
     .sec-row .fix-btn, .sec-row .fix-slot { flex:none; width:150px; box-sizing:border-box; }
+    .trend { width:100%; height:auto; display:block; margin:6px 0 8px; }
+    .trend polyline { fill:none; stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+    .trend .grid { stroke:var(--line); stroke-width:1; }
+    .trend .hot { stroke:var(--critical); stroke-dasharray:4 4; opacity:.7; stroke-width:1; }
+    .tr-cpu { stroke:var(--critical); background:var(--critical); } .tr-ssd { stroke:var(--blue); background:var(--blue); }
+    .tr-w { stroke:var(--warn); background:var(--warn); } .tr-bat { stroke:var(--good); background:var(--good); }
+    .trend-legend { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12px; color:var(--muted); }
+    .trend-legend i { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
+    .trend-range { margin-left:auto; font-variant-numeric:tabular-nums; }
     .cleanup-tiles { margin-bottom:12px; }
     .cleanup-tiles .cc-tile.is-active { border-color:var(--accent); box-shadow:0 0 0 2px var(--soft); }
     .cache-panel[hidden] { display:none; }
@@ -1004,6 +1013,16 @@
  "Кеш застосунку": "App cache",
  "Локальні LLM": "Local LLMs",
  "Запустити": "Run",
+ "Історія накопичується: графік зʼявиться через кілька хвилин роботи застосунку.": "History is collecting: the chart appears after a few minutes of the app running.",
+ "пік": "peak",
+ "пік за добу": "peak in 24 h",
+ "Графік за добу": "24-hour chart",
+ "Температура за добу": "Temperature, 24 h",
+ "Потужність за добу": "Power, 24 h",
+ "Довше 90 °C": "Above 90 °C",
+ "Довше 100 °C": "Above 100 °C",
+ "Пік CPU": "CPU peak",
+ "Середня потужність системи": "Average system power",
  "Виправити права": "Fix permissions",
  "Налаштувати": "Set up",
  "Оновити": "Update",
@@ -1911,7 +1930,7 @@
           ${tile('Swap на SSD', has(m.swapMb) ? `${esc(m.swapMb)} МБ` : NA, swapKind, has(m.swapMb) ? m.swapMb / 20 : null, has(m.swapoutsIn5s) ? `${tt('запис у swap за 5 с')}: ${m.swapoutsIn5s}` : '', 'swap')}
           ${tile('SSD заповнено', fmt(s.pct, '%'), diskKind, s.pct, parts(has(s.usedGb) && has(s.totalGb) && `${s.usedGb} ${tt('з')} ${s.totalGb} ${tt('ГБ')}`, has(s.availGb) && `${s.availGb} ${tt('ГБ')} ${tt('вільно')}`, s.smart && `SMART: ${s.smart}`), 'disk_free')}
           ${tile('Ємність батареї', batValue, batKind, b.healthPct, b.present === false ? '' : parts(has(b.cycles) && `${b.cycles} ${tt('циклів')}`, b.state, b.remain && `${tt('залишилось')} ${b.remain}`, has(b.tempC) && `${b.tempC}°C`), 'battery')}
-          ${has(t.cpuTemp) ? tile('Температура CPU', fmt(t.cpuTemp, '°C'), tempKind, t.cpuTemp, parts(has(t.gpuTemp) && `GPU ${t.gpuTemp}°C`, has(t.ssdTemp) && `SSD ${t.ssdTemp}°C`, has(t.fans) && `${tt('вентилятори')}: ${t.fans}`, t.pmsetPressure && `pmset: ${t.pmsetPressure}`), 'thermal') : uptimeTile}
+          ${has(t.cpuTemp) ? tile('Температура CPU', fmt(t.cpuTemp, '°C'), tempKind, t.cpuTemp, parts(has(t.maxCpu24h) && `${tt('пік за добу')} ${t.maxCpu24h}°C`, has(t.gpuTemp) && `GPU ${t.gpuTemp}°C`, has(t.ssdTemp) && `SSD ${t.ssdTemp}°C`, has(t.fans) && `${tt('вентилятори')}: ${t.fans}`, t.pmsetPressure && `pmset: ${t.pmsetPressure}`), 'thermal') : uptimeTile}
         </div>`;
       const ring = $('.ring__fg');
       requestAnimationFrame(() => { ring.style.strokeDashoffset = ring.dataset.off; });
@@ -2290,6 +2309,32 @@
         <div class="grid">${card('Time Machine', rows([['Стан', badge(b.kind, b.status || NA)], ['Остання копія', fmt(b.latest)]]))}</div>`;
     }
 
+    // Line chart of the last 24 hours from the history (5-minute points). specs: [{key, cls, label, unit}]; hot: a threshold line.
+    function trendChart(series, specs, hot) {
+      const W = 640, H = 120, PX = 4, PY = 10;
+      const pts = (series || []).filter(p => specs.some(sp => has(p[sp.key])));
+      if (pts.length < 2) return `<p class="muted">${esc(tt('Історія накопичується: графік зʼявиться через кілька хвилин роботи застосунку.'))}</p>`;
+      const vals = pts.flatMap(p => specs.map(sp => p[sp.key]).filter(v => has(v)));
+      let lo = Math.min(...vals), hi = Math.max(...vals);
+      if (hot) hi = Math.max(hi, hot);
+      if (hi - lo < 4) { hi += 2; lo -= 2; }
+      const t0 = pts[0].t, t1 = pts[pts.length - 1].t || t0 + 1;
+      const x = t => PX + (t - t0) / Math.max(1, t1 - t0) * (W - 2 * PX);
+      const y = v => PY + (1 - (v - lo) / (hi - lo)) * (H - 2 * PY);
+      const lines = specs.map(sp => {
+        const d = pts.filter(p => has(p[sp.key])).map(p => `${x(p.t).toFixed(1)},${y(p[sp.key]).toFixed(1)}`).join(' ');
+        return `<polyline class="${sp.cls}" points="${d}"></polyline>`;
+      }).join('');
+      const hotLine = hot && hot >= lo && hot <= hi ? `<line class="hot" x1="${PX}" x2="${W - PX}" y1="${y(hot).toFixed(1)}" y2="${y(hot).toFixed(1)}"></line>` : '';
+      const legend = specs.map(sp => {
+        const v = pts.map(p => p[sp.key]).filter(has);
+        const last = v[v.length - 1], peak = Math.max(...v);
+        return `<span><i class="${sp.cls}"></i>${esc(tt(sp.label))} ${esc(last)}${esc(sp.unit)} · ${esc(tt('пік'))} ${esc(peak)}${esc(sp.unit)}</span>`;
+      }).join('');
+      return `<svg class="trend" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(tt('Графік за добу'))}"><line class="grid" x1="${PX}" x2="${W - PX}" y1="${PY}" y2="${PY}"></line><line class="grid" x1="${PX}" x2="${W - PX}" y1="${H - PY}" y2="${H - PY}"></line>${hotLine}${lines}</svg>
+        <div class="trend-legend">${legend}<span class="trend-range">${esc(lo.toFixed(0))}–${esc(hi.toFixed(0))}</span></div>`;
+    }
+
     function renderThermal() {
       const t = DATA.thermal || {}, g = DATA.gpu || {};
       const note = has(t.cpuTemp) ? '' : '<p class="muted" style="margin-bottom:12px">Сенсори температури CPU і GPU не знайдено. Через ioreg на Apple Silicon їх зазвичай не видно без додаткових інструментів.</p>';
@@ -2298,6 +2343,10 @@
           ['CPU', fmt(t.cpuTemp, '°C')], ['GPU', fmt(t.gpuTemp, '°C')],
           ['SSD (NAND)', fmt(t.ssdTemp, '°C')], ['Батарея', fmt(t.batteryTemp, '°C')],
         ]))}
+        ${card('Температура за добу', trendChart(t.series, [{ key: 'cpu', cls: 'tr-cpu', label: 'CPU', unit: '°C' }, { key: 'ssd', cls: 'tr-ssd', label: 'SSD', unit: '°C' }], 90)
+          + (has(t.hotMinutes24h) ? rows([['Довше 90 °C', fmt(t.hotMinutes24h, 'хв')], ['Довше 100 °C', fmt(t.extremeMinutes24h, 'хв')], ['Пік CPU', fmt(t.maxCpu24h, '°C')]]) : ''))}
+        ${card('Потужність за добу', trendChart(t.series, [{ key: 'w', cls: 'tr-w', label: 'Система', unit: ' W' }, { key: 'batW', cls: 'tr-bat', label: 'Батарея', unit: ' W' }])
+          + (has(t.avgPowerW) ? rows([['Середня потужність системи', fmt(t.avgPowerW, 'W')]]) : ''))}
         ${card('Охолодження', rows([
           ['Тепловий тиск (pmset -g therm)', esc(t.pmsetPressure || NA)],
           ['Вентилятори', fmt(t.fans)], ['Обороти', fmt(t.fanSpeed, 'RPM')],

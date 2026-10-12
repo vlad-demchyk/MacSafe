@@ -357,6 +357,27 @@ class Monitor:
         self._wake = threading.Event()   # wakes the cycle at once when the process list is opened
         self._thread = None
 
+    def _temperature(self):
+        """The processor temperature in °C from the HID sensors (no root), or None."""
+        try:
+            import thermal_hid
+            found = thermal_hid.read() or {}
+            return found.get("cpu")
+        except Exception:
+            return None
+
+    def _power(self):
+        """{"sysW", "batW"} of the battery sensor, read at most every 5 seconds (it is an ioreg call)."""
+        now = time.time()
+        if now - getattr(self, "_power_at", 0) >= 5:
+            self._power_at = now
+            try:
+                import history
+                self._power_last = history.battery_power() or None
+            except Exception:
+                self._power_last = None
+        return getattr(self, "_power_last", None)
+
     def start(self):
         # Priming the system CPU: the first cpu_percent is always 0, so we make a call before the first cycle
         psutil.cpu_percent(interval=None)
@@ -419,6 +440,8 @@ class Monitor:
                     snap["topGpu"] = self._top_gpu
                     snap["groups"] = self._groups
                     snap["procReady"] = ready
+                    snap["temp"] = self._temperature()
+                    snap["power"] = self._power()
                     self._latest = snap
             except Exception:
                 pass

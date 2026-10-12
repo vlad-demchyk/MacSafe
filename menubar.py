@@ -275,6 +275,22 @@ def _percent_text(value):
     return text.rjust(4, "\u2007")
 
 
+TEMP_LOW, TEMP_HIGH = 20.0, 100.0     # the temperature graph spans these °C: 84 °C is the yellow line, 96 °C the red one
+POWER_MAX_W = 40.0                    # the power graph spans 0 to this many watts
+
+
+def _scale_temp(celsius):
+    if celsius is None:
+        return None
+    return max(0.0, min(100.0, (celsius - TEMP_LOW) / (TEMP_HIGH - TEMP_LOW) * 100))
+
+
+def _scale_power(watts):
+    if watts is None:
+        return None
+    return max(0.0, min(100.0, abs(watts) / POWER_MAX_W * 100))
+
+
 def _legend_row(view, y, color, title):
     """Detail row: a coloured dot and the name on the left, the value on the right. Returns (name, value)."""
     font = AppKit.NSFont.systemFontOfSize_(11)
@@ -555,11 +571,17 @@ class _PopoverPanel:
             sub = _label(root, "", x0 + 10, y + 28, col - 26, 10, True, height=14)
             self.infos[key] = (top, sub)
         y += 66
+        # Optional graphs under the cards: temperature and power. They are added or removed in the Appearance zone
+        self.extra = {}
+        self._extra_top = y + 4
+        for i, (key, caption) in enumerate((("temp", T("ТЕМПЕРАТУРА")), ("power", T("ПОТУЖНІСТЬ")))):
+            self.extra[key] = self._make_extra_meter(root, key, caption, self._extra_top + i * 70)
         self.divider = AppKit.NSBox.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, y - 8, INNER_W, 1))
         self.divider.setBoxType_(AppKit.NSBoxSeparator)
         self.divider.setHidden_(True)   # cards and zone plates separate the blocks without lines
         root.addSubview_(self.divider)
-        self.zones_top = y - 2   # zones are counted from the end of the metrics block, not from a fixed 252
+        self._zones_base = y - 2
+        self.zones_top = self._zones_base   # zones are counted from the end of the metrics block (plus the optional graphs)
         self.zones = []
         self.process_rows = []
         self.switches = {}
@@ -606,8 +628,64 @@ class _PopoverPanel:
         self.slot_names = [[], [], []]   # names by row of CPU, RAM and GPU: the order is stable between updates
         self._lit = None             # the highlighted row: we change the background only when the selection changes
         self._icon_paths = {}        # which app is already shown in the row icon: we change it only when it changes
+        self.apply_extra()
         self._layout()
         self.sync()
+
+    # ---------- optional graphs: temperature and power ----------
+    def _make_extra_meter(self, root, key, caption, y):
+        cap = _label(root, caption, PANEL_PAD, y, 160, 11, height=16)
+        cap.setFont_(AppKit.NSFont.systemFontOfSize_weight_(11, 0.5))
+        value = _label(root, "—", PANEL_W - PANEL_PAD - 130, y - 7, 130, size=20, digits=True, height=28)
+        value.setAlignment_(AppKit.NSTextAlignmentRight)
+        detail = _label(root, T("Очікування даних"), PANEL_PAD, y + 18, INNER_W, 11, True, height=16)
+        graph = _MeterView.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, y + 34, INNER_W, 24))
+        graph.value, graph.samples, graph.end = None, (), 0
+        graph.setWantsLayer_(True)
+        graph.fill = _BarFill.alloc().initWithFrame_(NSMakeRect(0, 0, 0, 5))
+        graph.fill.setWantsLayer_(True)
+        graph.fill.setHidden_(True)
+        graph.addSubview_(graph.fill)
+        graph.setAccessibilityLabel_(caption + ": " + T("історія за 60 секунд"))
+        root.addSubview_(graph)
+        return {"views": (cap, value, detail, graph), "value": value, "detail": detail, "graph": graph}
+
+    def apply_extra(self):
+        """Shows the graphs that are on, hides the rest, and moves the zones below by the height they take."""
+        shown = 0
+        for key, meter in self.extra.items():
+            on = bool(self.owner._settings.get("graphTemp" if key == "temp" else "graphPower"))
+            top = self._extra_top + shown * 70
+            for view, dy in zip(meter["views"], (0, -7, 18, 34)):
+                frame = view.frame()
+                view.setFrame_(NSMakeRect(frame.origin.x, top + dy, frame.size.width, frame.size.height))
+                view.setHidden_(not on)
+            shown += 1 if on else 0
+        self.zones_top = self._zones_base + 70 * shown
+        if getattr(self, "zones", None):
+            self._layout(animate=False)
+
+    def _update_extra(self, snap):
+        temp = snap.get("temp")
+        power = snap.get("power") or {}
+        meter = self.extra["temp"]
+        meter["value"].setStringValue_(("—" if temp is None else f"{temp:.0f} °C").rjust(6, "\u2007"))
+        meter["detail"].setStringValue_(T("Датчики недоступні") if temp is None else T("процесор · зараз"))
+        meter["graph"].value = _scale_temp(temp)
+        meter = self.extra["power"]
+        sys_w, bat_w = power.get("sysW"), power.get("batW")
+        meter["value"].setStringValue_(("—" if sys_w is None else f"{sys_w:.1f} W").rjust(6, "\u2007"))
+        if sys_w is None:
+            meter["detail"].setStringValue_(T("Дані недоступні"))
+        elif bat_w is None:
+            meter["detail"].setStringValue_(T("система"))
+        else:
+            meter["detail"].setStringValue_(T("система · батарея {sign}{w:.1f} W", sign="+" if bat_w > 0 else "−", w=abs(bat_w)))
+        meter["graph"].value = _scale_power(sys_w)
+        for key, meter in self.extra.items():
+            meter["graph"].samples = [(s[0], s[1].get(key)) for s in self.owner._history]
+            meter["graph"].end = self.owner._history[-1][0] if self.owner._history else 0
+            meter["graph"].setNeedsDisplay_(True)
 
     # ---------- zones ----------
     def _zone(self, title, fill):
@@ -896,6 +974,16 @@ class _PopoverPanel:
             self.switches[key] = sw
             y += 28
         y += 10
+        _caption(view, T("Графіки в панелі"), y)
+        y += 22
+        for key, title in (("graphTemp", T("Температура")), ("graphPower", T("Потужність, W"))):
+            _label(view, title, 0, y, 200, 12, height=20)
+            sw = _Switch.alloc().initWithFrame_(NSMakeRect(INNER_W - _Switch.WIDTH, y, _Switch.WIDTH, _Switch.HEIGHT))
+            sw.on_change = lambda key=key: self.owner.toggle_graph(key)
+            view.addSubview_(sw)
+            self.switches[key] = sw
+            y += 28
+        y += 10
         _caption(view, T("Автоматично"), y)
         y += 22
         for key, title in (("alerts", T("Сповіщення")), ("dailyCheck", T("Щоденна перевірка"))):
@@ -991,8 +1079,9 @@ class _PopoverPanel:
         self.meters["gpu"][1].setStringValue_(T("Дані недоступні") if snap["gpu"] is None else T("Навантаження графіки"))
         self.cores.setLoads_(snap.get("perCore") or [])
         self._update_infos(snap)
+        self._update_extra(snap)
         for key, (_, _, graph) in self.meters.items():
-            graph.samples = [(s[0], s[1][key]) for s in self.owner._history]
+            graph.samples = [(s[0], s[1].get(key)) for s in self.owner._history]
             graph.end = self.owner._history[-1][0]
         self._release()
         armed = self.armed if self.armed and time.monotonic() - self.armed[1] <= 3 else None
@@ -1236,7 +1325,7 @@ class StatusBar:
         self._monitor = monitor
         self.actions = actions
         self._prefs = prefs
-        self._settings = {key: prefs.get(key) for key in ("cpu", "ram", "gpu", "style", "interval", "alerts", "dailyCheck")}
+        self._settings = {key: prefs.get(key) for key in ("cpu", "ram", "gpu", "style", "interval", "alerts", "dailyCheck", "graphTemp", "graphPower")}
         self._monitor.set_interval(self._settings["interval"])
         self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="audit-settings")
         self._closed = False
@@ -1500,6 +1589,13 @@ class StatusBar:
         self._sync_view_items()
         self.refresh()
 
+    def toggle_graph(self, key):
+        """The temperature and power graphs of the panel: on or off, the panel closes the gap at once."""
+        self._save_setting(key, not self._settings[key])
+        self._sync_view_items()
+        if self._panel is not None:
+            self._panel.apply_extra()
+
     def toggle_flag(self, key):
         """The “Notifications” and “Daily check” switches."""
         self._save_setting(key, not self._settings[key])
@@ -1643,15 +1739,17 @@ class StatusBar:
         cpu, gpu, ram = snap["cpu"], snap["gpu"], snap["ram"]
         ram_pct = ram["percent"]
         stamp = float(snap["time"])
+        sample = {"cpu": cpu, "ram": ram_pct, "gpu": gpu,
+                  "temp": _scale_temp(snap.get("temp")), "power": _scale_power((snap.get("power") or {}).get("sysW"))}
         if not self._history or stamp > self._history[-1][0]:
             # A gap in the line only when samples are skipped, not at the normal interval with timer jitter
             gap = max(2.0, 2.5 * self._monitor.interval)
             if self._history and stamp - self._history[-1][0] > gap:
-                self._history.append((stamp - 0.001, {"cpu": None, "ram": None, "gpu": None}))
-            self._history.append((stamp, {"cpu": cpu, "ram": ram_pct, "gpu": gpu}))
+                self._history.append((stamp - 0.001, {"cpu": None, "ram": None, "gpu": None, "temp": None, "power": None}))
+            self._history.append((stamp, sample))
         elif stamp < self._history[-1][0]:
             self._history.clear()
-            self._history.append((stamp, {"cpu": cpu, "ram": ram_pct, "gpu": gpu}))
+            self._history.append((stamp, sample))
         while self._history and self._history[0][0] < stamp - 60:
             self._history.popleft()
         self._update_security()

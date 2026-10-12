@@ -390,6 +390,16 @@ if [ -z "$CPU_TEMP_C" ] && [ -n "${MACSAFE_PYTHON:-}" ] && [ -f "${MACSAFE_HELPE
   [ -n "$SSD_TEMP_C" ] || SSD_TEMP_C="$(hid_temp ssd)"
   [ -n "$BATT_TEMP_C" ] || BATT_TEMP_C="$(hid_temp battery)"
 fi
+# History of the last 24 hours (history.py): how high and how long the processor was hot, and the points for the charts
+H_MAX=""; H_HOT=""; H_EXT=""; H_AVGW=""; H_VERDICT=""; H_SAMPLES=""; HIST_SERIES="[]"
+if [ -n "${MACSAFE_PYTHON:-}" ] && [ -f "${MACSAFE_HELPERS:-}/history.py" ]; then
+  HIST_OUT="$("$MACSAFE_PYTHON" "$MACSAFE_HELPERS/history.py" summary 24 2>/dev/null || true)"
+  hist_value() { printf '%s\n' "$HIST_OUT" | sed -nE "s/^$1=(.*)$/\1/p" | head -1; }
+  H_MAX="$(hist_value maxCpu)"; H_HOT="$(hist_value hotMinutes)"; H_EXT="$(hist_value extremeMinutes)"
+  H_AVGW="$(hist_value avgW)"; H_VERDICT="$(hist_value verdict)"; H_SAMPLES="$(hist_value samples)"
+  HIST_SERIES="$("$MACSAFE_PYTHON" "$MACSAFE_HELPERS/history.py" series 24 2>/dev/null || true)"
+  [ -n "$HIST_SERIES" ] || HIST_SERIES="[]"
+fi
 FAN_COUNT="$(printf '%s\n' "$IOREG_ALL" | awk -F= '/"Fan.*Count"/ { gsub(/[^0-9]/,"",$2); print $2; exit }')"
 FAN_SPEED="$(printf '%s\n' "$IOREG_ALL" | awk -F= '/"Fan.*CurrentSpeed"/ { gsub(/[^0-9]/,"",$2); printf "%s ", $2 }' | sed 's/ *$//')"
 THROTTLE_STATUS="Не виявлено"; THROTTLE_KIND="good"
@@ -940,21 +950,28 @@ done < <(awk -F'\t' '$2 >= 3600 && $3 / $2 >= 0.25 { print }' "$PS_TABLE" | sort
 
 # Temperatures and graphs
 if is_number "${CPU_TEMP_C:-}"; then
+  # A single reading is only a notice (a hot moment under load is normal); the score follows how long it stays hot (below)
   CPU_TEMP_INT="$(integer_part "$CPU_TEMP_C")"
-  if [ "$CPU_TEMP_INT" -ge 95 ]; then
-    add_issue critical "Температура" "Температура CPU критична: ${CPU_TEMP_C} °C" "Mac може знижувати швидкість для захисту від перегріву." \
-      "CPU: ${CPU_TEMP_C} °C" "Перегрів скорочує строк служби і спричиняє тротлінг." "ioreg -l | grep -i temp" "низький" \
-      "Негайно зменшіть навантаження: закрийте важкі процеси." "Перевірте вентиляцію і не тримайте Mac на м'яких поверхнях."
-  elif [ "$CPU_TEMP_INT" -ge 80 ]; then
-    add_issue warning "Температура" "Температура CPU підвищена: ${CPU_TEMP_C} °C" "Вище звичайного." \
-      "CPU: ${CPU_TEMP_C} °C" "Тривалий жар погіршує продуктивність і батарею." "ioreg -l | grep -i temp" "низький" \
-      "Знайдіть процеси з великим CPU в таблиці нижче." "Не тримайте Mac на ковдрі чи подушці."
-  elif [ "$CPU_TEMP_INT" -ge 70 ]; then
-    add_issue info "Температура" "Температура CPU помітно підвищена: ${CPU_TEMP_C} °C" "Під навантаженням це нормально." \
-      "CPU: ${CPU_TEMP_C} °C" "Одиничні значення нормальні." "ioreg -l | grep -i temp" "низький" \
-      "Стежте за трендом у наступних звітах."
+  if [ "$CPU_TEMP_INT" -ge 85 ]; then
+    add_issue info "Температура" "Температура CPU зараз висока: ${CPU_TEMP_C} °C" "Під навантаженням це буває. Оцінка залежить від того, скільки це триває." \
+      "CPU: ${CPU_TEMP_C} °C" "Одиничне значення нічого не доводить." "python3 thermal_hid.py" "низький" \
+      "Стежте за графіком температури за добу."
   fi
 fi
+case "$H_VERDICT" in
+  critical)
+    add_issue critical "Температура" "Процесор довго на межі перегріву: ${H_EXT} хв за добу вище 100 °C" "Пік за добу ${H_MAX} °C." \
+      "history.py: хвилин вище 100 °C: ${H_EXT}, вище 90 °C: ${H_HOT}" "Тривалий жар скорочує строк служби і спричиняє тротлінг." "python3 history.py summary 24" "низький" \
+      "Закрийте важкі процеси і дайте Mac охолонути." "Перевірте вентиляцію, не тримайте Mac на м'яких поверхнях." ;;
+  warning)
+    add_issue warning "Температура" "Процесор довго гарячий: ${H_HOT} хв за добу вище 90 °C" "Пік за добу ${H_MAX} °C." \
+      "history.py: хвилин вище 90 °C: ${H_HOT}" "Довге навантаження нагріває Mac і зношує батарею." "python3 history.py summary 24" "низький" \
+      "Знайдіть процеси з великим CPU у таблиці нижче." "Не тримайте Mac на ковдрі чи подушці." ;;
+  info)
+    add_issue info "Температура" "Пік температури за добу: ${H_MAX} °C" "Коротко, без довгого перегріву." \
+      "history.py: пік ${H_MAX} °C, довше 90 °C менше ${HOT_LIMIT_NOTE:-45} хв" "Одиничні піки нормальні." "python3 history.py summary 24" "низький" \
+      "Стежте за графіком температури за добу." ;;
+esac
 # macOS thermal pressure through pmset -g therm (no root). Threshold: text without the phrase “No thermal warning level has been recorded”.
 THERM_RAW="$(pmset -g therm 2>&1 || true)"
 THERM_LEVEL="Немає даних"
@@ -1130,7 +1147,7 @@ BATTERY_OBJ="$(obj "$(kb present "$BATT_PRESENT")" "$(kn pct "$BATT_PCT")" "$(kv
   "$(kn tempC "$BATT_TEMP_C")" "$(kn voltageV "$BATT_VOLT_V")" "$(kv condition "$BATT_CONDITION")")"
 STORAGE_OBJ="$(obj "$(kv device "$STORAGE_DEVICE")" "$(kv smart "$SMART_STATUS")" "$(kn usedGb "$DISK_USED_GB")" \
   "$(kn totalGb "$DISK_TOTAL_GB")" "$(kn availGb "$DISK_AVAIL_GB")" "$(kn pct "$DISK_PCT")" "$(kn localSnapshots "$LOCAL_SNAPS")")"
-THERMAL_OBJ="$(obj "$(kv pmsetPressure "$THERM_LEVEL")" "$(kn cpuTemp "$CPU_TEMP_C")" "$(kn gpuTemp "$GPU_TEMP_C")" "$(kn ssdTemp "$SSD_TEMP_C")" \
+THERMAL_OBJ="$(obj "$(kn maxCpu24h "$H_MAX")" "$(kn hotMinutes24h "$H_HOT")" "$(kn extremeMinutes24h "$H_EXT")" "$(kn avgPowerW "$H_AVGW")" "$(kn historySamples "$H_SAMPLES")" "$(kr series "$HIST_SERIES")" "$(kv pmsetPressure "$THERM_LEVEL")" "$(kn cpuTemp "$CPU_TEMP_C")" "$(kn gpuTemp "$GPU_TEMP_C")" "$(kn ssdTemp "$SSD_TEMP_C")" \
   "$(kn batteryTemp "$BATT_TEMP_C")" "$(kn fans "$FAN_COUNT")" "$(kv fanSpeed "$FAN_SPEED")" "$(kv throttle "$THROTTLE_STATUS")" "$(kv throttleKind "$THROTTLE_KIND")")"
 GPU_OBJ="$(obj "$(kv model "$GPU_MODEL")" "$(kv vram "$GPU_VRAM")" "$(kv metal "$GPU_METAL")" "$(kv resolution "$GPU_RESOLUTION")" "$(kv displayType "$GPU_DISPLAY_TYPE")")"
 SECURITY_ARR=()

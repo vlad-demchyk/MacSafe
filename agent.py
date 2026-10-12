@@ -24,6 +24,7 @@ import autostart
 import persistence
 import cleanup
 import engine
+import history
 import i18n
 import menubar
 from i18n import T
@@ -240,6 +241,16 @@ def main():
         threading.Thread(target=work, daemon=True).start()
         AppHelper.callLater(600, watch_persistence)
 
+    def watch_history():
+        # A sample of temperatures and power every minute in a background thread: the history for graphs and the score
+        def work():
+            try:
+                history.append(history.take_sample())
+            except Exception:
+                pass
+        threading.Thread(target=work, daemon=True).start()
+        AppHelper.callLater(history.SAMPLE_EVERY, watch_history)
+
     def start_daily():
         # The first check one minute after start: the panel and the monitor come first
         AppHelper.callLater(60, daily_loop)
@@ -251,6 +262,7 @@ def main():
     AppHelper.callAfter(install)
     AppHelper.callAfter(start_daily)
     AppHelper.callLater(20, watch_persistence)
+    AppHelper.callLater(15, watch_history)
     AppHelper.runEventLoop()
 
 
