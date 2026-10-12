@@ -1256,6 +1256,13 @@ class SystemMetricsTests(unittest.TestCase):
         r = metrics.net_rates(2.0)
         self.assertTrue(r is None or (r[0] >= 0 and r[1] >= 0))
 
+    def test_disk_rates_first_call_none(self):
+        import metrics
+        metrics._DISK_IO.update(at=None, read=None, write=None)
+        self.assertIsNone(metrics.disk_rates(1.0))
+        r = metrics.disk_rates(2.0)
+        self.assertTrue(r is None or (r[0] >= 0 and r[1] >= 0))
+
 
 class BigFilesTests(unittest.TestCase):
     def setUp(self):

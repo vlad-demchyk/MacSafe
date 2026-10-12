@@ -1129,7 +1129,11 @@ class _PopoverPanel:
         disk, net, bat = snap.get("disk"), snap.get("net"), snap.get("battery")
         top, sub = self.infos["disk"]
         top.setStringValue_("—" if not disk else T("{free:.0f} ГБ", free=disk["freeGb"]))
-        sub.setStringValue_("" if not disk else T("з {total:.0f} ГБ", total=disk["totalGb"]))
+        io = snap.get("diskIo")
+        if disk and io and max(io) >= 100 * 1024:   # while the disk is busy the line shows its speed, otherwise the size
+            sub.setStringValue_(T("ч {r} · з {w}", r=_rate(io[0]), w=_rate(io[1])))
+        else:
+            sub.setStringValue_("" if not disk else T("з {total:.0f} ГБ", total=disk["totalGb"]))
         low = bool(disk) and disk["freeGb"] < 10
         top.setTextColor_(AppKit.NSColor.systemRedColor() if low else AppKit.NSColor.labelColor())
         top, sub = self.infos["net"]

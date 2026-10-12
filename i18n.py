@@ -130,6 +130,7 @@ EN = {
     "від мережі": "on power",
     "від батареї": "on battery",
     "з {total:.0f} ГБ": "of {total:.0f} GB",
+    "ч {r} · з {w}": "R {r} · W {w}",
     "Показники в барі": "Menu bar metrics",
     "Автоматично": "Automatic",
     "Сповіщення": "Notifications",

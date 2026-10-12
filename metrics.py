@@ -286,6 +286,26 @@ def net_rates(now=None):
     return ((c.bytes_recv - prev_rx) / dt, (c.bytes_sent - prev_tx) / dt)
 
 
+_DISK_IO = {"at": None, "read": None, "write": None}
+
+
+def disk_rates(now=None):
+    """Disk speed, bytes/s: (read, write). None until there is a previous snapshot or counters."""
+    now = time.monotonic() if now is None else now
+    try:
+        c = psutil.disk_io_counters()
+    except Exception:
+        return None
+    if c is None:
+        return None
+    prev_at, prev_r, prev_w = _DISK_IO["at"], _DISK_IO["read"], _DISK_IO["write"]
+    _DISK_IO.update(at=now, read=c.read_bytes, write=c.write_bytes)
+    if prev_at is None or now <= prev_at or c.read_bytes < prev_r or c.write_bytes < prev_w:
+        return None
+    dt = now - prev_at
+    return ((c.read_bytes - prev_r) / dt, (c.write_bytes - prev_w) / dt)
+
+
 def disk_info():
     """User disk: free and total, GB, percent in use. None if it failed."""
     try:
@@ -343,6 +363,7 @@ def take_quick():
         "gpuDetail": gpu,
         "disk": disk_info(),
         "net": net_rates(),
+        "diskIo": disk_rates(),
         "battery": battery_info(),
     }
 
