@@ -358,13 +358,19 @@ class Monitor:
         self._thread = None
 
     def _temperature(self):
-        """The processor temperature in °C from the HID sensors (no root), or None."""
-        try:
-            import thermal_hid
-            found = thermal_hid.read() or {}
-            return found.get("cpu")
-        except Exception:
-            return None
+        """The processor temperature in °C from the HID sensors (no root), or None.
+
+        Reading the sensors costs about 30 ms and the value moves slowly, so it is read at most every 3 seconds.
+        """
+        now = time.time()
+        if now - getattr(self, "_temp_at", 0) >= 3:
+            self._temp_at = now
+            try:
+                import thermal_hid
+                self._temp_last = (thermal_hid.read() or {}).get("cpu")
+            except Exception:
+                self._temp_last = None
+        return getattr(self, "_temp_last", None)
 
     def _power(self):
         """{"sysW", "batW"} of the battery sensor, read at most every 5 seconds (it is an ioreg call)."""
