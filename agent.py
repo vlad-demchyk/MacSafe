@@ -158,6 +158,8 @@ def main():
             ("alertMemoryDisk", "memory_disk"), ("alertBattery", "battery"), ("alertLoad", "load")) if not prefs.get(key))
         for title, text in rules.check(snap, security, off):
             notify(title, text)
+            if bar.get("ctrl"):
+                bar["ctrl"].add_alert(title, text)
 
     def daily_check():
         # Once an hour we check whether there is a report for today; if not and no check is running, we start one

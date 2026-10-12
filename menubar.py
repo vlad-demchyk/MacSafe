@@ -1356,6 +1356,7 @@ class StatusBar:
         self._bar_key = None       # the last menu bar state: we update only when it changes
         self._icon_key = None      # the last column heights of the icon (pixels)
         self._bar_text = None      # the last text and security level in the menu bar
+        self._alert_log = deque(maxlen=5)   # (time, title, text) of the notifications shown, newest first
         self._security = None      # security summary from the latest report, updated once per SECURITY_EVERY
         self._security_at = 0.0
         self._last = None
@@ -1411,6 +1412,12 @@ class StatusBar:
         menu.addItem_(view)
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
+        self._alerts_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(T("Тривоги"), None, "")
+        self._alerts_menu = AppKit.NSMenu.alloc().initWithTitle_(T("Тривоги"))
+        self._alerts_menu.setAutoenablesItems_(False)
+        self._alerts_item.setSubmenu_(self._alerts_menu)
+        menu.addItem_(self._alerts_item)
+        self._fill_alerts()
         menu.addItem_(self._action(T("Звіти"), "openReport:"))
         menu.addItem_(self._action(T("Перевірити зараз"), "runCheck:"))
         menu.addItem_(self._action(T("Звільнити памʼять…"), "purge:"))
@@ -1831,6 +1838,23 @@ class StatusBar:
         if title_key != self._bar_text:
             self._bar_text = title_key
             self._button.setAttributedTitle_(self._bar_title(text))
+
+    def add_alert(self, title, text):
+        """Remember a notification that was shown: the “Alerts” menu keeps the last five, the newest first."""
+        self._alert_log.appendleft((time.strftime("%H:%M"), title, text))
+        self._fill_alerts()
+
+    def _fill_alerts(self):
+        self._alerts_menu.removeAllItems()
+        if not self._alert_log:
+            empty = self._action(T("Немає тривог"), None)
+            empty.setEnabled_(False)
+            self._alerts_menu.addItem_(empty)
+            return
+        for stamp, title, text in self._alert_log:
+            item = self._action(f"{stamp}  {title}", "openReport:")   # a click opens the report window
+            item.setToolTip_(text)
+            self._alerts_menu.addItem_(item)
 
     def refresh_security(self):
         """The next update of the security indicator reads the report at once (after a check)."""
