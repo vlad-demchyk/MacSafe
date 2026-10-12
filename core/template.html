@@ -521,6 +521,7 @@
             <button class="cc-tile cc-tile--read" type="button" data-panel="big-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/></svg></span><span class="cc-txt"><b>Великі файли</b><small id="ct-big-sub">Не перевірено</small></span></button>
             <button class="cc-tile cc-tile--read" type="button" data-panel="left-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></span><span class="cc-txt"><b>Залишки застосунків</b><small id="ct-left-sub">Не перевірено</small></span></button>
             <button class="cc-tile cc-tile--read" type="button" data-panel="llm-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></span><span class="cc-txt"><b>Локальні LLM</b><small id="ct-llm-sub">Не перевірено</small></span></button>
+            <button class="cc-tile cc-tile--read" type="button" data-panel="apps-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg></span><span class="cc-txt"><b>Програми</b><small id="ct-apps-sub">Не перевірено</small></span></button>
           </div>
           <article class="card cache-panel" id="cache-panel" aria-labelledby="cache-heading" aria-busy="false">
             <h3 id="cache-heading">Кеші застосунків</h3>
@@ -575,6 +576,18 @@
             </div>
             <p class="hint" id="llm-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
             <div class="cache-list" id="llm-list"></div>
+          </article>
+          <article class="card cache-panel" id="apps-panel" hidden aria-labelledby="apps-heading" aria-busy="false">
+            <h3 id="apps-heading">Програми</h3>
+            <p class="hint">Застосунок іде в кошик разом із вибраними файлами з Library. Термінальний пакет видаляє його менеджер.</p>
+            <div class="cache-actions">
+              <button class="btn" id="apps-scan" type="button" disabled>Показати програми</button>
+              <button class="btn" id="apps-tab-gui" type="button" aria-pressed="true">Застосунки</button>
+              <button class="btn" id="apps-tab-cli" type="button" aria-pressed="false">Термінальні</button>
+              <input id="apps-search" type="search" placeholder="Пошук" aria-label="Пошук" disabled>
+            </div>
+            <p class="hint" id="apps-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
+            <div class="cache-list" id="apps-list"></div>
           </article>
           <details class="card more-details"><summary>Рекомендації зі звіту</summary>
             <p id="cleanup-summary"></p>
@@ -984,6 +997,31 @@
  "Знайдено через softwareupdate -l.": "Found with softwareupdate -l.",
  "Знайдено:": "Found:",
  "Знайдіть процеси з великим CPU в таблиці нижче.": "Find processes with high CPU in the table below.",
+ "Програми": "Programs",
+ "Показати програми": "Show programs",
+ "Застосунки": "Apps",
+ "Термінальні": "Terminal",
+ "Застосунок іде в кошик разом із вибраними файлами з Library. Термінальний пакет видаляє його менеджер.": "An app goes to the Trash together with the chosen Library files. A terminal package is removed by its manager.",
+ "Видалити…": "Remove…",
+ "Видалити": "Remove",
+ "Файли з Library": "Library files",
+ "Скасувати": "Cancel",
+ "збіг лише за назвою: перевірте": "matched by name only: check",
+ "Пов'язаних файлів не знайдено.": "No related files found.",
+ "Шукаю пов'язані файли…": "Looking for related files…",
+ "Перемістити в кошик": "Move to the Trash",
+ "Звільнено близько": "Freed about",
+ "не вдалося": "failed",
+ "Видалити пакет": "Remove package",
+ "Його видалить менеджер пакетів, у кошик він не потрапить.": "The package manager removes it; it does not go to the Trash.",
+ "Видаляю…": "Removing…",
+ "Видалено": "Removed",
+ "востаннє": "last used",
+ "дн.": "d.",
+ "Від нього залежать інші пакети": "Other packages depend on it",
+ "Застосунків": "Apps",
+ "Термінальних пакетів": "Terminal packages",
+ "Не вдалося знайти": "Could not find",
  "Знайти великі файли": "Find large files",
  "Знайти залишки": "Find leftovers",
  "Значення в момент звіту.": "Value at the time of the report.",
@@ -3496,12 +3534,180 @@
       window.addEventListener('pywebviewready', sync);
       sync();
     })();
+    // Programs: installed apps (removed with their Library files) and command line packages
+    (() => {
+      const scanBtn = document.getElementById('apps-scan');
+      const guiTab = document.getElementById('apps-tab-gui');
+      const cliTab = document.getElementById('apps-tab-cli');
+      const search = document.getElementById('apps-search');
+      const st = document.getElementById('apps-status');
+      const out = document.getElementById('apps-list');
+      const tr_ = t => (window.MacSafeI18n ? window.MacSafeI18n.tr(t) : t);
+      let apps = [], pkgs = [], tab = 'gui', open_ = null;
+      const api = () => {
+        const a = window.pywebview && window.pywebview.api;
+        return a && typeof a.apps_list === 'function' ? a : null;
+      };
+      const sizeText = v => v === null || v === undefined ? '' : v >= 1024 ? `${(v / 1024).toLocaleString('uk-UA', { maximumFractionDigits:1 })} ГБ` : `${v.toLocaleString('uk-UA', { maximumFractionDigits:1 })} МБ`;
+      const sync = () => {
+        const on = !!api();
+        scanBtn.disabled = !on;
+        search.disabled = !on;
+        if (!on) st.textContent = unavailable;
+        else if (st.textContent === unavailable) st.textContent = '';
+      };
+      const setTab = name => {
+        tab = name; open_ = null;
+        guiTab.setAttribute('aria-pressed', String(name === 'gui'));
+        cliTab.setAttribute('aria-pressed', String(name === 'cli'));
+        draw();
+      };
+      const row = (title, meta, size, button) => {
+        const label = document.createElement('div');
+        label.className = 'cache-item';
+        const copy = document.createElement('span');
+        copy.className = 'cache-copy';
+        const name = document.createElement('span');
+        name.className = 'cache-title';
+        name.textContent = title;
+        const sub = document.createElement('span');
+        sub.className = 'big-path';
+        sub.textContent = meta;
+        copy.append(name, sub);
+        const sz = document.createElement('span');
+        sz.className = 'cache-size';
+        sz.textContent = size;
+        label.append(copy, sz);
+        if (button) label.append(button);
+        return label;
+      };
+      const button = (text, handler, danger) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'btn' + (danger ? ' btn--danger' : '');
+        b.textContent = tr_(text);
+        b.addEventListener('click', handler);
+        return b;
+      };
+      async function openRemoval(app) {
+        const a = api();
+        if (!a) return;
+        st.textContent = tr_('Шукаю пов\'язані файли…');
+        try {
+          const r = await a.app_related(app.path);
+          open_ = { path: app.path, files: Array.isArray(r.items) ? r.items : [], chosen: new Set() };
+          open_.files.forEach(f => { if (!f.weak) open_.chosen.add(f.path); });
+          st.textContent = '';
+        } catch (error) { st.textContent = `${tr_('Помилка')}: ${errorText(error)}`; }
+        draw();
+      }
+      async function removeApp(app) {
+        const a = api();
+        const paths = [...open_.chosen];
+        if (!a) return;
+        if (!window.confirm(`${tr_('Перемістити в кошик')}: ${app.name}${paths.length ? ' + ' + paths.length : ''}?\n${tr_('Їх можна повернути з кошика.')}`)) return;
+        st.textContent = tr_('Переміщую…');
+        try {
+          const r = await a.app_uninstall(app.path, paths, true);
+          if (!r || !r.ok) throw new Error(r && r.error || tr_('Помилка'));
+          const failed = r.results.filter(x => !x.ok).length;
+          st.textContent = `${tr_('Звільнено близько')} ${sizeText(r.freedMb)}` + (failed ? `; ${tr_('не вдалося')}: ${failed}` : '') + '.';
+          apps = apps.filter(x => x.path !== app.path);
+          open_ = null;
+          window.setTileSub('ct-apps-sub', `${apps.length}`);
+        } catch (error) { st.textContent = `${tr_('Помилка')}: ${errorText(error)}`; }
+        draw();
+      }
+      async function removePkg(pkg) {
+        const a = api();
+        if (!a) return;
+        if (!window.confirm(`${tr_('Видалити пакет')} ${pkg.name} (${pkg.manager})?\n${tr_('Його видалить менеджер пакетів, у кошик він не потрапить.')}`)) return;
+        st.textContent = tr_('Видаляю…');
+        try {
+          const r = await a.packages_remove([pkg.id], true);
+          if (!r || !r.ok) throw new Error(r && r.error || tr_('Помилка'));
+          const res = r.results[0] || {};
+          if (res.ok) { pkgs = pkgs.filter(x => x.id !== pkg.id); st.textContent = `${tr_('Видалено')}: ${pkg.name}.`; }
+          else st.textContent = `${tr_('Не вдалося')}: ${res.error || ''}`;
+        } catch (error) { st.textContent = `${tr_('Помилка')}: ${errorText(error)}`; }
+        draw();
+      }
+      function drawRemoval(app) {
+        const box = document.createElement('div');
+        box.className = 'cache-item';
+        const copy = document.createElement('span');
+        copy.className = 'cache-copy';
+        const head = document.createElement('span');
+        head.className = 'cache-title';
+        head.textContent = tr_('Файли з Library');
+        copy.append(head);
+        if (!open_.files.length) {
+          const none = document.createElement('span'); none.className = 'big-path'; none.textContent = tr_('Пов\'язаних файлів не знайдено.');
+          copy.append(none);
+        }
+        open_.files.forEach(f => {
+          const label = document.createElement('label');
+          label.className = 'big-path';
+          const box_ = document.createElement('input');
+          box_.type = 'checkbox'; box_.checked = open_.chosen.has(f.path);
+          box_.addEventListener('change', () => { if (box_.checked) open_.chosen.add(f.path); else open_.chosen.delete(f.path); });
+          label.append(box_, document.createTextNode(` ${f.path.replace(/^.*\/Library\//, '~/Library/')} · ${sizeText(f.sizeMb)}` + (f.weak ? ` · ${tr_('збіг лише за назвою: перевірте')}` : '')));
+          copy.append(label);
+        });
+        const actions = document.createElement('span');
+        actions.append(button('У кошик', () => removeApp(app), true), button('Скасувати', () => { open_ = null; draw(); }));
+        box.append(copy, actions);
+        return box;
+      }
+      function draw() {
+        out.replaceChildren();
+        const q = search.value.trim().toLowerCase();
+        if (tab === 'gui') {
+          apps.filter(x => !q || x.name.toLowerCase().includes(q) || x.bundleId.toLowerCase().includes(q)).forEach(app => {
+            const used = app.days === null || app.days === undefined ? '' : ` · ${tr_('востаннє')}: ${app.days} ${tr_('дн.')}`;
+            const del = button('Видалити…', () => openRemoval(app));
+            del.disabled = !!app.blocked;
+            out.append(row(app.name, app.blocked ? app.blocked : `${app.version} · ${app.bundleId}${used}`, sizeText(app.sizeMb), del));
+            if (open_ && open_.path === app.path) out.append(drawRemoval(app));
+          });
+        } else {
+          pkgs.filter(x => !q || x.name.toLowerCase().includes(q)).forEach(pkg => {
+            const del = button('Видалити', () => removePkg(pkg), true);
+            del.disabled = !pkg.leaf;
+            out.append(row(pkg.name, `${pkg.manager}${pkg.kind === 'cask' ? ' cask' : ''} · ${pkg.version}` + (pkg.leaf ? '' : ` · ${tr_('Від нього залежать інші пакети')}`), sizeText(pkg.sizeMb), del));
+          });
+        }
+        sync();
+      }
+      async function find() {
+        const a = api();
+        if (!a) { sync(); return; }
+        scanBtn.disabled = true; st.textContent = tr_('Шукаю…'); open_ = null;
+        try {
+          const [r1, r2] = await Promise.all([a.apps_list(), a.packages_list()]);
+          apps = Array.isArray(r1.items) ? r1.items : [];
+          pkgs = Array.isArray(r2.items) ? r2.items : [];
+          const total = apps.reduce((n, x) => n + (x.sizeMb || 0), 0);
+          st.textContent = `${tr_('Застосунків')}: ${apps.length}, ${sizeText(total)}. ${tr_('Термінальних пакетів')}: ${pkgs.length}.`;
+          window.setTileSub('ct-apps-sub', `${apps.length} · ${pkgs.length}`);
+          draw();
+        } catch (error) {
+          st.textContent = `${tr_('Не вдалося знайти')}: ${errorText(error)}`;
+        } finally { sync(); }
+      }
+      scanBtn.addEventListener('click', find);
+      guiTab.addEventListener('click', () => setTab('gui'));
+      cliTab.addEventListener('click', () => setTab('cli'));
+      search.addEventListener('input', draw);
+      (window.cleanupScans = window.cleanupScans || {}).apps = find;
+      window.addEventListener('pywebviewready', sync);
+      sync();
+    })();
     (window.cleanupScans = window.cleanupScans || {}).cache = scanCaches;
     document.querySelectorAll('#cleanup-tiles .cc-tile').forEach(tile_ => tile_.addEventListener('click', () => {
       document.querySelectorAll('#cleanup-tiles .cc-tile').forEach(t => t.classList.toggle('is-active', t === tile_));
       document.querySelectorAll('#cleanup .cache-panel').forEach(panel => { panel.hidden = panel.id !== tile_.dataset.panel; });
       // The first time a type is opened, its own check runs
-      const kind = { 'cache-panel': 'cache', 'big-panel': 'big', 'left-panel': 'left', 'llm-panel': 'llm' }[tile_.dataset.panel];
+      const kind = { 'cache-panel': 'cache', 'big-panel': 'big', 'left-panel': 'left', 'llm-panel': 'llm', 'apps-panel': 'apps' }[tile_.dataset.panel];
       const run = window.cleanupScans && window.cleanupScans[kind];
       if (run && !tile_.dataset.scanned && cacheApi()) run();
     }));
