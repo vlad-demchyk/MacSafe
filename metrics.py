@@ -350,6 +350,7 @@ def take_quick():
             "usedGb": round((vm.total - vm.available) / GB, 1),
             "totalGb": round(vm.total / GB, 1),
             "swapGb": round(sw.used / GB, 1),
+            "pressure": _sysctl_u64("kern.memorystatus_vm_pressure_level"),   # 1 normal, 2 warning, 4 critical
         },
         "memory": {
             "totalGb": vm.total / GB,

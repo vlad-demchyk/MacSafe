@@ -1200,8 +1200,16 @@ class AlertsTests(unittest.TestCase):
         self.now = [0.0]
         self.rules = alerts.Alerts(clock=lambda: self.now[0])
 
-    def snap(self, ram=50, free=100, bat=None):
-        return {"ram": {"percent": ram}, "disk": {"freeGb": free}, "battery": bat}
+    def snap(self, ram=50, free=100, bat=None, pressure=None):
+        return {"ram": {"percent": ram, "pressure": pressure}, "disk": {"freeGb": free}, "battery": bat}
+
+    def test_ram_uses_pressure_when_known(self):
+        self.rules.check(self.snap(ram=97, pressure=1))
+        self.now[0] = 100
+        self.assertEqual(self.rules.check(self.snap(ram=97, pressure=1)), [])   # a full but healthy memory is silent
+        self.rules.check(self.snap(ram=60, pressure=2))
+        self.now[0] = 200
+        self.assertEqual(len(self.rules.check(self.snap(ram=60, pressure=2))), 1)
 
     def test_ram_needs_hold_then_cooldown(self):
         self.assertEqual(self.rules.check(self.snap(ram=95)), [])

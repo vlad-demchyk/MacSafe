@@ -7,7 +7,8 @@ the previous check.
 from i18n import T
 import time
 
-RAM_PERCENT = 92        # percent of memory in use
+RAM_PERCENT = 92        # percent of memory in use, used only when the memory pressure is unknown
+PRESSURE_WARN = 2       # kern.memorystatus_vm_pressure_level: 1 normal, 2 warning, 4 critical
 DISK_FREE_GB = 10       # free disk space, GB
 BATTERY_LOW = 15        # charge percentage when not on power
 HOLD = 60.0             # how many seconds the condition must last
@@ -37,8 +38,12 @@ class Alerts:
         """List of notifications (title, text) to show now."""
         now = self._clock()
         out = []
-        ram = (snap.get("ram") or {}).get("percent")
-        self._fire("ram", ram is not None and ram >= RAM_PERCENT, now, out,
+        ramd = snap.get("ram") or {}
+        ram, pressure = ramd.get("percent"), ramd.get("pressure")
+        # The share of memory in use is high on a healthy Mac (caches), so the system's own pressure decides;
+        # the percentage is only a fallback when macOS does not report it
+        tight = pressure >= PRESSURE_WARN if pressure else (ram is not None and ram >= RAM_PERCENT)
+        self._fire("ram", tight, now, out,
                    T("Памʼять майже вичерпана"), T("Зайнято {ram:.0f}%. Закрийте важкі застосунки або відкрийте «Процеси».", ram=ram) if ram else "")
         disk = snap.get("disk")
         low = disk is not None and disk["freeGb"] < DISK_FREE_GB
