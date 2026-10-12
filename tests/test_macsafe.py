@@ -1406,6 +1406,71 @@ class AppsTests(unittest.TestCase):
         self.assertFalse(self.apps.remove_packages([], listing, runner)["ok"])
 
 
+class DiskMapTests(unittest.TestCase):
+    def setUp(self):
+        import diskmap
+        self.dm = diskmap
+        self.home = os.path.realpath(tempfile.mkdtemp())
+        self.saved = diskmap.HOME
+        diskmap.HOME = self.home
+        diskmap._JOBS.clear()
+        os.makedirs(os.path.join(self.home, "big"))
+        os.makedirs(os.path.join(self.home, "small"))
+        os.makedirs(os.path.join(self.home, "empty"))
+        with open(os.path.join(self.home, "file.bin"), "wb") as fh:
+            fh.write(b"x" * (3 * 1024 * 1024))
+        os.symlink(os.path.join(self.home, "big"), os.path.join(self.home, "link"))
+
+    def tearDown(self):
+        self.dm.HOME = self.saved
+        self.dm._JOBS.clear()
+        shutil.rmtree(self.home, ignore_errors=True)
+
+    def finish(self, path):
+        for _ in range(100):
+            r = self.dm.poll(path)
+            if r["done"]:
+                return r
+            time.sleep(0.05)
+        self.fail("the scan did not finish")
+
+    def test_safe_folder_stays_in_home(self):
+        self.assertEqual(self.dm.safe_folder(self.home), self.home)
+        self.assertIsNone(self.dm.safe_folder(os.path.dirname(self.home)))
+        self.assertIsNone(self.dm.safe_folder(os.path.join(self.home, "link")))       # a link is not followed
+        self.assertIsNone(self.dm.safe_folder(os.path.join(self.home, "file.bin")))   # not a folder
+        self.assertIsNone(self.dm.safe_folder("relative"))
+
+    def test_parse_du(self):
+        self.assertEqual(self.dm.parse_du("2048\t/x/y\n"), 2048)
+        self.assertIsNone(self.dm.parse_du("du: /x: Permission denied"))
+
+    def test_scan_sizes_and_skips_links_and_empty(self):
+        sizes = {os.path.join(self.home, "big"): 5 * 1024 * 1024, os.path.join(self.home, "small"): 1024,
+                 os.path.join(self.home, "empty"): 0}
+        self.dm.start(self.home, sizer=lambda path: sizes[path])
+        r = self.finish(self.home)["result"]
+        names = [i["name"] for i in r["items"]]
+        self.assertEqual(names, ["big", "file.bin", "small"])         # biggest first; no link, no empty folder
+        self.assertEqual(r["items"][0]["sizeMb"], 5120.0)
+        self.assertIsNone(r["parent"])
+
+    def test_subfolder_has_parent_and_other_block(self):
+        self.dm.MAX_ITEMS, saved = 2, self.dm.MAX_ITEMS
+        try:
+            sizes = {os.path.join(self.home, d): 1024 * (i + 1) for i, d in enumerate(("big", "small", "empty"))}
+            self.dm.start(self.home, sizer=lambda path: sizes[path])
+            r = self.finish(self.home)["result"]
+        finally:
+            self.dm.MAX_ITEMS = saved
+        self.assertEqual(r["items"][-1]["path"], None)
+        self.assertGreater(r["items"][-1]["count"], 0)
+        self.assertEqual(self.dm.build(os.path.join(self.home, "big"), {}, [])["parent"], self.home)
+
+    def test_refuses_path_outside_home(self):
+        self.assertFalse(self.dm.start("/etc")["ok"])
+
+
 class BigFilesTests(unittest.TestCase):
     def setUp(self):
         import bigfiles

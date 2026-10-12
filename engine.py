@@ -19,6 +19,7 @@ from collections import deque
 import autostart
 import bigfiles
 import cleanup
+import diskmap
 import actions
 import apps
 import leftovers
@@ -283,6 +284,19 @@ class Api:
             if ok:
                 freed += item["sizeMb"]
         return {"ok": True, "results": results, "freedMb": round(freed, 1)}
+
+    # ---------- Disk map ----------
+    def diskmap_start(self, path=None):
+        """Starts counting one folder of the home folder (the home folder by default). Changes nothing."""
+        return diskmap.start(path or os.path.expanduser("~"))
+
+    def diskmap_poll(self, path):
+        """What has been counted so far for a folder started with diskmap_start."""
+        return diskmap.poll(path)
+
+    def reveal_folder(self, path):
+        """Shows a folder or file of the disk map in Finder."""
+        return self.reveal_file(path)
 
     # ---------- Programs: apps and command line packages ----------
     def apps_list(self):

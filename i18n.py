@@ -203,6 +203,8 @@ EN = {
     "Від нього залежать інші пакети": "Other packages depend on it",
     "Недозволена назва": "Name not allowed",
     "Команда не вдалась": "The command failed",
+    "Інше": "Other",
+    "Не вдалося порахувати": "Could not count",
     "Процесор перегрівається": "The processor is overheating",
     "Температура {temp:.0f} °C вже кілька хвилин. Закрийте важкі застосунки й дайте Mac охолонути.": "{temp:.0f} °C for several minutes. Close heavy apps and let the Mac cool down.",
     "Процесор довго навантажений": "The processor is busy for a long time",
