@@ -112,6 +112,9 @@ def _gpu_percent_by_pid(now):
             for pid, total in ns.items()}
 
 
+_STATIC = {}   # pid -> (start time, name, exe, owned by the user); the start time guards against pid reuse
+
+
 def take_processes():
     """Process groups: CPU (% of one core, as in Activity Monitor), RSS and PIDs of their own processes.
 
@@ -121,22 +124,30 @@ def take_processes():
     """
     uid = os.getuid()
     groups = {}
-    for p in psutil.process_iter(["name"]):
+    seen = set()
+    for p in psutil.process_iter():
         try:
             with p.oneshot():
                 cpu = p.cpu_percent(None)
                 rss = p.memory_info().rss
-                name = p.info.get("name") or ""
-                try:
-                    exe = p.exe()
-                except (psutil.AccessDenied, psutil.ZombieProcess):
-                    exe = ""
-                try:
-                    owned = p.uids().real == uid
-                except (psutil.AccessDenied, psutil.ZombieProcess):
-                    owned = False
+                born = p.create_time()
+                cached = _STATIC.get(p.pid)
+                if cached is None or cached[0] != born:
+                    # name, path and owner do not change while the process lives: read them once
+                    name = p.name() or ""
+                    try:
+                        exe = p.exe()
+                    except (psutil.AccessDenied, psutil.ZombieProcess):
+                        exe = ""
+                    try:
+                        owned = p.uids().real == uid
+                    except (psutil.AccessDenied, psutil.ZombieProcess):
+                        owned = False
+                    cached = _STATIC[p.pid] = (born, name, exe, owned)
+                _, name, exe, owned = cached
         except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
             continue
+        seen.add(p.pid)
         key = SELF_NAME if p.pid == SELF_PID else _group_name(name, exe)
         g = groups.setdefault(key, {"name": key, "cpu": 0.0, "rss": 0, "count": 0, "pids": [], "all": [],
                                     "bundle": None})
@@ -148,6 +159,8 @@ def take_processes():
         g["count"] += 1
         if owned and p.pid != SELF_PID:
             g["pids"].append(p.pid)
+    for pid in set(_STATIC) - seen:
+        del _STATIC[pid]
     rows = list(groups.values())
     gpu_pct = _gpu_percent_by_pid(time.monotonic())
     for g in rows:
