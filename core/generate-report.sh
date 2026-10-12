@@ -202,9 +202,20 @@ DESIGN_CAP="$(batt_data_value DesignCapacity)"
 BATT_TEMP_RAW="$(ioreg_value Temperature)"
 BATT_VOLT_RAW="$(ioreg_value Voltage)"
 BATT_CONDITION="$(ioreg_value BatteryHealth)"
-BATT_HEALTH_PCT=""
-if is_number "$MAX_CAP" && is_number "$DESIGN_CAP" && [ "$(integer_part "$DESIGN_CAP")" -gt 0 ]; then
-  BATT_HEALTH_PCT="$(awk -v a="$MAX_CAP" -v b="$DESIGN_CAP" 'BEGIN { printf "%.0f", a / b * 100 }')"
+# Health: the "Maximum Capacity" that macOS itself shows (System Settings). FullChargeCapacity jumps with temperature
+# and recalibration and reads lower than that figure, so it is only the last fallback.
+BATT_HEALTH_PCT=""; BATT_HEALTH_SRC=""
+if [ -n "$BATT_PCT" ]; then
+  SP_CAP="$(LC_ALL=C system_profiler SPPowerDataType 2>/dev/null | sed -nE 's/.*Maximum Capacity:[[:space:]]*([0-9]+)%.*/\1/p' | head -1)"
+  if is_number "$SP_CAP"; then BATT_HEALTH_PCT="$SP_CAP"; BATT_HEALTH_SRC="macOS Maximum Capacity"; fi
+fi
+if [ -z "$BATT_HEALTH_PCT" ] && is_number "$DESIGN_CAP" && [ "$(integer_part "$DESIGN_CAP")" -gt 0 ]; then
+  NOMINAL_CAP="$(batt_data_value NominalChargeCapacity)"
+  if is_number "$NOMINAL_CAP"; then
+    BATT_HEALTH_PCT="$(awk -v a="$NOMINAL_CAP" -v b="$DESIGN_CAP" 'BEGIN { printf "%.0f", a / b * 100 }')"; BATT_HEALTH_SRC="NominalChargeCapacity / DesignCapacity"
+  elif is_number "$MAX_CAP"; then
+    BATT_HEALTH_PCT="$(awk -v a="$MAX_CAP" -v b="$DESIGN_CAP" 'BEGIN { printf "%.0f", a / b * 100 }')"; BATT_HEALTH_SRC="FullChargeCapacity / DesignCapacity"
+  fi
 fi
 BATT_TEMP_C=""; BATT_VOLT_V=""
 is_number "$BATT_TEMP_RAW" && BATT_TEMP_C="$(div "$BATT_TEMP_RAW" 100 '%.1f')"
@@ -1088,7 +1099,7 @@ MEMORY_OBJ="$(obj "$(kv usedText "$MEM_USED_TEXT")" "$(kn freePct "$MEM_FREE_PCT
   "$(kn swapoutsIn5s "$SWAPOUT_5S")" "$(kn pageoutsIn5s "$PAGEOUT_5S")" "$(kn finderRssMb "$FINDER_RSS_MB")" \
   "$(kn panelRssMb "$PANEL_RSS_MB")" "$(kn electronMb "$ELECTRON_MB")")"
 BATTERY_OBJ="$(obj "$(kb present "$BATT_PRESENT")" "$(kn pct "$BATT_PCT")" "$(kv state "$BATT_STATE")" "$(kv remain "$BATT_REMAIN")" \
-  "$(kn healthPct "$BATT_HEALTH_PCT")" "$(kn cycles "$CYCLE_COUNT")" "$(kn maxCapacity "$MAX_CAP")" "$(kn designCapacity "$DESIGN_CAP")" \
+  "$(kn healthPct "$BATT_HEALTH_PCT")" "$(kv healthSource "$BATT_HEALTH_SRC")" "$(kn cycles "$CYCLE_COUNT")" "$(kn maxCapacity "$MAX_CAP")" "$(kn designCapacity "$DESIGN_CAP")" \
   "$(kn tempC "$BATT_TEMP_C")" "$(kn voltageV "$BATT_VOLT_V")" "$(kv condition "$BATT_CONDITION")")"
 STORAGE_OBJ="$(obj "$(kv device "$STORAGE_DEVICE")" "$(kv smart "$SMART_STATUS")" "$(kn usedGb "$DISK_USED_GB")" \
   "$(kn totalGb "$DISK_TOTAL_GB")" "$(kn availGb "$DISK_AVAIL_GB")" "$(kn pct "$DISK_PCT")" "$(kn localSnapshots "$LOCAL_SNAPS")")"
