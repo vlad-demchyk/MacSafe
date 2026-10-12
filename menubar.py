@@ -676,7 +676,7 @@ class _PopoverPanel:
         screen = (window.screen() if window is not None else None) or AppKit.NSScreen.mainScreen()
         if screen is None:
             return 10000
-        return max(300, screen.visibleFrame().size.height - 40)
+        return max(300, screen.visibleFrame().size.height - 90)
 
     def freeze(self):
         """Pins the rows as they are visible now: positions do not change while there is no selection or “Sure?”."""
