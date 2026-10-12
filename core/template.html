@@ -963,6 +963,7 @@
  "Кеш застосунку": "App cache",
  "Локальні LLM": "Local LLMs",
  "Запустити": "Run",
+ "дн": "d",
  "Рекомендація": "Recommendation",
  "Штраф": "Penalty",
  "критичні": "critical",
@@ -1821,6 +1822,9 @@
       const batKind = !has(b.healthPct) ? 'info' : b.healthPct < 80 ? 'critical' : b.healthPct < 85 ? 'warning' : 'good';
       const swapKind = !has(m.swapMb) ? 'info' : m.swapMb >= 8192 ? 'critical' : m.swapMb >= 4096 ? 'warning' : 'good';   // as in the report: macOS uses swap even with free memory
       const tempKind = !has(t.cpuTemp) ? 'info' : t.cpuTemp >= 95 ? 'critical' : t.cpuTemp >= 80 ? 'warning' : 'good';
+      const sy = DATA.system || {};
+      const upDays = has(sy.uptimeDays) ? Number(sy.uptimeDays) : null;
+      const uptimeTile = tile('Безперервна робота', has(upDays) ? `${upDays} ${tt('дн')}` : NA, upDays === null ? 'info' : upDays >= 30 ? 'warning' : 'good', upDays === null ? null : Math.min(100, upDays / 30 * 100), sy.bootDate ? `${tt('з')} ${sy.bootDate}` : '', 'tm_destination');
       const batValue = b.present === false ? 'Немає батареї' : fmt(b.healthPct, '%');
       $('#hero').innerHTML = `
         <article class="score score--${esc(h.kind || 'info')}">
@@ -1836,12 +1840,12 @@
           </div>
         </article>
         <div class="tiles">
-          ${tile('CPU зараз', fmt(l.cpuTotal, '%'), cpuKind, l.cpuTotal, parts(has(l.ncpu) && `${l.ncpu} ${tt('ядер')}`, has(l.cpuUser) && `user ${l.cpuUser}%`, has(l.cpuSys) && `sys ${l.cpuSys}%`, has(l.l1) && `${tt('навантаження')} ${l.l1} · ${l.l5} · ${l.l15}`), 'cpu')}
+          ${tile('CPU зараз', fmt(l.cpuTotal, '%'), cpuKind, l.cpuTotal, parts(has(l.ncpu) && `${l.ncpu} ${tt('ядер')}`, has(l.l1) && `${tt('навантаження')} ${l.l1}`), 'cpu')}
           ${tile('Вільна памʼять (memory_pressure)', fmt(m.freePct, '%'), memKind, m.freePct, parts(m.usedText, has(m.compressorMb) && `${tt('стиснуто')} ${m.compressorMb} ${tt('МБ')}`, m.pressure && `${tt('тиск')}: ${m.pressure}`), 'ram')}
           ${tile('Swap', has(m.swapMb) ? `${esc(m.swapMb)} МБ` : NA, swapKind, has(m.swapMb) ? m.swapMb / 20 : null, has(m.swapoutsIn5s) ? `${tt('запис у swap за 5 с')}: ${m.swapoutsIn5s}` : '', 'swap')}
           ${tile('Диск заповнено', fmt(s.pct, '%'), diskKind, s.pct, parts(has(s.usedGb) && has(s.totalGb) && `${s.usedGb} ${tt('з')} ${s.totalGb} ${tt('ГБ')}`, has(s.availGb) && `${s.availGb} ${tt('ГБ')} ${tt('вільно')}`, s.smart && `SMART: ${s.smart}`), 'disk_free')}
           ${tile('Ємність батареї', batValue, batKind, b.healthPct, b.present === false ? '' : parts(has(b.cycles) && `${b.cycles} ${tt('циклів')}`, b.state, b.remain && `${tt('залишилось')} ${b.remain}`, has(b.tempC) && `${b.tempC}°C`), 'battery')}
-          ${tile('Температура CPU', fmt(t.cpuTemp, '°C'), tempKind, t.cpuTemp, parts(has(t.gpuTemp) && `GPU ${t.gpuTemp}°C`, has(t.ssdTemp) && `SSD ${t.ssdTemp}°C`, has(t.fans) && `${tt('вентилятори')}: ${t.fans}`, t.pmsetPressure && `pmset: ${t.pmsetPressure}`), 'thermal')}
+          ${has(t.cpuTemp) ? tile('Температура CPU', fmt(t.cpuTemp, '°C'), tempKind, t.cpuTemp, parts(has(t.gpuTemp) && `GPU ${t.gpuTemp}°C`, has(t.ssdTemp) && `SSD ${t.ssdTemp}°C`, has(t.fans) && `${tt('вентилятори')}: ${t.fans}`, t.pmsetPressure && `pmset: ${t.pmsetPressure}`), 'thermal') : uptimeTile}
         </div>`;
       const ring = $('.ring__fg');
       requestAnimationFrame(() => { ring.style.strokeDashoffset = ring.dataset.off; });
