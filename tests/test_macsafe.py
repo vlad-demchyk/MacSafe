@@ -805,6 +805,39 @@ class ActionsTests(unittest.TestCase):
         self.assertEqual(st["state"], "done")
         self.assertIn("Filesystem", st["output"])
 
+    def test_launchagent_fix_changes_only_own_secret_plists_to_600(self):
+        home = os.path.realpath(tempfile.mkdtemp(prefix="macsafe-la-"))
+        saved = os.environ.get("HOME")
+        os.environ["HOME"] = home
+        try:
+            folder = os.path.join(home, "Library", "LaunchAgents")
+            os.makedirs(folder)
+            secret = os.path.join(folder, "a.plist")
+            plain = os.path.join(folder, "b.plist")
+            target = os.path.join(home, "outside.plist")
+            for path, text in ((secret, "<key>API_TOKEN</key>"), (plain, "<key>Label</key>"), (target, "SECRET")):
+                with open(path, "w") as fh:
+                    fh.write(text)
+                os.chmod(path, 0o644)
+            os.symlink(target, os.path.join(folder, "c.plist"))
+            ok, text = self.actions._fix_launchagent_perms()
+            self.assertTrue(ok)
+            self.assertEqual(os.stat(secret).st_mode & 0o777, 0o600)
+            self.assertEqual(os.stat(plain).st_mode & 0o777, 0o644)
+            self.assertEqual(os.stat(target).st_mode & 0o777, 0o644)   # a symbolic link is never followed
+            self.assertIn("a.plist", text)
+            self.assertNotIn("a.plist", self.actions._fix_launchagent_perms()[1])   # the second run has nothing left to fix
+        finally:
+            if saved is None:
+                os.environ.pop("HOME", None)
+            else:
+                os.environ["HOME"] = saved
+            shutil.rmtree(home, ignore_errors=True)
+
+    def test_issue_actions_are_not_page_tiles(self):
+        page = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core", "template.html"), encoding="utf-8").read()
+        self.assertNotIn("issue:", page[page.index("const ACTION_GROUPS"):page.index("const LEVEL_TEXT")])
+
     def test_page_list_matches_the_actions(self):
         page = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core", "template.html"), encoding="utf-8").read()
         block = page[page.index("const ACTION_CMDS = ["):page.index("const ACTION_GROUPS")]

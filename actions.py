@@ -34,6 +34,34 @@ def _xcode_derived():
     return True, T("Звільнено {mb} МБ (файли старші за {days} дн.)", mb=result.get("freedMb", 0), days=result.get("days"))
 
 
+def _fix_launchagent_perms():
+    """Own LaunchAgents whose plist mentions a secret and is readable by others: mode 600. Nothing else is touched."""
+    import glob
+    import re
+    folder = os.path.join(os.path.expanduser("~"), "Library", "LaunchAgents")
+    keyword = re.compile(rb"TOKEN|SECRET|PASSWORD", re.I)
+    fixed = []
+    for path in sorted(glob.glob(os.path.join(folder, "*.plist"))):
+        try:
+            st = os.lstat(path)
+            if os.path.islink(path) or st.st_uid != os.getuid() or (st.st_mode & 0o077) == 0:
+                continue
+            with open(path, "rb") as fh:
+                if not keyword.search(fh.read(1_000_000)):
+                    continue
+            os.chmod(path, 0o600)
+            fixed.append(os.path.basename(path))
+        except OSError:
+            continue
+    if not fixed:
+        return True, T("Нічого виправляти: файлів із секретом і широкими правами немає")
+    return True, T("Права 600 встановлено: {n}", n=len(fixed)) + "\n" + "\n".join(fixed)
+
+
+def _open_pane(url):
+    return ["/usr/bin/open", url]
+
+
 ACTIONS = [
     _a("sleep_blockers", "read", "pmset -g assertions", ["/usr/bin/pmset", "-g", "assertions"]),
     _a("thermal", "read", "pmset -g therm", ["/usr/bin/pmset", "-g", "therm"]),
@@ -58,6 +86,15 @@ ACTIONS = [
     _a("npm_cache", "destructive", "npm cache clean --force", ["npm", "cache", "clean", "--force"], timeout=180, group="clean"),
     _a("brew_cleanup", "destructive", "brew cleanup -s", ["brew", "cleanup", "-s"], timeout=300, group="clean"),
     _a("xcode_derived", "destructive", "Xcode DerivedData", fn=_xcode_derived, group="clean"),
+    _a("fix_launchagent_perms", "mild", "chmod 600 LaunchAgents with a secret", fn=_fix_launchagent_perms, group="issue"),
+    _a("open_softwareupdate", "read", "open System Settings: Software Update",
+       _open_pane("x-apple.systempreferences:com.apple.Software-Update-Settings.extension"), group="issue"),
+    _a("open_timemachine", "read", "open System Settings: Time Machine",
+       _open_pane("x-apple.systempreferences:com.apple.Time-Machine-Settings.extension"), group="issue"),
+    _a("open_firewall", "read", "open System Settings: Network",
+       _open_pane("x-apple.systempreferences:com.apple.Network-Settings.extension"), group="issue"),
+    _a("open_privacy", "read", "open System Settings: Privacy and Security",
+       _open_pane("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension"), group="issue"),
     _a("empty_trash", "destructive", 'osascript -e \'tell application "Finder" to empty the trash\'',
        ["/usr/bin/osascript", "-e", 'tell application "Finder" to empty the trash'], group="clean"),
 ]

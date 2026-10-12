@@ -106,6 +106,10 @@
     #cache-panel .cache-title { font-size:14px; }
     #cache-panel .cache-note { font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
     #cache-panel .cache-size { font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .sec-row { display:flex; gap:8px; align-items:center; }
+    .sec-row .sec-link { flex:1; min-width:0; }
+    .fix-btn { white-space:nowrap; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
+    .sec-row .fix-btn, .sec-row .fix-slot { flex:none; width:150px; box-sizing:border-box; }
     .cleanup-tiles { margin-bottom:12px; }
     .cleanup-tiles .cc-tile.is-active { border-color:var(--accent); box-shadow:0 0 0 2px var(--soft); }
     .cache-panel[hidden] { display:none; }
@@ -1000,6 +1004,17 @@
  "Кеш застосунку": "App cache",
  "Локальні LLM": "Local LLMs",
  "Запустити": "Run",
+ "Виправити права": "Fix permissions",
+ "Налаштувати": "Set up",
+ "Оновити": "Update",
+ "Відкрити": "Open",
+ "Перезапустити": "Restart",
+ "Очистити": "Clean",
+ "Оновлення ПЗ": "Software Update",
+ "Приватність і безпека": "Privacy and Security",
+ "Виправити права секретів у LaunchAgents": "Fix secret permissions in LaunchAgents",
+ "Права 600 для plist із секретом": "Mode 600 for plists with a secret",
+ "Відкриває налаштування": "Opens the settings",
  "Перевірити все": "Check all",
  "Кеші": "Caches",
  "Залишки застосунків": "App leftovers",
@@ -1936,7 +1951,7 @@
     function renderOverview() {
       const top = sortedIssues().filter(i => i.sev === 'critical' || i.sev === 'warning').slice(0, 3);
       const pri = top.length
-        ? top.map(i => `<a class="sec-link" href="#issues">${badge(i.sev, KIND_TEXT[i.sev])}<span>${esc(i.title)}</span></a>`).join('')
+        ? top.map(i => `<div class="sec-row"><a class="sec-link" href="#issues">${badge(i.sev, KIND_TEXT[i.sev])}<span>${esc(i.title)}</span></a>${fixControl(i) || '<span class="fix-slot"></span>'}</div>`).join('')
         : '<p class="muted">Критичних проблем і попереджень немає.</p>';
       const sys = DATA.system || {}, bk = DATA.backup || {}, up = DATA.updates || {}, m = DATA.meta || {};
       const ageH = has(m.generatedEpoch) ? Math.floor((Date.now() / 1000 - m.generatedEpoch) / 3600) : null;
@@ -2033,7 +2048,8 @@
 
     function issueBody(i) {
       const steps = list(i.fix).map(s => `<li>${esc(s)}</li>`).join('') || '<li>Окремих кроків немає, перевірте вручну.</li>';
-      return `${rows([
+      const fix = fixControl(i);
+      return `${fix ? `<p>${fix}</p>` : ''}${rows([
         ['Що сталося', esc(i.detail)],
         ['Докази', `<code>${esc(i.evidence)}</code>`],
         ['Чому важливо', esc(i.why)],
@@ -2357,6 +2373,11 @@
       { id: 'npm_cache', group: 'clean', level: 'destructive', title: 'Очистити кеш npm', cmd: 'npm cache clean --force', desc: 'Кеш npm, завантажиться знову' },
       { id: 'brew_cleanup', group: 'clean', level: 'destructive', title: 'Очистити кеш Homebrew', cmd: 'brew cleanup -s', desc: 'Старі версії пакетів і кеш Homebrew' },
       { id: 'xcode_derived', group: 'clean', level: 'destructive', title: 'Очистити Xcode DerivedData', cmd: 'Xcode DerivedData', desc: 'Старі файли збірок Xcode (30+ днів)' },
+      { id: 'fix_launchagent_perms', group: 'issue', level: 'mild', title: 'Виправити права секретів у LaunchAgents', cmd: 'chmod 600 LaunchAgents with a secret', desc: 'Права 600 для plist із секретом' },
+      { id: 'open_softwareupdate', group: 'issue', level: 'read', title: 'Оновлення ПЗ', cmd: 'open System Settings: Software Update', desc: 'Відкриває налаштування' },
+      { id: 'open_timemachine', group: 'issue', level: 'read', title: 'Time Machine', cmd: 'open System Settings: Time Machine', desc: 'Відкриває налаштування' },
+      { id: 'open_firewall', group: 'issue', level: 'read', title: 'Брандмауер', cmd: 'open System Settings: Network', desc: 'Відкриває налаштування' },
+      { id: 'open_privacy', group: 'issue', level: 'read', title: 'Приватність і безпека', cmd: 'open System Settings: Privacy and Security', desc: 'Відкриває налаштування' },
       { id: 'empty_trash', group: 'clean', level: 'destructive', title: 'Очистити кошик Finder', cmd: `osascript -e 'tell application "Finder" to empty the trash'`, desc: 'Остаточно очищає кошик' },
     ];
     const ACTION_GROUPS = { check: 'Перевірки', security: 'Безпека', fix: 'Виправлення', clean: 'Очищення' };
@@ -2419,6 +2440,43 @@
       renderQuick();
     }
 
+    // A fix next to an issue: an action that is run here, or a link to the page where it is done
+    const ISSUE_FIX = [
+      [/LaunchAgent/, { action: 'fix_launchagent_perms', label: 'Виправити права' }],
+      [/Резервні копії/, { action: 'open_timemachine', label: 'Налаштувати' }],
+      [/Доступні оновлення macOS/, { action: 'open_softwareupdate', label: 'Оновити' }],
+      [/Брандмауер/, { action: 'open_firewall', label: 'Відкрити' }],
+      [/FileVault|Gatekeeper/, { action: 'open_privacy', label: 'Відкрити' }],
+      [/Finder займає/, { action: 'restart_finder', label: 'Перезапустити' }],
+      [/Панель відкриття/, { action: 'restart_panel', label: 'Перезапустити' }],
+      [/Сховище|Безпечних кешів|Локальні знімки/, { href: '#cleanup', label: 'Очистити' }],
+      [/навантаж|рахує/, { href: '#processes', label: 'Процеси' }],
+      [/swap|Мало вільної/, { href: '#memory', label: 'RAM' }],
+      [/автозапуск|Автозапуск/, { href: '#launch', label: 'Автозапуск' }],
+    ];
+    function fixControl(issue) {
+      const hit = ISSUE_FIX.find(([re]) => re.test(`${issue.cat} ${issue.title}`));
+      if (!hit) return '';
+      const f = hit[1];
+      return f.href
+        ? `<a class="btn fix-btn" href="${esc(f.href)}">${esc(f.label)}</a>`
+        : `<button class="btn btn--accent fix-btn" type="button" data-fix="${esc(f.action)}">${esc(f.label)}</button>`;
+    }
+    async function runFix(id) {
+      const a = ACTION_CMDS.find(x => x.id === id);
+      const res = await runAction(id);
+      if (!a || !res) return;
+      const first = (res.text || '').split('\n')[0].slice(0, 70);
+      toast(`${a.title}: ${res.ok ? (first || 'готово') : 'помилка'}`);
+      // After a fix the check runs again, so the issue and the score update
+      const api = window.pywebview && window.pywebview.api;
+      if (res.ok && ['fix_launchagent_perms', 'restart_finder', 'restart_panel'].includes(id) && api && typeof api.run_check === 'function') api.run_check();
+    }
+    document.addEventListener('click', event => {
+      const btn = event.target.closest && event.target.closest('[data-fix]');
+      if (btn) runFix(btn.dataset.fix);
+    });
+
     // Home: the daily actions as the same tiles, plus a way into cleaning
     const QUICK_IDS = ['updates', 'disk_free', 'firewall', 'filevault', 'top_cpu', 'restart_finder'];
     function renderQuick() {
@@ -2467,6 +2525,7 @@
         actionBusy = false; actionRunning = null;
         renderActions();
       }
+      return actionResult;
     }
 
     document.addEventListener('click', event => {

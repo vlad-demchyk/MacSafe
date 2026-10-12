@@ -190,6 +190,8 @@ EN = {
     "Кеш застосунку. Закрийте його перед очищенням.": "App cache. Quit the app before cleaning.",
     "Запущено. Закрийте і повторіть.": "Running. Quit it and try again.",
     "Не є локальною моделлю": "Not a local model",
+    "Нічого виправляти: файлів із секретом і широкими правами немає": "Nothing to fix: no files with a secret and wide permissions",
+    "Права 600 встановлено: {n}": "Permissions set to 600: {n}",
     "Звільнено {mb} МБ (файли старші за {days} дн.)": "Freed {mb} MB (files older than {days} days)",
     "Команду не знайдено на цьому Mac": "The command was not found on this Mac",
     "Перевищено час виконання ({s} с)": "Timed out ({s} s)",
