@@ -30,7 +30,7 @@
     #audit-steps i { display:block; width:20px; height:5px; border-radius:3px; background:var(--line, #d6d6dc); }
     #audit-steps i.done { background:var(--good, #16a34a); } #audit-steps i.now { background:var(--blue, #2563eb); animation:audit-pulse 1s ease-in-out infinite; }
     @keyframes audit-pulse { 50% { opacity:.4; } }
-    @media (prefers-reduced-motion:reduce) { #audit-steps i.now, #audit-pill.running .ab-dot { animation:none; } #audit-bar button { transition:none; } }
+    @media (prefers-reduced-motion:reduce) { #audit-steps i.now, #audit-pill.running .ab-dot, #audit-run.is-busy svg, #audit-pill.done, #audit-pill.error, #audit-bar.is-running::after { animation:none; } #audit-bar button { transition:none; } }
     #audit-setup { position:fixed; right:16px; bottom:16px; z-index:9999; width:340px; padding:14px 16px; border-radius:16px;
       background:var(--card, #fff); color:var(--ink, #242426); border:1px solid var(--line, #d6d6dc); box-shadow:0 18px 52px rgba(0,0,0,.25);
       font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,Arial,sans-serif; }
@@ -38,6 +38,17 @@
     #audit-setup .row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-top:1px solid var(--line, #d6d6dc); }
     #audit-setup small { display:block; color:var(--muted, #64646a); font-size:12px; }
     #audit-setup button { font:inherit; color:var(--on-accent, #fff); background:var(--accent, #2563eb); border:0; border-radius:8px; padding:6px 12px; cursor:pointer; }
+    #audit-bar::after { content:""; position:absolute; left:0; bottom:-1px; height:2px; width:100%; opacity:0; pointer-events:none;
+      background:linear-gradient(90deg, transparent, var(--blue, #2563eb), transparent); transform:translateX(-100%); }
+    #audit-bar.is-running::after { opacity:1; animation:audit-sweep 1.3s linear infinite; }
+    @keyframes audit-sweep { to { transform:translateX(100%); } }
+    @keyframes audit-spin { to { transform:rotate(360deg); } }
+    #audit-run.is-busy svg { animation:audit-spin .9s linear infinite; }
+    #audit-pill.done { animation:audit-pop .55s cubic-bezier(.34,1.56,.64,1); }
+    #audit-pill.error { animation:audit-shake .4s; }
+    @keyframes audit-pop { 0% { transform:scale(.88); } 100% { transform:scale(1); } }
+    @keyframes audit-shake { 20%, 60% { transform:translateX(-4px); } 40%, 80% { transform:translateX(4px); } }
+    #audit-bar button:hover:not(:disabled) { transform:translateY(-1px); }
     body { padding-top:56px !important; }
     .side { top:56px !important; height:calc(100vh - 56px) !important; }
   `;
@@ -46,6 +57,7 @@
   document.head.appendChild(style);
 
   const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>';
+  const ICON_SPIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
   const ICON_MEM = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="8" rx="1"/><path d="M7 8v8M11 8v8M15 8v8"/></svg>';
   const bar = document.createElement('div');
   bar.id = 'audit-bar';
@@ -78,10 +90,27 @@
   };
 
   const setStatus = status => { pill.className = status; };
+  // The report file is rebuilt by a check (from this window, the menu bar or the daily run): the page then loads the fresh one.
+  // The page loaded after the file was written, so a newer file means this page is stale. Once per file, to never loop.
+  const reloadIfStale = s => {
+    if (!s.dashboard || s.dashboard * 1000 <= performance.timeOrigin + 1000 || s.status === 'running') return;
+    if (sessionStorage.getItem('audit-reloaded') === String(s.dashboard)) return;
+    sessionStorage.setItem('audit-reloaded', String(s.dashboard));
+    const lang = new URLSearchParams(location.search).get('lang');
+    location.href = location.pathname + (lang ? `?lang=${lang}` : '') + location.hash;
+  };
+
   const render = s => {
+    reloadIfStale(s);
     stateEl.textContent = STATE[s.status] || s.status;
     setStatus(s.status);
     runBtn.disabled = s.status === 'running';
+    const busy = s.status === 'running';
+    bar.classList.toggle('is-running', busy);
+    if (runBtn.classList.contains('is-busy') !== busy) {
+      runBtn.classList.toggle('is-busy', busy);
+      runBtn.firstElementChild.outerHTML = busy ? ICON_SPIN : ICON_PLAY;
+    }
     let extra = '';
     if (s.started) {
       const end = s.finished || s.now;

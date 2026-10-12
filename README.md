@@ -3,7 +3,7 @@
 A macOS menu bar monitor, a security report, and a safe cache cleaner in one small app.
 
 - **Menu bar:** CPU, memory, GPU, disk, network and battery at a glance, with a popover for details, the process list and quick actions.
-- **Report window:** a security and health report with an issue list, an action plan, history, and a cleaning panel.
+- **Report window:** a security and health report with an issue list, history, and a cleaning panel.
 - **Safe by design:** no root, no system changes. It deletes only caches and old logs, and anything it removes goes to the Trash first.
 - **English by default, and Ukrainian:** switch the language in the menu bar popover (Appearance) or in the report window (Settings).
 

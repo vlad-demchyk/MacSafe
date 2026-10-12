@@ -24,7 +24,6 @@ The sidebar groups sections into six areas. Each section shows its issues count 
 
 - **State**: the score (0–100), the most important issues first, the key numbers, the snapshot time, and the context (macOS version, mode).
 - **Issues**: every finding, filtered by urgency (urgent, warning, info). Each issue expands to show the evidence, why it matters, the risk of acting, and the steps.
-- **Action plan**: the steps grouped by time: now, this week, this month, regularly. Check marks are saved in the browser.
 
 ### System
 

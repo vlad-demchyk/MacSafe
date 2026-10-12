@@ -798,9 +798,20 @@ class _PopoverPanel:
             if zone["open"]:
                 zone["content"].setFrame_(NSMakeRect(PANEL_PAD, y + 6, INNER_W, zone["height"]))
                 zone["content"].setHidden_(False)
+                if animate and not zone.get("shown") and not _reduce_motion():
+                    # The zone's content fades in as it opens
+                    zone["content"].setAlphaValue_(0.0)
+                    AppKit.NSAnimationContext.beginGrouping()
+                    AppKit.NSAnimationContext.currentContext().setDuration_(0.28)
+                    zone["content"].animator().setAlphaValue_(1.0)
+                    AppKit.NSAnimationContext.endGrouping()
+                else:
+                    zone["content"].setAlphaValue_(1.0)
+                zone["shown"] = True
                 y += zone["height"] + 18
             else:
                 zone["content"].setHidden_(True)
+                zone["shown"] = False
         # A note above the footer, and the buttons at the very bottom with the same margin
         self.note.setFrame_(NSMakeRect(PANEL_PAD, y, INNER_W, 14))
         y += 22

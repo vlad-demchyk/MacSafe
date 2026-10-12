@@ -52,14 +52,12 @@
     /* One section at a time */
     .view { display:none; }
     .view.is-active { display:block; animation:reveal 180ms var(--ease) both; }
-    .view.is-active :is(.card,.metric,.score,.issue) { animation:rise 240ms var(--ease) both; }
-    .view.is-active .grid > :nth-child(2), .view.is-active .tiles > :nth-child(2) { animation-delay:35ms; }
-    .view.is-active .tiles > :nth-child(n+3) { animation-delay:60ms; }
+    .view.is-active.is-entering :is(.card,.metric,.score,.issue,.cc-tile) { animation:rise 420ms var(--ease) backwards; animation-delay:calc(var(--i, 0) * 38ms); }
     @keyframes reveal { from { opacity:0; } to { opacity:1; } }
     .block { margin-top:26px; }
     .block:first-child { margin-top:0; }
     .block__head { margin-bottom:12px; }
-    @keyframes rise { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+    @keyframes rise { from { opacity:0; transform:translateY(12px) scale(.985); } to { opacity:1; transform:none; } }
     .stack { display:grid; gap:10px; }
     .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
     .card, .score, .metric, .issue { border:1px solid var(--line); border-radius:10px; background:var(--card); box-shadow:var(--shadow); }
@@ -181,6 +179,7 @@
     @media (prefers-reduced-motion:reduce) { .cc-tile.is-running .cc-ico { animation:none; } .cc-tile { transition:none; } }
     .list-more { margin:8px 0 0; }
     .cache-item--blocked { opacity:.6; cursor:not-allowed; }
+    .cache-item { transition:background .2s, border-color .2s; } .cache-item:hover:not(.cache-item--blocked) { border-color:color-mix(in srgb, var(--blue) 40%, var(--line)); }
     .cache-item input, .cache-confirm input { flex:none; margin:4px 0 0; accent-color:var(--blue); }
     .cache-copy { flex:1; min-width:0; overflow-wrap:anywhere; }
     .cache-title { display:block; font-weight:600; }
@@ -254,13 +253,6 @@
     .steps { margin:0; padding-left:20px; } .steps li { margin:4px 0; }
     .tips { margin:8px 0 0; padding-left:20px; color:var(--muted); }
     .group { color:var(--blue); font-size:12px; text-transform:uppercase; letter-spacing:.09em; margin:18px 0 6px; }
-    .progress { height:8px; border-radius:999px; background:var(--card2); overflow:hidden; border:1px solid var(--line); }
-    .progress__bar { height:100%; width:0; background:var(--blue); transition:width .6s var(--ease); }
-    .phase { margin-top:14px; } .phase h3 { display:flex; justify-content:space-between; }
-    .check { display:flex; gap:10px; align-items:flex-start; padding:9px 12px; border:1px solid var(--line); border-radius:12px; margin-top:6px; background:var(--card2); cursor:pointer; transition:background .2s; }
-    .check:hover { background:var(--card2); }
-    .check input { margin-top:4px; accent-color:var(--blue); }
-    .check input:checked + span { color:var(--muted); text-decoration:line-through; }
     .acc { border:1px solid var(--line); border-radius:10px; background:var(--card); overflow:hidden; transition:border-color .25s; }
     .acc.open { border-color:var(--line); }
     .acc__btn:focus-visible { outline:2px solid var(--blue); outline-offset:-3px; }
@@ -368,7 +360,7 @@
     .score { background:linear-gradient(160deg,var(--card),color-mix(in srgb,var(--card) 88%,var(--accent))); }
     .block__head h2 { display:flex; align-items:center; gap:10px; }
     .block__head h2::before { content:""; width:4px; height:20px; border-radius:2px; background:var(--accent); }
-    .cache-item, .cache-memory, .sec-link, .check, .drop, .chart, pre.cmd, textarea { border-radius:12px; }
+    .cache-item, .cache-memory, .sec-link, .drop, .chart, pre.cmd, textarea { border-radius:12px; }
     .chip[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
     .lang__btn { font:inherit; font-size:14px; color:var(--ink); background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:7px 16px; cursor:pointer; }
     .lang__btn[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
@@ -390,6 +382,31 @@
       .grid { grid-template-columns:1fr; }
     }
     @media (max-width:560px) { .tiles { grid-template-columns:1fr 1fr; } .ring { width:110px; height:110px; flex-basis:110px; } .score__num { font-size:36px; } }
+    /* Motion layer: restrained, switched off by prefers-reduced-motion below */
+    body::before { content:""; position:fixed; top:-18vw; right:-12vw; width:58vw; height:58vw; pointer-events:none; z-index:-1;
+      background:radial-gradient(closest-side, color-mix(in srgb, var(--blue) 13%, transparent), transparent); animation:drift 26s ease-in-out infinite alternate; }
+    @keyframes drift { to { transform:translate(-9vw, 7vw) scale(1.12); } }
+    .btn:hover:not(:disabled), .copy:hover { transform:translateY(-1px); }
+    .copy { transition:transform .15s var(--ease), background .2s; }
+    .sec { transition:background .2s, transform .2s var(--ease); } .sec:hover { transform:translateX(3px); }
+    .cc-tile { position:relative; overflow:hidden; }
+    .cc-tile:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 12px 28px rgba(0,0,0,.16); }
+    .cc-ico { transition:transform .3s cubic-bezier(.34,1.56,.64,1); }
+    .cc-tile:hover:not(:disabled) .cc-ico { transform:scale(1.1) rotate(-6deg); }
+    .cc-tile.is-running::after { content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(105deg, transparent 30%, color-mix(in srgb, var(--blue) 22%, transparent) 50%, transparent 70%); transform:translateX(-100%); animation:sweep 1.3s linear infinite; }
+    @keyframes sweep { to { transform:translateX(100%); } }
+    .cc-tile.is-just-done { animation:done-ring .9s var(--ease); }
+    @keyframes done-ring { 0% { box-shadow:0 0 0 0 color-mix(in srgb, var(--good) 55%, transparent); } 100% { box-shadow:0 0 0 14px transparent; } }
+    .ripple-host { position:relative; overflow:hidden; }
+    .ripple { position:absolute; border-radius:50%; background:currentColor; opacity:.2; transform:scale(0); pointer-events:none; animation:ripple .65s var(--ease) forwards; }
+    @keyframes ripple { to { transform:scale(1); opacity:0; } }
+    .act-result.is-new { animation:rise 480ms var(--ease) backwards; }
+    .act-result.is-new .res-row { animation:row-in 420ms var(--ease) backwards; animation-delay:calc(120ms + var(--i, 0) * 45ms); }
+    .act-result.is-new .res-st { animation:pop 520ms cubic-bezier(.34,1.56,.64,1) backwards; animation-delay:calc(200ms + var(--i, 0) * 45ms); }
+    @keyframes row-in { from { opacity:0; transform:translateX(-10px); } to { opacity:1; transform:none; } }
+    @keyframes pop { from { transform:scale(0); } to { transform:scale(1); } }
+    .toast { transition:transform .5s cubic-bezier(.34,1.56,.64,1); }
+    .score__num [data-count] { font-variant-numeric:tabular-nums; }
     @media (prefers-reduced-motion:reduce) { *, *::before, *::after { animation:none !important; transition:none !important; } .chart__line { stroke-dashoffset:0; } }
     @media print {
       body { background:#fff; color:#102033; }
@@ -481,15 +498,6 @@
             </div>
           </div>
           <div class="stack" id="issues-list"></div>
-        </div>
-      </section>
-
-      <section class="view" data-view="plan" aria-label="План дій">
-        <div class="block" id="plan">
-          <div class="block__head"><h2>План дій</h2><p class="hint">Порядок: зараз, цього тижня, цього місяця, регулярно. Відмітки зберігаються в цьому браузері.</p></div>
-          <div class="progress"><div class="progress__bar" id="plan-progress"></div></div>
-          <p class="muted" id="plan-count"></p>
-          <div id="plan-list"></div>
         </div>
       </section>
 
@@ -761,7 +769,6 @@
  "# дн. тому": "# d ago",
  "# днів": "# days",
  "# з #": "# of #",
- "# з # виконано": "# of # done",
  "# за потреби: tmutil thinlocalsnapshots / # #": "# if needed: tmutil thinlocalsnapshots / # #",
  "# обрізати після зупинки daemon, потім запустити знову": "# trim after stopping the daemon, then start it again",
  "#% у CPU означає одне повністю зайняте ядро. Значення «За життя» стабільно низьке у фонових службах, а короткі піки не означають постійної проблеми.": "100% CPU means one fully busy core. A “Lifetime” value that stays low for background services, and short peaks, do not mean a constant problem.",
@@ -1478,7 +1485,6 @@
  "Перегляньте список і вимкніть непотрібні агенти.": "Review the list and turn off unneeded agents.",
  "Перегляньте таблицю очищення.": "Review the cleaning table.",
  "Перегрів скорочує строк служби і спричиняє тротлінг.": "Overheating shortens the service life and causes throttling.",
- "Перед змінами в системі: переконатися, що резервна копія працює.": "Before changing the system: make sure the backup works.",
  "Перезавантаження знімає більшість сплесків": "A restart removes most spikes",
  "Перезавантаження очищає swap": "A restart clears swap",
  "Перезавантаження раз на два тижні": "Restart once every two weeks",
@@ -1502,7 +1508,6 @@
  "Перенесіть значення в Keychain або у файл з правами #, а в plist залиште лише шлях до нього.": "Move the value to the Keychain or to a file with # permissions, and leave only the path to it in the plist.",
  "Перетягніть JSON-знімки сюди або": "Drag JSON snapshots here or",
  "Перший запуск: доступи": "First run: permissions",
- "План дій": "Action plan",
  "Плануйте заміну, якщо автономність відчутно гірша.": "Plan a replacement if battery life is noticeably worse.",
  "Пн": "Mon",
  "Повторні спроби запуску конфліктують за порт, launchd перезапускає процес без паузи.": "Repeated start attempts conflict over the port, and launchd restarts the process without a pause.",
@@ -1530,7 +1535,6 @@
  "Поради": "Tips",
  "Порт": "Port",
  "Порти, що слухають": "Listening ports",
- "Порядок: зараз, цього тижня, цього місяця, регулярно. Відмітки зберігаються в цьому браузері.": "Order: now, this week, this month, regularly. Check marks are saved in this browser.",
  "Порівнюйте з наступними звітами.": "Compare with the next reports.",
  "Порівняйте з наступним звітом.": "Compare with the next report.",
  "Порівняйте з наступним звітом: якщо обмін повторюється, потрібно менше одночасних задач або більше памʼяті.": "Compare with the next report: if swap repeats, you need fewer simultaneous tasks or more memory.",
@@ -1574,12 +1578,9 @@
  "Підрахунок plist без префікса com.apple": "Count of plists without the com.apple prefix",
  "Підсумок": "Summary",
  "Після # циклів ємність помітно падає.": "After # cycles the capacity drops noticeably.",
- "Після встановлення нового застосунку: перевірити автозапуск і розширення Finder.": "After installing a new app: check login items and Finder extensions.",
  "Після оновлення macOS, копіювання великих папок або встановлення застосунків Spotlight переіндексовує файли. Це займає години.": "After a macOS update, copying large folders or installing apps, Spotlight reindexes files. It takes hours.",
  "Раз на місяць відкривайте Time Machine і дивіться дату останньої копії": "Once a month open Time Machine and check the date of the last backup",
- "Раз на місяць: перезавантажити Mac, перевірити оновлення macOS і застосунків.": "Once a month: restart the Mac, check macOS and app updates.",
  "Раз на тиждень запускайте звіт": "Run the report once a week",
- "Раз на тиждень: запустити звіт і переглянути критичні та попередження.": "Once a week: run the report and review critical issues and warnings.",
  "Разовий обмін нормальний, його варто лише відстежувати.": "A one-off swap is normal, it is only worth tracking.",
  "Регулярно": "Regularly",
  "Режим": "Mode",
@@ -1926,7 +1927,6 @@
     const SEV_ORDER = { critical: 0, warning: 1, info: 2, good: 3 };
     const LS_SYS = 'report.systems.v1';
     // Plan and notes are tied to the computer, not the date: one machine's entries are not mixed with another's
-    const planKey = () => `report.plan.v1:${(DATA.meta && DATA.meta.computer) || 'mac'}`;
     const notesKey = () => `report.notes.v1:${(DATA.meta && DATA.meta.computer) || 'mac'}`;
     // Access to localStorage may be blocked by the browser: then simply without saving
     const store = {
@@ -1938,7 +1938,7 @@
 
     // Modes and sections: the order here defines the sidebar and the keys 1–9
     const MODES = [
-      { id: 'state', title: 'Огляд', sections: [['overview', 'Стан'], ['issues', 'Проблеми'], ['plan', 'План дій']] },
+      { id: 'state', title: 'Огляд', sections: [['overview', 'Стан'], ['issues', 'Проблеми']] },
       { id: 'system', title: 'Система', sections: [['system', 'Mac'], ['memory', 'RAM'], ['processes', 'Процеси'], ['thermal', 'Температури']] },
       { id: 'security', title: 'Безпека', sections: [['security', 'Перевірки'], ['launch', 'Автозапуск'], ['crashes', 'Збої'], ['daemon', 'XBrain daemon']] },
       { id: 'cleanup', title: 'Обслуговування', sections: [['cleanup', 'Очищення'], ['actions', 'Кнопки дій']] },
@@ -1949,7 +1949,6 @@
     const ICONS = {
       overview: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
       issues: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
-      plan: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17"/>',
       system: '<rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2 20h20"/>',
       memory: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
       processes: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
@@ -2021,6 +2020,7 @@
         f.style.transition = '';
         requestAnimationFrame(() => { f.style.width = w; });
       });
+      $$('[data-count]', root).forEach(el => countUp(el, Number(el.dataset.count) || 0));
     }
 
     function countUp(el, to) {
@@ -2033,6 +2033,20 @@
       };
       requestAnimationFrame(step);
     }
+
+    // A soft ripple from the click point on buttons, tiles and menu items
+    document.addEventListener('pointerdown', e => {
+      if (REDUCED || !e.target.closest) return;
+      const el = e.target.closest('.btn, .cc-tile, .sec');
+      if (!el || el.disabled) return;
+      const r = el.getBoundingClientRect(), d = Math.max(r.width, r.height) * 2;
+      const dot = document.createElement('span');
+      dot.className = 'ripple';
+      dot.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX - r.left - d / 2}px;top:${e.clientY - r.top - d / 2}px`;
+      el.classList.add('ripple-host');
+      el.appendChild(dot);
+      dot.addEventListener('animationend', () => dot.remove());
+    });
 
     function toast(text) {
       const t = $('#toast');
@@ -2073,7 +2087,7 @@
             <circle class="ring__fg" cx="60" cy="60" r="52" style="stroke-dasharray:${C.toFixed(1)};stroke-dashoffset:${C.toFixed(1)}" data-off="${off.toFixed(1)}"></circle>
           </svg>
           <div>
-            <p class="score__num">${esc(clamp(h.score))}<small class="score__of"> /100</small></p>
+            <p class="score__num"><span data-count="${esc(clamp(h.score))}">${esc(clamp(h.score))}</span><small class="score__of"> /100</small></p>
             <p class="score__label">${esc(h.text || NA)}</p>
             <p class="score__copy">${esc((h.counts || {}).critical ?? 0)} ${esc(tt('критичні'))} · ${esc((h.counts || {}).warning ?? 0)} ${esc(tt('попередження'))} · ${esc((h.counts || {}).info ?? 0)} ${esc(tt('рекомендації'))}</p>
           </div>
@@ -2255,66 +2269,6 @@
         box.append(acc(head, issueBody(i), i.sev === 'critical'));
       });
       animateBars(box);
-    }
-
-    // ---------- Plan ----------
-    function hash(s) {
-      let h = 5381;
-      for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-      return (h >>> 0).toString(36);
-    }
-
-    function readPlan() {
-      try {
-        const v = JSON.parse(store.get(planKey()) || '{}');
-        return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-      } catch (e) { return {}; }
-    }
-
-    function planItems() {
-      const phase = { critical: 'Зараз', warning: 'Цього тижня', info: 'Цього місяця' };
-      const fromIssues = sortedIssues().filter(i => phase[i.sev]).map(i => {
-        const step = list(i.fix)[0] || i.verify || '';
-        return { id: hash(`${i.title}|${step}`), phase: phase[i.sev], text: `${i.title}: ${step}` };
-      });
-      const regular = [
-        'Раз на тиждень: запустити звіт і переглянути критичні та попередження.',
-        'Раз на місяць: перезавантажити Mac, перевірити оновлення macOS і застосунків.',
-        'Перед змінами в системі: переконатися, що резервна копія працює.',
-        'Після встановлення нового застосунку: перевірити автозапуск і розширення Finder.',
-      ].map((t, n) => ({ id: `reg${n}`, phase: 'Регулярно', text: t }));
-      return fromIssues.concat(regular);
-    }
-
-    function updatePlanCount(all, done) {
-      const n = all.filter(x => done[x.id]).length;
-      $('#plan-progress').style.width = (all.length ? (n / all.length) * 100 : 0) + '%';
-      $('#plan-count').textContent = `${n} з ${all.length} виконано`;
-    }
-
-    function renderPlan() {
-      const done = readPlan();
-      const all = planItems();
-      const box = $('#plan-list');
-      box.innerHTML = '';
-      ['Зараз', 'Цього тижня', 'Цього місяця', 'Регулярно'].forEach(p => {
-        const its = all.filter(x => x.phase === p);
-        if (!its.length) return;
-        const sec = document.createElement('div');
-        sec.className = 'phase';
-        sec.innerHTML = `<h3><span>${esc(p)}</span><span class="muted">${its.filter(x => done[x.id]).length} з ${its.length}</span></h3>`
-          + its.map(x => `<label class="check"><input type="checkbox" data-id="${esc(x.id)}" ${done[x.id] ? 'checked' : ''}><span>${esc(x.text)}</span></label>`).join('');
-        box.append(sec);
-      });
-      box.onchange = e => {
-        const id = e.target.dataset.id;
-        if (!id) return;
-        const cur = readPlan();
-        cur[id] = e.target.checked;
-        store.set(planKey(), JSON.stringify(cur));
-        updatePlanCount(all, cur);
-      };
-      updatePlanCount(all, done);
     }
 
     // ---------- Sections with data ----------
@@ -2631,6 +2585,7 @@
     };
     let actionBusy = false;
     let actionRunning = null;   // id of the running action
+    let actionFresh = null;     // id whose result was just produced: only that card plays its entrance
     const actionResults = {};   // id -> {ok, text, result, at}: every run keeps its own result, a new run does not close the others
     let actionOrder = [];       // ids with a result, the latest run first
     let actionAvail = null;     // id -> available on this Mac; null until the app answers
@@ -2659,7 +2614,7 @@
 
     function resultRow(id, row, i) {
       const ops = row.ops.map(o => `<button class="btn res-op${o.op === 'quit' ? ' res-op--quit' : ''}" type="button" data-row="${esc(id)}" data-i="${i}" data-op="${esc(o.op)}">${esc(o.label)}</button>`).join('');
-      return `<div class="res-row res-row--${esc(row.status)}"><span class="res-st"><svg viewBox="0 0 24 24" aria-hidden="true">${ROW_ICONS[row.status] || ROW_ICONS.info}</svg></span>
+      return `<div class="res-row res-row--${esc(row.status)}" style="--i:${i}"><span class="res-st"><svg viewBox="0 0 24 24" aria-hidden="true">${ROW_ICONS[row.status] || ROW_ICONS.info}</svg></span>
         <div class="res-txt"><b>${esc(row.title)}</b>${row.value ? `<small>${esc(row.value)}</small>` : ''}</div>
         <div class="res-ops">${ops}${copyBtn(parts(row.title, row.value))}</div></div>`;
     }
@@ -2676,7 +2631,7 @@
       const body = res
         ? `<div class="res-rows">${res.rows.map((row, i) => resultRow(id, row, i)).join('')}</div><details class="more-details"><summary>Сирий вивід</summary>${raw}</details>`
         : raw;
-      return `<div class="card act-result" id="res-${esc(id)}">
+      return `<div class="card act-result${actionFresh === id ? ' is-new' : ''}" id="res-${esc(id)}">
         <div class="res-head"><span class="cc-ico res-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${ACTION_ICONS[id] || ''}</svg></span>
           <div class="res-title"><b>${esc(a.title)}</b><small>${esc(res ? res.summary : a.cmd)} · ${esc(time)}</small></div>
           ${badge(kind === 'info' ? 'good' : kind, label)}
@@ -2777,8 +2732,11 @@
         actionDone[id] = { ok: false, brief: '✗ ' + outcome.text.slice(0, 50) };
       } finally {
         actionBusy = false; actionRunning = null;
-        if (outcome) { actionResults[id] = outcome; actionOrder = [id, ...actionOrder.filter(x => x !== id)]; }
+        if (outcome) { actionResults[id] = outcome; actionOrder = [id, ...actionOrder.filter(x => x !== id)]; actionFresh = id; }
         renderActions();
+        actionFresh = null;
+        const doneTile = outcome && outcome.ok && document.querySelector(`.cc-tile[data-run="${id}"]`);
+        if (doneTile) doneTile.classList.add('is-just-done');
         const card = outcome && document.getElementById('res-' + id);
         if (card && card.scrollIntoView) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
@@ -3096,7 +3054,15 @@
       refreshSideCounts();
       $$('.sec').forEach(b => { if (b.dataset.section === id) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
       const active = $(`.view[data-view="${id}"]`);
-      if (active) animateBars(active);
+      if (active) {
+        // the entrance of cards and tiles is staggered by their order on the page
+        active.querySelectorAll('.card, .metric, .score, .issue, .cc-tile').forEach((el, n) => el.style.setProperty('--i', Math.min(n, 14)));
+        // the entrance plays once per visit: a re-render of the page later does not replay it
+        active.classList.add('is-entering');
+        clearTimeout(active._entering);
+        active._entering = setTimeout(() => active.classList.remove('is-entering'), 1100);
+        animateBars(active);
+      }
       if (push) history.replaceState(null, '', `#${id}`);
       $('#content').scrollTop = 0;
       window.scrollTo(0, 0);
@@ -3181,7 +3147,7 @@
     }
 
     function renderAll() {
-      renderMeta(); renderHero(); renderOverview(); renderIssues(); renderPlan(); renderSystem(); renderMemory();
+      renderMeta(); renderHero(); renderOverview(); renderIssues(); renderSystem(); renderMemory();
       renderProcesses(); renderThermal(); renderSecurity(); renderLaunch(); renderCrashes(); renderDaemon();
       renderCleanup(); renderActions(); renderAgents(); renderAdvice(); renderHistory(); renderSystems();
     }

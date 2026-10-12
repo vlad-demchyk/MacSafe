@@ -445,6 +445,10 @@ class Api:
             s = dict(self._state)
             s["log"] = list(self._log)
         s["now"] = time.time()
+        try:
+            s["dashboard"] = os.path.getmtime(DASHBOARD)   # the page reloads itself when the report file is newer than the page
+        except OSError:
+            s["dashboard"] = 0
         return s
 
     def run_check(self):
@@ -527,13 +531,6 @@ class Api:
                 status = "done" if code == 0 else "error"
                 msg = T("Готово") if code == 0 else T("Перевірка завершилась помилкою")
             self._state.update(status=status, finished=time.time(), exit=code, message=msg)
-            window = self._window
-        # After a successful check we show the fresh report; the run bar will add the load handler
-        if window is not None and code == 0 and not self._stop_requested:
-            try:
-                window.load_url(self.dashboard_url())
-            except Exception:
-                pass
 
     @staticmethod
     def _kill_group(proc):
