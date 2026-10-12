@@ -409,9 +409,14 @@ class Monitor:
         return getattr(self, "_temp_last", None)
 
     def _power(self):
-        """{"sysW", "batW"} of the battery sensor, read at most every 5 seconds (it is an ioreg call)."""
+        """{"sysW", "batW"} of the battery sensor: every second through IOKit (cheap), every 5 seconds when it falls back to ioreg."""
         now = time.time()
-        if now - getattr(self, "_power_at", 0) >= 5:
+        try:
+            import gpu_iokit
+            every = 1 if gpu_iokit._ok else 5
+        except Exception:
+            every = 5
+        if now - getattr(self, "_power_at", 0) >= every:
             self._power_at = now
             try:
                 import history

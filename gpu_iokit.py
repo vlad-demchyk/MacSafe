@@ -219,6 +219,24 @@ def gpu_time_by_pid():
     return totals
 
 
+def _dict_number(service, prop, key):
+    """A number inside a dictionary property of a registry entry, or None."""
+    k = _cfstr(prop)
+    ref = _iokit.IORegistryEntryCreateCFProperty(service, k, None, 0)
+    _cf.CFRelease(k)
+    if not ref:
+        return None
+    try:
+        if _cf.CFGetTypeID(ref) != _cf.CFDictionaryGetTypeID():
+            return None
+        k = _cfstr(key)
+        inner = _cf.CFDictionaryGetValue(ref, k)
+        _cf.CFRelease(k)
+        return _number(inner) if inner else None
+    finally:
+        _cf.CFRelease(ref)
+
+
 def battery_iokit():
     """{"load": SystemLoad mW, "volt": mV, "amp": mA (negative while discharging), "pct"} of AppleSmartBattery.
 
@@ -245,18 +263,11 @@ def battery_iokit():
                     _cf.CFRelease(ref)
                     if value is not None:
                         out[key] = value
-            k = _cfstr("PowerTelemetryData")
-            ref = _iokit.IORegistryEntryCreateCFProperty(service, k, None, 0)
-            _cf.CFRelease(k)
-            if ref:
-                if _cf.CFGetTypeID(ref) == _cf.CFDictionaryGetTypeID():
-                    k = _cfstr("SystemLoad")
-                    inner = _cf.CFDictionaryGetValue(ref, k)
-                    _cf.CFRelease(k)
-                    value = _number(inner) if inner else None
-                    if value is not None:
-                        out["load"] = value
-                _cf.CFRelease(ref)
+            for prop, inner_key, name in (("PowerTelemetryData", "SystemLoad", "load"), ("PowerTelemetryData", "SystemPowerIn", "wall"),
+                                          ("AdapterDetails", "Watts", "adapterW")):
+                value = _dict_number(service, prop, inner_key)
+                if value is not None:
+                    out[name] = value
         finally:
             _iokit.IOObjectRelease(service)
     finally:

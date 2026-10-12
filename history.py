@@ -44,6 +44,8 @@ def battery_power():
             result["batW"] = round(raw["volt"] / 1000 * raw["amp"] / 1000, 2)
         if "pct" in raw:
             result["pct"] = raw["pct"]
+        if raw.get("adapterW"):
+            result["adapterW"] = raw["adapterW"]   # the adapter's rating in watts
         return result
     try:
         out = subprocess.run(["/usr/sbin/ioreg", "-rn", "AppleSmartBattery"], capture_output=True, text=True, timeout=10).stdout

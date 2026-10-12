@@ -275,6 +275,9 @@ def _percent_text(value):
     return text.rjust(4, "\u2007")
 
 
+METER_NOTE_X = 40  # the note after the CPU, RAM and GPU captions starts here
+CARDS_GAP = 10     # space between the last graph and the cards
+EXTRA_H = 72       # height of the optional temperature graph that pushes the cards down
 TEMP_LOW, TEMP_HIGH = 20.0, 100.0     # the temperature graph spans these °C: 84 °C is the yellow line, 96 °C the red one
 POWER_MAX_W = 40.0                    # the power graph spans 0 to this many watts
 
@@ -572,8 +575,9 @@ class _PopoverPanel:
             cap.setFont_(AppKit.NSFont.systemFontOfSize_weight_(11, 0.5))
             value = _label(root, "—", PANEL_W - PANEL_PAD - 110, y - 7, 110, size=20, digits=True, height=28)
             value.setAlignment_(AppKit.NSTextAlignmentRight)
-            detail = _label(root, T("Очікування даних"), PANEL_PAD, y + 18, INNER_W, 11, True, height=16)
-            graph = _MeterView.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, y + 34, INNER_W, 24))
+            # The note sits in the caption's row, so a block is one line shorter
+            detail = _label(root, "", PANEL_PAD + METER_NOTE_X, y + 1, INNER_W - METER_NOTE_X - 70, 11, True, height=16)
+            graph = _MeterView.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, y + 22, INNER_W, 24))
             graph.value, graph.samples, graph.end = None, (), 0
             graph.setWantsLayer_(True)
             graph.fill = _BarFill.alloc().initWithFrame_(NSMakeRect(0, 0, 0, 5))
@@ -584,28 +588,34 @@ class _PopoverPanel:
             root.addSubview_(graph)
             self.meters[key] = (value, detail, graph)
             if key == "cpu":
-                self.cores = _CoresView.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, y + 62, INNER_W, 42))
+                self.cores = _CoresView.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, y + 50, INNER_W, 42))
                 self.cores.setKinds_(core_types())
                 self.cores.setToolTip_(T("Ядра: синє — продуктивні (P), бірюзове — економні (E)"))
                 root.addSubview_(self.cores)
                 y += 44
-            y += 70
+            y += 58
         # System metrics row: disk, network, battery
         self.infos = {}
+        self._cards_base = y - 2     # the end of the graphs: the optional temperature graph goes here, the cards under it
+        self._card_views = []
+        y += CARDS_GAP
         col = INNER_W / 3
         for i, (key, caption) in enumerate((("disk", T("ДИСК")), ("net", T("МЕРЕЖА")), ("battery", T("БАТАРЕЯ")))):
             x0 = PANEL_PAD + i * col
             card = _Card.alloc().initWithFrame_(NSMakeRect(x0, y - 8, col - 6, 58))
             root.addSubview_(card)
+            self._card_views.append(card)
             cap = _label(root, caption, x0 + 10, y - 3, col - 26, 10, True, height=14)
             cap.setFont_(AppKit.NSFont.systemFontOfSize_weight_(10, 0.5))
             top = _label(root, "—", x0 + 10, y + 10, col - 26, 13, digits=True, height=18)
             sub = _label(root, "", x0 + 10, y + 28, col - 26, 10, True, height=14)
             self.infos[key] = (top, sub)
+            self._card_views += [cap, top, sub]
+        self._card_frames = [v.frame() for v in self._card_views]
         y += 66
-        # Optional graphs under the cards: temperature and power. They are added or removed in the Appearance zone
+        # Optional graph above the cards: temperature and power. It is added or removed in the Appearance zone
         self.extra = {}
-        self._extra_top = y + 4
+        self._extra_top = self._cards_base + 4
         self.extra["temp"] = self._make_extra_meter(root, "temp", T("ТЕМПЕРАТУРА · W"), self._extra_top)
         self.divider = AppKit.NSBox.alloc().initWithFrame_(NSMakeRect(PANEL_PAD, y - 8, INNER_W, 1))
         self.divider.setBoxType_(AppKit.NSBoxSeparator)
@@ -686,7 +696,10 @@ class _PopoverPanel:
         on = bool(self.owner._settings.get("graphTemp"))
         for view in self.extra["temp"]["views"]:
             view.setHidden_(not on)
-        self.zones_top = self._zones_base + (70 if on else 0)
+        shift = EXTRA_H if on else 0
+        for view, frame in zip(self._card_views, self._card_frames):
+            view.setFrame_(NSMakeRect(frame.origin.x, frame.origin.y + shift, frame.size.width, frame.size.height))
+        self.zones_top = self._zones_base + shift
         if getattr(self, "zones", None):
             self._layout(animate=False)
 
@@ -700,10 +713,20 @@ class _PopoverPanel:
         meter["value"].setStringValue_(f"{t_text}  ·  {w_text}")
         if temp is None and sys_w is None:
             meter["detail"].setStringValue_(T("Датчики недоступні"))
-        elif bat_w is None:
-            meter["detail"].setStringValue_(T("процесор · система"))
+        elif bat_w is not None and bat_w > 0:
+            meter["detail"].setStringValue_(T("заряд +{w:.1f} W", w=bat_w))
+        elif bat_w is not None and bat_w < -0.5 and (snap.get("battery") or {}).get("plugged"):
+            # On the adapter and the battery still gives power: that is slow charging only if the adapter is below the load.
+            # Right after plugging in the battery current lags behind the adapter reading: say nothing then
+            adapter = power.get("adapterW")
+            if not adapter:
+                meter["detail"].setStringValue_(T("від мережі, батарея −{w:.1f} W", w=-bat_w))
+            elif adapter < (sys_w or 0):
+                meter["detail"].setStringValue_(T("повільно: блок {a} W, батарея −{w:.1f} W", a=adapter, w=-bat_w))
+            else:
+                meter["detail"].setStringValue_("")
         else:
-            meter["detail"].setStringValue_(T("процесор · батарея {sign}{w:.1f} W", sign="+" if bat_w > 0 else "−", w=abs(bat_w)))
+            meter["detail"].setStringValue_("")
         graph = meter["graph"]
         graph.value = _scale_temp(temp)
         graph.samples = [(s[0], s[1].get("temp")) for s in self.owner._history]
@@ -1097,11 +1120,11 @@ class _PopoverPanel:
 
     def update(self, snap):
         self.ends = {"cpu": snap["cpu"], "ram": snap["ram"]["percent"], "gpu": snap["gpu"]}
-        self.meters["cpu"][1].setStringValue_(T("{cores} ядер · загальне навантаження", cores=snap["cores"]))
+        self.meters["cpu"][1].setStringValue_(T("{cores} ядер", cores=snap["cores"]))
         ram = snap["ram"]
         self.meters["ram"][1].setStringValue_(
-            T("{used:.1f} з {total:.1f} ГБ · swap {swap:.1f} ГБ", used=ram["usedGb"], total=ram["totalGb"], swap=ram["swapGb"]))
-        self.meters["gpu"][1].setStringValue_(T("Дані недоступні") if snap["gpu"] is None else T("Навантаження графіки"))
+            T("{used:.1f}/{total:.0f} ГБ · swap {swap:.1f}", used=ram["usedGb"], total=ram["totalGb"], swap=ram["swapGb"]))
+        self.meters["gpu"][1].setStringValue_(T("Дані недоступні") if snap["gpu"] is None else "")
         self.cores.setLoads_(snap.get("perCore") or [])
         self._update_infos(snap)
         self._update_extra(snap)
