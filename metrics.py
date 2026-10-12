@@ -23,6 +23,7 @@ SELF_NAME = "MacSafe"
 SELF_PID = os.getpid()
 GB = 1024 ** 3
 MB = 1024 ** 2
+SAVING_INTERVAL = 5.0   # seconds between samples with the panel closed on battery or in Low Power Mode
 GPU_KEYS = ("Device Utilization %", "GPU Activity(%)")   # the main key and the fallback (Stats/eul)
 
 
@@ -432,10 +433,32 @@ class Monitor:
 
     @property
     def interval(self):
-        """Sampling interval: open panel — 1 s, closed — as in the settings."""
+        """Sampling interval: open panel — 1 s, closed — as in the settings.
+
+        With the panel closed on battery power or in Low Power Mode nobody watches the numbers, so the pace drops
+        to SAVING_INTERVAL (unless the setting is already slower).
+        """
         with self._guard:
             detail = self._detail
-        return min(self._interval, 1.0) if detail else self._interval
+            latest = self._latest
+        if detail:
+            return min(self._interval, 1.0)
+        return max(self._interval, SAVING_INTERVAL) if self._saving(latest) else self._interval
+
+    def _saving(self, snap):
+        """True on battery power or in Low Power Mode. The mode is asked from the system at most every 30 s."""
+        battery = (snap or {}).get("battery")
+        if battery and not battery.get("plugged"):
+            return True
+        now = time.time()
+        if now - getattr(self, "_lpm_at", 0) >= 30:
+            self._lpm_at = now
+            try:
+                import Foundation
+                self._lpm = bool(Foundation.NSProcessInfo.processInfo().isLowPowerModeEnabled())
+            except Exception:
+                self._lpm = False
+        return getattr(self, "_lpm", False)
 
     def set_interval(self, seconds):
         """Interval between samples, in seconds. Takes effect from the next cycle."""

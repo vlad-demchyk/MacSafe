@@ -1293,6 +1293,31 @@ class SystemMetricsTests(unittest.TestCase):
         self.assertTrue(r is None or (r[0] >= 0 and r[1] >= 0))
 
 
+class AdaptiveIntervalTests(unittest.TestCase):
+    def monitor(self, interval=1.0):
+        import metrics
+        m = metrics.Monitor(interval=interval)
+        m._lpm_at, m._lpm = time.time(), False   # Low Power Mode off, not asked from the system
+        return m
+
+    def test_battery_slows_closed_panel(self):
+        m = self.monitor()
+        m._latest = {"battery": {"percent": 80.0, "plugged": False}}
+        self.assertEqual(m.interval, 5.0)
+        m.set_detail(True)
+        self.assertEqual(m.interval, 1.0)    # an open panel is always live
+
+    def test_power_adapter_keeps_setting(self):
+        m = self.monitor(2.0)
+        m._latest = {"battery": {"percent": 80.0, "plugged": True}}
+        self.assertEqual(m.interval, 2.0)
+
+    def test_low_power_mode_slows(self):
+        m = self.monitor()
+        m._lpm = True
+        self.assertEqual(m.interval, 5.0)
+
+
 class BigFilesTests(unittest.TestCase):
     def setUp(self):
         import bigfiles
