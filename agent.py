@@ -154,7 +154,9 @@ def main():
         threading.Thread(target=work, daemon=True).start()
 
     def check_alerts(snap, security):
-        for title, text in rules.check(snap, security):
+        off = tuple(name for key, name in (
+            ("alertMemoryDisk", "memory_disk"), ("alertBattery", "battery"), ("alertLoad", "load")) if not prefs.get(key))
+        for title, text in rules.check(snap, security, off):
             notify(title, text)
 
     def daily_check():

@@ -1252,6 +1252,11 @@ class AlertsTests(unittest.TestCase):
         out = rules.check(busy)
         self.assertIn("Xcode", out[0][1])
 
+    def test_switched_off_groups_stay_silent(self):
+        snap = dict(self.snap(free=3, bat={"percent": 10.0, "plugged": False}), temp=99, cpu=99)
+        self.assertEqual(len(self.rules.check(snap)), 2)
+        self.assertEqual(self.rules.check(snap, off=("memory_disk", "battery")), [])
+
     def test_charging_battery_silent(self):
         self.assertEqual(self.rules.check(self.snap(bat={"percent": 5.0, "plugged": True})), [])
 

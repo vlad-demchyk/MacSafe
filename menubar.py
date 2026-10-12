@@ -995,7 +995,8 @@ class _PopoverPanel:
         y += 10
         _caption(view, T("Автоматично"), y)
         y += 22
-        for key, title in (("alerts", T("Сповіщення")), ("dailyCheck", T("Щоденна перевірка"))):
+        for key, title in (("alerts", T("Сповіщення")), ("alertMemoryDisk", T("  · памʼять і диск")), ("alertBattery", T("  · батарея")),
+                           ("alertLoad", T("  · перегрів і навантаження")), ("dailyCheck", T("Щоденна перевірка"))):
             _label(view, title, 0, y, 200, 12, height=20)
             sw = _Switch.alloc().initWithFrame_(NSMakeRect(INNER_W - _Switch.WIDTH, y, _Switch.WIDTH, _Switch.HEIGHT))
             sw.on_change = lambda key=key: self.owner.toggle_flag(key)
@@ -1338,7 +1339,8 @@ class StatusBar:
         self._monitor = monitor
         self.actions = actions
         self._prefs = prefs
-        self._settings = {key: prefs.get(key) for key in ("cpu", "ram", "gpu", "style", "interval", "alerts", "dailyCheck", "graphTemp")}
+        self._settings = {key: prefs.get(key) for key in ("cpu", "ram", "gpu", "style", "interval", "alerts", "dailyCheck", "graphTemp",
+                                                                  "alertMemoryDisk", "alertBattery", "alertLoad")}
         self._monitor.set_interval(self._settings["interval"])
         self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="audit-settings")
         self._closed = False

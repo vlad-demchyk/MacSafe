@@ -44,10 +44,21 @@ class Alerts:
         self._last[key] = now
         out.append((title, text))
 
-    def check(self, snap, security=None):
-        """List of notifications (title, text) to show now."""
+    def check(self, snap, security=None, off=()):
+        """List of notifications (title, text) to show now.
+
+        off — groups the person switched off: "memory_disk" (memory, disk), "battery" (battery), "load" (heat, CPU).
+        The security alert follows the master switch only.
+        """
         now = self._clock()
         out = []
+        snap = dict(snap)
+        if "memory_disk" in off:
+            snap["ram"] = snap["disk"] = None
+        if "battery" in off:
+            snap["battery"] = None
+        if "load" in off:
+            snap["temp"] = snap["cpu"] = None
         ramd = snap.get("ram") or {}
         ram, pressure = ramd.get("percent"), ramd.get("pressure")
         # The share of memory in use is high on a healthy Mac (caches), so the system's own pressure decides;
