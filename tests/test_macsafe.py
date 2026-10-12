@@ -744,6 +744,34 @@ class ThermalHidTests(unittest.TestCase):
         self.assertNotIn("sudo powermetrics", script)
 
 
+class InstallTests(unittest.TestCase):
+    """Install: the running copy stops first, then the status bar is registered at login and started at once."""
+
+    def setUp(self):
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(here, "build_app.sh"), encoding="utf-8") as fh:
+            self.script = fh.read()
+        self.install = self.script[self.script.index('if [ "${1:-}" = "--install" ]; then'):]
+
+    def test_old_copy_is_stopped_before_the_copy(self):
+        self.assertLess(self.install.index("launchctl bootout"), self.install.index("ditto "))
+        self.assertLess(self.install.index("pkill -f"), self.install.index("ditto "))
+
+    def test_status_bar_is_registered_through_autostart_after_the_copy(self):
+        self.assertGreater(self.install.index("autostart.enable"), self.install.index("ditto "))
+        self.assertIn("STATUSBAR_OK", self.install)
+
+    def test_data_folder_exists_before_launchd_opens_the_log(self):
+        # launchd cannot start a job whose StandardOutPath folder is missing
+        self.assertLess(self.install.index('mkdir -p "$DATA_DIR'), self.install.index("autostart.enable"))
+
+    def test_the_plist_starts_the_status_bar_at_load_in_background(self):
+        import autostart
+        plist = autostart._build(["/Applications/MacSafe.app/Contents/MacOS/launcher"], "/tmp/x", "/tmp/x/log")
+        self.assertTrue(plist["RunAtLoad"])
+        self.assertEqual(plist["ProgramArguments"][-1], "--background")
+
+
 class LauncherTests(unittest.TestCase):
     """The menu bar icon must appear when the app is opened by Launch Services."""
 

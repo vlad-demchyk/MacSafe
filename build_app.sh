@@ -123,7 +123,24 @@ if [ "${1:-}" = "--install" ]; then
   DEST="/Applications"
   [ -w "$DEST" ] || DEST="$HOME/Applications"
   mkdir -p "$DEST"
+  # Stop the running copy first: its code would keep running, and its instance lock would stop the new build from starting
+  RUNNING='MacSafe[.]app/Contents/(MacOS/launcher|Resources/)'
+  launchctl bootout "gui/$(id -u)/com.user.macsafe" >/dev/null 2>&1 || true
+  pkill -f "$RUNNING" >/dev/null 2>&1 || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    pgrep -f "$RUNNING" >/dev/null 2>&1 || break
+    sleep 0.5
+  done
+  pkill -9 -f "$RUNNING" >/dev/null 2>&1 || true
   rm -rf "$DEST/$APP_NAME.app"
   ditto "$APP" "$DEST/$APP_NAME.app" || fail "copying to $DEST"
   echo "INSTALL_OK $DEST/$APP_NAME.app"
+
+  # The status bar starts now and at every login: a LaunchAgent with RunAtLoad, registered by autostart.py.
+  # It is the same plist the switch in the menu writes, so turning it off there keeps working.
+  DATA_DIR="$HOME/Library/Application Support/MacSafe"
+  mkdir -p "$DATA_DIR/дані"
+  "/usr/bin/python3" -c 'import sys; sys.path.insert(0, sys.argv[1]); import autostart; ok, err = autostart.enable([sys.argv[2]], sys.argv[3], sys.argv[4]); print("STATUSBAR_OK" if ok else "STATUSBAR_FAIL " + err)' \
+    "$DEST/$APP_NAME.app/Contents/Resources" "$DEST/$APP_NAME.app/Contents/MacOS/launcher" "$DATA_DIR" "$DATA_DIR/дані/автозапуск.log" \
+    || echo "STATUSBAR_FAIL (python)"
 fi
