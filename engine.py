@@ -18,6 +18,7 @@ from collections import deque
 import autostart
 import bigfiles
 import cleanup
+import actions
 import leftovers
 import llm
 import trash
@@ -280,6 +281,19 @@ class Api:
             if ok:
                 freed += item["sizeMb"]
         return {"ok": True, "results": results, "freedMb": round(freed, 1)}
+
+    # ---------- Action buttons: fixed commands run from the window, not from Terminal ----------
+    def actions_list(self):
+        """The actions the window may run, with their level and availability. The page never sends a command."""
+        return {"items": actions.listing()}
+
+    def action_run(self, action_id, confirm):
+        """Starts one action by id in the background. mild and destructive ones need confirm=True."""
+        return actions.start(action_id, confirm)
+
+    def action_status(self):
+        """State and output of the running or last action."""
+        return actions.status()
 
     # ---------- Local LLM models (a manual category, never part of the automatic cleaning) ----------
     def llm_scan(self):

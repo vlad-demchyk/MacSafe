@@ -71,6 +71,17 @@
     .cache-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:14px; }
     .cache-list { display:grid; gap:8px; margin:14px 0; }
     .cache-item { display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--card2); cursor:pointer; }
+    .act-grid { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+    .act-btn { position:relative; padding-left:26px; }
+    .act-btn::before, .act-dot { content:''; width:8px; height:8px; border-radius:50%; background:var(--good); }
+    .act-btn::before { position:absolute; left:11px; top:50%; margin-top:-4px; }
+    .act-btn--mild::before, .act-dot--mild { background:var(--warn); }
+    .act-btn--destructive::before, .act-dot--destructive { background:var(--critical); }
+    .act-btn.is-running { opacity:.7; }
+    .act-dot { display:inline-block; margin:0 4px 0 12px; }
+    .act-dot--read { background:var(--good); }
+    .act-legend { margin:0 0 4px; }
+    .list-more { margin:8px 0 0; }
     .cache-item--blocked { opacity:.6; cursor:not-allowed; }
     .cache-item input, .cache-confirm input { flex:none; margin:4px 0 0; accent-color:var(--blue); }
     .cache-copy { flex:1; min-width:0; overflow-wrap:anywhere; }
@@ -503,7 +514,7 @@
       <!-- Mode “Actions” -->
       <section class="view" data-view="actions" aria-label="Кнопки дій">
         <div class="block" id="actions">
-          <div class="block__head"><h2>Кнопки дій</h2><p class="hint">Команди для Terminal на цьому Mac. Сторінка нічого не запускає: команду копіюєте і виконуєте самі. Руйнівні позначені червоним.</p></div>
+          <div class="block__head"><h2>Кнопки дій</h2><p class="hint">Кнопки запускають фіксовані команди в застосунку MacSafe. Саму команду видно в підказці, її можна скопіювати з результату.</p></div>
           <div id="actions-body"><p class="empty">Сервер дій ще не підключено.</p></div>
         </div>
       </section>
@@ -927,6 +938,20 @@
  "Кеш відновлюється сам. Закрийте застосунок перед очищенням.": "The cache rebuilds itself. Close the app before cleaning.",
  "Кеш застосунку": "App cache",
  "Локальні LLM": "Local LLMs",
+ "Запустити": "Run",
+ "читання": "read only",
+ "легка дія": "light action",
+ "видаляє дані (питає підтвердження)": "deletes data (asks to confirm)",
+ "готово": "done",
+ "помилка": "error",
+ "Вільне місце на диску": "Free disk space",
+ "Перезапустити Dock": "Restart Dock",
+ "Запустити резервну копію Time Machine": "Start a Time Machine backup",
+ "Показати ще": "Show more",
+ "Згорнути": "Collapse",
+ "Виконується…": "Running…",
+ "Перевірки": "Checks",
+ "Виправлення": "Fixes",
  "Знайти моделі": "Find models",
  "Видалити вибране": "Remove selected",
  "пропущено.": "skipped.",
@@ -948,7 +973,7 @@
  "Кожен пункт потрібен лише для своєї дії. Кнопка «Дозволити» викликає запит macOS.": "Each item is needed only for its own action. The “Allow” button triggers the macOS request.",
  "Коли памʼяті бракує, macOS стискає і виводить дані в swap, і вся система сповільнюється.": "When memory runs short, macOS compresses data and moves it to swap, and the whole system slows down.",
  "Команди для Terminal": "Commands for Terminal",
- "Команди для Terminal на цьому Mac. Сторінка нічого не запускає: команду копіюєте і виконуєте самі. Руйнівні позначені червоним.": "Commands for Terminal on this Mac. The page runs nothing: you copy the command and run it yourself. Destructive ones are marked in red.",
+ "Кнопки запускають фіксовані команди в застосунку MacSafe. Саму команду видно в підказці, її можна скопіювати з результату.": "The buttons run fixed commands inside MacSafe. The command itself is in the tooltip and can be copied from the result.",
  "Контекст": "Context",
  "Конфлікт порту #: # помилок": "Port # conflict: # errors",
  "Копіювати": "Copy",
@@ -2169,35 +2194,102 @@
       <p class="muted" style="margin-top:12px">Лог без дат, тому помилки показано сумою за весь час. Щоб бачити, коли саме вони були, додайте часові мітки в лог.</p>`;
     }
 
-    // ---------- Actions: commands for Terminal. The page runs nothing itself ----------
+    // ---------- Actions: buttons that run fixed commands in the app; the page sends only an id ----------
+    // id and cmd must match actions.py (a test checks it)
     const ACTION_CMDS = [
-      { level: 'read', title: 'Хто блокує сон', cmd: 'pmset -g assertions' },
-      { level: 'read', title: 'Тепловий стан', cmd: 'pmset -g therm' },
-      { level: 'read', title: 'Призначення Time Machine', cmd: 'tmutil destinationinfo' },
-      { level: 'read', title: 'Керування пристроєм (MDM/DEP)', cmd: 'profiles status -type enrollment' },
-      { level: 'read', title: 'Статус SIP', cmd: 'csrutil status' },
-      { level: 'read', title: 'Системні проксі', cmd: 'scutil --proxy' },
-      { level: 'read', title: 'Порти, що слухають', cmd: 'lsof -nP -iTCP -sTCP:LISTEN' },
-      { level: 'read', title: 'Топ процесів за CPU', cmd: 'ps -Ao pid,%cpu,rss,comm -r | head -20' },
-      { level: 'mild', title: 'Перезапустити Finder', cmd: 'killall Finder' },
-      { level: 'mild', title: 'Перезапустити панель відкриття/збереження', cmd: 'killall com.apple.appkit.xpc.openAndSavePanelService' },
-      { level: 'destructive', title: 'Очистити кеш npm', cmd: 'npm cache clean --force' },
-      { level: 'destructive', title: 'Очистити кеш Homebrew', cmd: 'brew cleanup -s' },
-      { level: 'destructive', title: 'Очистити Xcode DerivedData', cmd: 'find ~/Library/Developer/Xcode/DerivedData -mindepth 1 -maxdepth 1 -exec rm -rf {} +' },
-      { level: 'destructive', title: 'Очистити кошик Finder', cmd: `osascript -e 'tell application "Finder" to empty the trash'` },
+      { id: 'sleep_blockers', group: 'check', level: 'read', title: 'Хто блокує сон', cmd: 'pmset -g assertions' },
+      { id: 'thermal', group: 'check', level: 'read', title: 'Тепловий стан', cmd: 'pmset -g therm' },
+      { id: 'battery', group: 'check', level: 'read', title: 'Батарея', cmd: 'pmset -g batt' },
+      { id: 'disk_free', group: 'check', level: 'read', title: 'Вільне місце на диску', cmd: 'df -h /' },
+      { id: 'tm_destination', group: 'check', level: 'read', title: 'Призначення Time Machine', cmd: 'tmutil destinationinfo' },
+      { id: 'mdm', group: 'check', level: 'read', title: 'Керування пристроєм (MDM/DEP)', cmd: 'profiles status -type enrollment' },
+      { id: 'top_cpu', group: 'check', level: 'read', title: 'Топ процесів за CPU', cmd: 'ps -Ao pid,%cpu,rss,comm -r | head -20' },
+      { id: 'updates', group: 'check', level: 'read', title: 'Оновлення macOS', cmd: 'softwareupdate -l' },
+      { id: 'sip', group: 'security', level: 'read', title: 'Статус SIP', cmd: 'csrutil status' },
+      { id: 'filevault', group: 'security', level: 'read', title: 'FileVault', cmd: 'fdesetup status' },
+      { id: 'gatekeeper', group: 'security', level: 'read', title: 'Gatekeeper', cmd: 'spctl --status' },
+      { id: 'firewall', group: 'security', level: 'read', title: 'Брандмауер', cmd: 'socketfilterfw --getglobalstate' },
+      { id: 'proxy', group: 'security', level: 'read', title: 'Системні проксі', cmd: 'scutil --proxy' },
+      { id: 'ports', group: 'security', level: 'read', title: 'Порти, що слухають', cmd: 'lsof -nP -iTCP -sTCP:LISTEN' },
+      { id: 'restart_finder', group: 'fix', level: 'mild', title: 'Перезапустити Finder', cmd: 'killall Finder' },
+      { id: 'restart_dock', group: 'fix', level: 'mild', title: 'Перезапустити Dock', cmd: 'killall Dock' },
+      { id: 'restart_panel', group: 'fix', level: 'mild', title: 'Перезапустити панель відкриття/збереження', cmd: 'killall com.apple.appkit.xpc.openAndSavePanelService' },
+      { id: 'backup_now', group: 'fix', level: 'mild', title: 'Запустити резервну копію Time Machine', cmd: 'tmutil startbackup' },
+      { id: 'npm_cache', group: 'clean', level: 'destructive', title: 'Очистити кеш npm', cmd: 'npm cache clean --force' },
+      { id: 'brew_cleanup', group: 'clean', level: 'destructive', title: 'Очистити кеш Homebrew', cmd: 'brew cleanup -s' },
+      { id: 'xcode_derived', group: 'clean', level: 'destructive', title: 'Очистити Xcode DerivedData', cmd: 'Xcode DerivedData' },
+      { id: 'empty_trash', group: 'clean', level: 'destructive', title: 'Очистити кошик Finder', cmd: `osascript -e 'tell application "Finder" to empty the trash'` },
     ];
+    const ACTION_GROUPS = { check: 'Перевірки', security: 'Безпека', fix: 'Виправлення', clean: 'Очищення' };
     const LEVEL_TEXT = { read: 'Читання', mild: 'Легка дія', destructive: 'Руйнівна дія' };
     const LEVEL_KIND = { read: 'good', mild: 'info', destructive: 'critical' };
+    const actionApi = () => {
+      const a = window.pywebview && window.pywebview.api;
+      return a && typeof a.action_run === 'function' ? a : null;
+    };
+    let actionBusy = false;
+    let actionRunning = null;   // id of the running action
+    let actionResult = null;    // {id, ok, text} of the last run: one shared result panel instead of a long list
+    let actionAvail = null;   // id -> available on this Mac; null until the app answers
+
+    function actionButton(a) {
+      const missing = actionAvail && actionAvail[a.id] === false;
+      const disabled = !actionApi() || missing || actionBusy;
+      const hint = missing ? 'Немає на цьому Mac' : (!actionApi() ? 'Доступно лише в застосунку MacSafe' : a.cmd);
+      const label = actionRunning === a.id ? 'Виконується…' : a.title;
+      return `<button class="btn act-btn act-btn--${esc(a.level)}${actionRunning === a.id ? ' is-running' : ''}" type="button" data-run="${esc(a.id)}" ${disabled ? 'disabled' : ''} title="${esc(hint)}">${esc(label)}</button>`;
+    }
 
     function renderActions() {
-      const rowsHtml = ACTION_CMDS.map(a => `<div class="check" style="cursor:default">
-          <span style="flex:1"><b>${esc(a.title)}</b> ${badge(LEVEL_KIND[a.level], LEVEL_TEXT[a.level])}
-          <code style="display:block;margin-top:6px">${esc(a.cmd)}</code></span>
-          ${copyBtn(a.cmd)}</div>`).join('');
+      const groups = Object.keys(ACTION_GROUPS).map(g => `<h4>${esc(ACTION_GROUPS[g])}</h4><div class="act-grid">${ACTION_CMDS.filter(a => a.group === g).map(actionButton).join('')}</div>`).join('');
+      const r = actionResult;
+      const res = r ? (() => {
+        const a = ACTION_CMDS.find(x => x.id === r.id);
+        return `<div class="card act-result"><p><b>${esc(a.title)}</b> ${badge(r.ok ? 'good' : 'critical', r.ok ? 'готово' : 'помилка')} ${copyBtn(a.cmd)}</p><pre class="cmd" style="white-space:pre-wrap">${esc(r.text)}</pre></div>` })() : '';
       $('#actions-body').innerHTML = `
-        <p class="card" style="margin-bottom:12px">Ці команди виконуються в Terminal на цьому Mac. Сторінка сама нічого не запускає. Руйнівні дії не мають швидкого відкату: спершу переконайтеся, що вони вам потрібні.</p>
-        <div class="stack">${rowsHtml}</div>`;
+        <p class="muted act-legend"><span class="act-dot act-dot--read"></span>читання <span class="act-dot act-dot--mild"></span>легка дія <span class="act-dot act-dot--destructive"></span>видаляє дані (питає підтвердження)</p>
+        ${groups}${res}`;
     }
+
+    async function refreshActionAvailability() {
+      const api = actionApi();
+      if (!api || typeof api.actions_list !== 'function') return;
+      try {
+        const r = await api.actions_list();
+        actionAvail = Object.fromEntries((r.items || []).map(i => [i.id, i.available]));
+      } catch (error) { actionAvail = null; }
+      renderActions();
+    }
+
+    async function runAction(id) {
+      const api = actionApi();
+      const a = ACTION_CMDS.find(x => x.id === id);
+      if (!api || !a || actionBusy) return;
+      if (a.level !== 'read' && !window.confirm(`${a.title}\n\n${a.cmd}\n\n` + (a.level === 'destructive' ? 'Це видаляє дані без швидкого відкату. Продовжити?' : 'Це перезапустить частину системи. Продовжити?'))) return;
+      actionBusy = true; actionRunning = id; actionResult = null;
+      renderActions();
+      try {
+        const start = await api.action_run(id, a.level !== 'read');
+        if (!start || !start.ok) throw new Error(start && start.error || 'Не вдалося запустити');
+        let st;
+        do {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          st = await api.action_status();
+        } while (st && st.state === 'running');
+        actionResult = { id, ok: st.state === 'done', text: st.output || (st.state === 'done' ? 'Готово' : `Код ${st.code}`) };
+      } catch (error) {
+        actionResult = { id, ok: false, text: String(error && error.message || error || 'Невідома помилка') };
+      } finally {
+        actionBusy = false; actionRunning = null;
+        renderActions();
+      }
+    }
+
+    document.addEventListener('click', event => {
+      const btn = event.target.closest && event.target.closest('.act-btn');
+      if (btn) runAction(btn.dataset.run);
+    });
+    window.addEventListener('pywebviewready', refreshActionAvailability);
 
     // ---------- Agents: text preview and Terminal commands ----------
     const AGENT_CMDS = {
@@ -2659,9 +2751,12 @@
       panel.setAttribute('aria-busy', String(busy));
     }
 
+    let cacheExpanded = false;
+    const LIST_LIMIT = 6;   // long lists stay light: the biggest few, the rest behind one button
     function renderCacheItems() {
       list.replaceChildren();
-      visible().forEach(item => {
+      const all = visible();
+      (cacheExpanded ? all : all.slice(0, LIST_LIMIT)).forEach(item => {
         const label = document.createElement('label');
         label.className = 'cache-item';
         const checkbox = document.createElement('input');
@@ -2691,6 +2786,13 @@
         label.append(checkbox, copy, size);
         list.append(label);
       });
+      if (all.length > LIST_LIMIT) {
+        const more = document.createElement('button');
+        more.type = 'button'; more.className = 'btn list-more';
+        more.textContent = cacheExpanded ? 'Згорнути' : `${(window.MacSafeI18n ? window.MacSafeI18n.tr('Показати ще') : 'Показати ще')} (${all.length - LIST_LIMIT})`;
+        more.addEventListener('click', () => { cacheExpanded = !cacheExpanded; renderCacheItems(); });
+        list.append(more);
+      }
       updateCacheControls();
     }
 
@@ -2974,9 +3076,10 @@
         if (!on) st.textContent = unavailable;
         else if (st.textContent === unavailable) st.textContent = '';
       };
+      let expanded = false;
       function draw() {
         out.replaceChildren();
-        rows.forEach(item => {
+        (expanded ? rows : rows.slice(0, 6)).forEach(item => {
           const label = document.createElement('label');
           label.className = 'cache-item' + (item.blocked ? ' cache-item--blocked' : '');
           const box = document.createElement('input');
@@ -3000,6 +3103,13 @@
           label.append(box, copy, size);
           out.append(label);
         });
+        if (rows.length > 6) {
+          const more = document.createElement('button');
+          more.type = 'button'; more.className = 'btn list-more';
+          more.textContent = expanded ? 'Згорнути' : `${(window.MacSafeI18n ? window.MacSafeI18n.tr('Показати ще') : 'Показати ще')} (${rows.length - 6})`;
+          more.addEventListener('click', () => { expanded = !expanded; draw(); });
+          out.append(more);
+        }
         sync();
       }
       async function find() {

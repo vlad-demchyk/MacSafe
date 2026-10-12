@@ -652,6 +652,67 @@ class QuickMetricsTests(unittest.TestCase):
 
 
 
+class ActionsTests(unittest.TestCase):
+    def setUp(self):
+        import actions
+        self.actions = actions
+
+    def _wait(self):
+        for _ in range(100):
+            if self.actions.status()["state"] != "running":
+                return self.actions.status()
+            time.sleep(0.02)
+        self.fail("action did not finish")
+
+    def test_every_action_is_a_fixed_argument_list_without_shell(self):
+        for a in self.actions.ACTIONS:
+            with self.subTest(a=a["id"]):
+                self.assertIn(a["level"], self.actions.LEVELS)
+                self.assertTrue(a["fn"] is not None or (isinstance(a["argv"], list) and all(isinstance(x, str) for x in a["argv"])))
+                if a["argv"]:
+                    self.assertNotIn(a["argv"][0], ("sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh"))
+
+    def test_unknown_id_and_injection_are_refused(self):
+        for bad in ("rm -rf /", "../x", None, 5, "restart_finder; reboot"):
+            self.assertFalse(self.actions.start(bad, True)["ok"])
+
+    def test_mild_and_destructive_need_confirmation(self):
+        ran = []
+        self.actions._execute = lambda a: (ran.append(a["id"]), (0, "ok"))[1]
+        for aid in ("restart_finder", "npm_cache", "empty_trash"):
+            self.assertFalse(self.actions.start(aid, None)["ok"])
+            self.assertFalse(self.actions.start(aid, "yes")["ok"])
+        self.assertEqual(ran, [])
+
+    def test_read_runs_without_confirmation_and_reports_output(self):
+        self.actions._execute = lambda a: (0, "hello")
+        self.assertTrue(self.actions.start("disk_free", None)["ok"])
+        st = self._wait()
+        self.assertEqual((st["state"], st["output"], st["id"]), ("done", "hello", "disk_free"))
+
+    def test_failed_action_reports_error_state(self):
+        self.actions._execute = lambda a: (1, "boom")
+        self.actions.start("disk_free", None)
+        self.assertEqual(self._wait()["state"], "error")
+
+    def test_real_read_action_runs(self):
+        importlib.reload(self.actions)
+        self.assertTrue(self.actions.start("disk_free", None)["ok"])
+        st = self._wait()
+        self.assertEqual(st["state"], "done")
+        self.assertIn("Filesystem", st["output"])
+
+    def test_page_list_matches_the_actions(self):
+        page = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core", "template.html"), encoding="utf-8").read()
+        block = page[page.index("const ACTION_CMDS = ["):page.index("const ACTION_GROUPS")]
+        ui = dict(re.findall(r"id: '([a-z_]+)'.*?cmd: (?:'([^']*)'|`([^`]*)`)", block, re.S) and
+                  [(m[0], m[1] or m[2]) for m in re.findall(r"id: '([a-z_]+)'.*?cmd: (?:'([^']*)'|`([^`]*)`)", block)])
+        py = {a["id"]: a["display"].replace("\'", "'") for a in self.actions.ACTIONS}
+        self.assertEqual(set(ui), set(py))
+        for aid, cmd in ui.items():
+            self.assertEqual(cmd.replace("\'", "'"), py[aid], aid)
+
+
 class LlmTests(unittest.TestCase):
     """llm reads HOME on import, so the module is reloaded with a temporary home."""
 
