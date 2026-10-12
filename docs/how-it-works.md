@@ -8,7 +8,8 @@ MacSafe is a small Python app built on PyObjC (AppKit), psutil and pywebview. It
 |---|---|
 | `agent.py` | The background agent. It owns the menu bar item, samples the metrics, sends alerts, runs the daily check, and watches for new login items. It starts at login. |
 | `menubar.py` | The status item, the popover, the secondary "summary" panel and the menus. |
-| `metrics.py`, `gpu_iokit.py` | Sampling: CPU and per-core load (psutil, `sysctl`), memory (`vm_stat`, `memory_pressure`), disk, network and battery; GPU load from IOKit. |
+| `metrics.py`, `gpu_iokit.py`, `thermal_hid.py` | Sampling: CPU and per-core load (psutil, `sysctl`), memory (`vm_stat`, `memory_pressure`), disk and network; GPU load, battery power and temperatures straight from IOKit (no subprocess per sample). |
+| `tools/bench.py` | Cost check: milliseconds per sampling call and the CPU and memory of a running process. |
 | `app.py` | The report window, a separate process started on demand. It loads the report page with pywebview and closes with the window. |
 | `engine.py` | Shared logic: report paths, the check runner, permission checks and the methods the window page calls. |
 | `cleanup.py`, `bigfiles.py`, `leftovers.py`, `trash.py` | Cleaning and file search. See [Safety](safety.md). |
@@ -62,3 +63,13 @@ Settings live in `~/Library/Application Support/MacSafe/дані/налашту�
 ## Tests
 
 `tests/test_macsafe.py` runs without touching your data: paths are replaced with temporary folders, and `launchctl` and `ioreg` are not called. Run it with `python3 -m unittest discover -s tests`.
+
+## Cost of sampling
+
+Measured with `tools/bench.py` on Apple Silicon. Idle agent: about 1% CPU, 106 MB, 5 threads (Stats, for comparison: 2.7% CPU, 123 MB, 14 threads).
+
+| Call | Before | Now |
+|---|---|---|
+| Temperature sensors | 51 ms every cycle | 22 ms every 3 s |
+| Process scan (panel open) | 47 ms | 9 ms (name, path and owner cached per process) |
+| Battery power | 15 ms (fork of `ioreg`) | 0.04 ms (IOKit) |
