@@ -1253,6 +1253,18 @@ class _PopoverPanel:
             value = self.ends[key]
             graph.value = None if value is None else max(0, min(100, value))
             label.setStringValue_(_percent_text(value))
+            band = 0 if value is None or value <= 80 else 1 if value <= 95 else 2
+            bands = self.__dict__.setdefault("_bands", {})
+            if bands.get(key, 0) != band:
+                # Crossing a threshold tints the number and makes it pulse once
+                label.setTextColor_((AppKit.NSColor.labelColor(), AppKit.NSColor.systemYellowColor(), AppKit.NSColor.systemRedColor())[band])
+                if not _reduce_motion():
+                    label.setAlphaValue_(0.35)
+                    AppKit.NSAnimationContext.beginGrouping()
+                    AppKit.NSAnimationContext.currentContext().setDuration_(0.45)
+                    label.animator().setAlphaValue_(1.0)
+                    AppKit.NSAnimationContext.endGrouping()
+            bands[key] = band
             graph.setNeedsDisplay_(True)
 
 
