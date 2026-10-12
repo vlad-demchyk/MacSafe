@@ -71,12 +71,8 @@
     .cache-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:14px; }
     .cache-list { display:grid; gap:8px; margin:14px 0; }
     .cache-item { display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--card2); cursor:pointer; }
-    .flags { display:flex; flex-wrap:wrap; gap:8px; align-content:center; }
-    .flag { display:inline-flex; align-items:center; gap:7px; padding:8px 13px; border:1px solid var(--line); border-radius:999px; background:var(--card); font-size:13px; }
-    .flag svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; flex:none; }
-    .flag__label { color:var(--muted); }
-    .flag--good svg { color:var(--good); } .flag--warning svg { color:var(--warn); } .flag--critical svg { color:var(--critical); } .flag--info svg { color:var(--muted); }
-    .flag--critical { border-color:var(--critical); } .flag--warning { border-color:var(--warn); }
+    .metric__ico { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; vertical-align:-2px; margin-right:5px; }
+    .metric__detail { color:var(--muted); font-size:11.5px; line-height:1.35; margin-top:6px; min-height:2.7em; }
     .more-details { margin-top:14px; } .more-details > summary { cursor:pointer; font-weight:600; }
     .cc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px; margin:6px 0 16px; }
     .cc-tile { display:flex; align-items:center; gap:12px; text-align:left; padding:12px 14px; border:1px solid var(--line); border-radius:18px; background:var(--card); color:var(--ink); cursor:pointer; font:inherit; box-shadow:var(--shadow); transition:transform .15s var(--ease), background .15s var(--ease); }
@@ -956,6 +952,17 @@
  "Кеш застосунку": "App cache",
  "Локальні LLM": "Local LLMs",
  "Запустити": "Run",
+ "ядер": "cores",
+ "процесів": "processes",
+ "хв": "min",
+ "стиснуто": "compressed",
+ "тиск": "pressure",
+ "запис у swap за 5 с": "swap writes in 5 s",
+ "з": "of",
+ "циклів": "cycles",
+ "залишилось": "left",
+ "вентилятори": "fans",
+ "локальних знімків": "local snapshots",
  "Джерело здоровʼя": "Health source",
  "Швидкі дії": "Quick actions",
  "Що зробити зараз": "What to do now",
@@ -1712,13 +1719,17 @@
     const clamp = v => Math.max(0, Math.min(100, Number(v) || 0));
     const badge = (kind, text) => `<span class="badge badge--${esc(kind || 'info')}">${esc(text)}</span>`;
     const bar = (pct, kind = 'info') => `<div class="bar"><span class="bar__fill bar__fill--${esc(kind)}" data-w="${clamp(pct).toFixed(1)}"></span></div>`;
-    // A state as a flag: icon, name, value, colour by severity
+    // Icons for the stat cards (the action icons are reused)
     const FLAG_ICONS = {
       ram: '<rect x="3" y="8" width="18" height="8" rx="1"/><path d="M7 8v8M11 8v8M15 8v8"/>',
-      swap: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>'
+      swap: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>',
+      cpu: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+      load: '<path d="M3 12h4l3-8 4 16 3-8h4"/>'
     };
-    const flag = (icon, label, valueHtml, kind) => `<span class="flag flag--${esc(kind || 'info')}" title="${esc(label)}"><svg viewBox="0 0 24 24" aria-hidden="true">${FLAG_ICONS[icon] || ACTION_ICONS[icon] || ''}</svg><span class="flag__label">${esc(label)}</span><b>${valueHtml}</b></span>`;
-    const tile = (label, valueHtml, kind, pct) => `<div class="metric"><div class="metric__value">${valueHtml}</div><div class="metric__label">${esc(label)}</div>${bar(pct, kind)}</div>`;
+    // Stat card: value, name, details line and a status bar; the icon sits next to the name
+    const tile = (label, valueHtml, kind, pct, detail, icon) => `<div class="metric"><div class="metric__value">${valueHtml}</div><div class="metric__label">${icon ? `<svg class="metric__ico" viewBox="0 0 24 24" aria-hidden="true">${FLAG_ICONS[icon] || ACTION_ICONS[icon] || ''}</svg>` : ''}${esc(label)}</div>${detail ? `<div class="metric__detail">${esc(detail)}</div>` : ''}${bar(pct, kind)}</div>`;
+    const tt = text => (window.MacSafeI18n ? window.MacSafeI18n.tr(text) : text);
+    const parts = (...xs) => xs.filter(x => x !== null && x !== undefined && x !== '' && x !== false).join(' · ');
     const rows = pairs => `<dl class="kvs">${pairs.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
     const card = (title, body) => `<article class="card"><h3>${esc(title)}</h3>${body}</article>`;
     const copyBtn = text => `<button class="copy" type="button" data-copy="${esc(text)}">Копіювати</button>`;
@@ -1806,13 +1817,15 @@
             <p class="score__copy">${esc(h.summary || '')} Штрафи: ${esc(h.penalty ?? 0)}.</p>
           </div>
         </article>
-        <div class="flags">
-          ${flag('top_cpu', 'CPU', fmt(l.cpuTotal, '%'), cpuKind)}
-          ${flag('ram', 'Памʼять', `${fmt(m.freePct, '%')} <span class="flag__label">вільно</span>`, memKind)}
-          ${flag('swap', 'Swap', has(m.swapMb) ? `${esc(m.swapMb)} МБ` : NA, swapKind)}
-          ${flag('disk_free', 'Диск', fmt(s.pct, '%'), diskKind)}
-          ${flag('battery', 'Батарея', batValue, batKind)}
-          ${flag('thermal', 'Температура', fmt(t.cpuTemp, '°C'), tempKind)}
+        <div class="tiles">
+          ${tile('CPU зараз', fmt(l.cpuTotal, '%'), cpuKind, l.cpuTotal, parts(has(l.ncpu) && `${l.ncpu} ${tt('ядер')}`, has(l.cpuUser) && `user ${l.cpuUser}%`, has(l.cpuSys) && `sys ${l.cpuSys}%`, has(l.processCount) && `${l.processCount} ${tt('процесів')}`), 'cpu')}
+          ${tile('Навантаження на ядро (5 хв)', fmt(l.perCore5), loadKind, loadPct, has(l.l1) ? `1 · 5 · 15 ${tt('хв')}: ${l.l1} · ${l.l5} · ${l.l15}` : '', 'load')}
+          ${tile('Вільна памʼять (memory_pressure)', fmt(m.freePct, '%'), memKind, m.freePct, parts(m.usedText, has(m.compressorMb) && `${tt('стиснуто')} ${m.compressorMb} ${tt('МБ')}`, m.pressure && `${tt('тиск')}: ${m.pressure}`), 'ram')}
+          ${tile('Swap', has(m.swapMb) ? `${esc(m.swapMb)} МБ` : NA, swapKind, has(m.swapMb) ? m.swapMb / 20 : null, has(m.swapoutsIn5s) ? `${tt('запис у swap за 5 с')}: ${m.swapoutsIn5s}` : '', 'swap')}
+          ${tile('Диск заповнено', fmt(s.pct, '%'), diskKind, s.pct, parts(has(s.usedGb) && has(s.totalGb) && `${s.usedGb} ${tt('з')} ${s.totalGb} ${tt('ГБ')}`, s.smart && `SMART: ${s.smart}`), 'disk_free')}
+          ${tile('Ємність батареї', batValue, batKind, b.healthPct, b.present === false ? '' : parts(has(b.cycles) && `${b.cycles} ${tt('циклів')}`, b.state, b.remain && `${tt('залишилось')} ${b.remain}`, has(b.tempC) && `${b.tempC}°C`), 'battery')}
+          ${tile('Температура CPU', fmt(t.cpuTemp, '°C'), tempKind, t.cpuTemp, parts(has(t.gpuTemp) && `GPU ${t.gpuTemp}°C`, has(t.ssdTemp) && `SSD ${t.ssdTemp}°C`, has(t.fans) && `${tt('вентилятори')}: ${t.fans}`, t.pmsetPressure && `pmset: ${t.pmsetPressure}`), 'thermal')}
+          ${tile('Вільно на диску', fmt(s.availGb, 'ГБ'), diskKind, has(s.pct) ? 100 - s.pct : null, has(s.localSnapshots) ? `${tt('локальних знімків')}: ${s.localSnapshots}` : '', 'disk_free')}
         </div>`;
       const ring = $('.ring__fg');
       requestAnimationFrame(() => { ring.style.strokeDashoffset = ring.dataset.off; });
