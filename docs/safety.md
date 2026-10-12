@@ -57,3 +57,7 @@ Security checks read only what macOS exposes without root. Values that need root
 
 - An app is removed only if it sits directly in `/Applications` or `~/Applications`, is not an Apple app, is not running and is not MacSafe. It goes to the Trash with the related Library files you chose; the page can only choose from the list MacSafe just found for that app.
 - A command line package is removed with the manager's own command, a fixed argument list with no shell and no input, so a command that asks for a password fails instead of hanging. The name must match a strict pattern and appear in a fresh listing of that manager.
+
+## Disk map
+
+The map only reads sizes (`du` and a directory listing) and never leaves the home folder: a path outside it, a link or a file is refused. Symbolic links are not followed, so a link cannot make a folder look bigger or lead out of the home folder. Moving a block to the Trash uses the same rules as large files.

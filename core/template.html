@@ -69,6 +69,16 @@
     /* Interactive cache cleaning */
     .cache-panel { margin-bottom:14px; }
     .cache-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:14px; }
+    .dm-crumbs { display:flex; flex-wrap:wrap; gap:4px; align-items:center; margin-top:14px; font-size:13px; }
+    .dm-crumbs .btn { padding:3px 9px; }
+    .dm-map { position:relative; height:380px; margin-top:12px; border-radius:12px; overflow:hidden; background:var(--card2); }
+    .dm-block { position:absolute; box-sizing:border-box; padding:6px 8px; overflow:hidden; cursor:pointer; color:var(--ink); border:2px solid var(--card); border-radius:6px; font-size:12px; line-height:1.3; transition:filter .15s var(--ease); }
+    .dm-block:hover { filter:brightness(1.08); }
+    .dm-block.is-selected { outline:2px solid var(--blue); outline-offset:-2px; }
+    .dm-block b { display:block; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .dm-block small { color:var(--muted); }
+    .dm-info { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:12px; min-height:34px; }
+    .dm-pending { margin-top:8px; color:var(--muted); font-size:12px; }
     .cache-list { display:grid; gap:8px; margin:14px 0; }
     .cache-item { display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--card2); cursor:pointer; }
     .metric__ico { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; vertical-align:-2px; margin-right:5px; }
@@ -522,6 +532,7 @@
             <button class="cc-tile cc-tile--read" type="button" data-panel="left-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></span><span class="cc-txt"><b>Залишки застосунків</b><small id="ct-left-sub">Не перевірено</small></span></button>
             <button class="cc-tile cc-tile--read" type="button" data-panel="llm-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></span><span class="cc-txt"><b>Локальні LLM</b><small id="ct-llm-sub">Не перевірено</small></span></button>
             <button class="cc-tile cc-tile--read" type="button" data-panel="apps-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg></span><span class="cc-txt"><b>Програми</b><small id="ct-apps-sub">Не перевірено</small></span></button>
+            <button class="cc-tile cc-tile--read" type="button" data-panel="map-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="11" height="10" rx="1.5"/><rect x="16" y="3" width="5" height="10" rx="1.5"/><rect x="3" y="15" width="6" height="6" rx="1.5"/><rect x="11" y="15" width="10" height="6" rx="1.5"/></svg></span><span class="cc-txt"><b>Карта диска</b><small id="ct-map-sub">Не перевірено</small></span></button>
           </div>
           <article class="card cache-panel" id="cache-panel" aria-labelledby="cache-heading" aria-busy="false">
             <h3 id="cache-heading">Кеші застосунків</h3>
@@ -588,6 +599,18 @@
             </div>
             <p class="hint" id="apps-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
             <div class="cache-list" id="apps-list"></div>
+          </article>
+          <article class="card cache-panel" id="map-panel" hidden aria-labelledby="map-heading" aria-busy="false">
+            <h3 id="map-heading">Карта диска</h3>
+            <p class="hint">Що займає місце в домашній папці. Один клік вибирає блок, подвійний відкриває папку.</p>
+            <div class="cache-actions">
+              <button class="btn" id="map-scan" type="button" disabled>Порахувати</button>
+            </div>
+            <p class="hint" id="map-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
+            <div class="dm-crumbs" id="map-crumbs"></div>
+            <div class="dm-map" id="map-view" role="group" aria-label="Карта диска"></div>
+            <div class="dm-info" id="map-info"></div>
+            <p class="dm-pending" id="map-pending"></p>
           </article>
           <details class="card more-details"><summary>Рекомендації зі звіту</summary>
             <p id="cleanup-summary"></p>
@@ -1022,6 +1045,18 @@
  "Застосунків": "Apps",
  "Термінальних пакетів": "Terminal packages",
  "Не вдалося знайти": "Could not find",
+ "Карта диска": "Disk map",
+ "Що займає місце в домашній папці. Один клік вибирає блок, подвійний відкриває папку.": "What takes space in the home folder. One click selects a block, a double click opens the folder.",
+ "Порахувати": "Count",
+ "Показати у Finder": "Show in Finder",
+ "Папку з усім вмістом": "The folder with everything in it",
+ "Перемістити в кошик? Його можна повернути з кошика.": "Move to the Trash? It can be restored from the Trash.",
+ "Переміщено в кошик": "Moved to the Trash",
+ "Ще рахуються папки": "Folders still being counted",
+ "Найбільші можуть з'явитися пізніше.": "The biggest may appear later.",
+ "Разом": "Total",
+ "Рахую": "Counting",
+ "Рахую…": "Counting…",
  "Знайти великі файли": "Find large files",
  "Знайти залишки": "Find leftovers",
  "Значення в момент звіту.": "Value at the time of the report.",
@@ -3702,12 +3737,171 @@
       window.addEventListener('pywebviewready', sync);
       sync();
     })();
+    // Disk map: a treemap of one folder at a time; sizes arrive while the folders are being counted
+    (() => {
+      const scanBtn = document.getElementById('map-scan');
+      const st = document.getElementById('map-status');
+      const crumbs = document.getElementById('map-crumbs');
+      const view = document.getElementById('map-view');
+      const info = document.getElementById('map-info');
+      const pending = document.getElementById('map-pending');
+      const tr_ = t => (window.MacSafeI18n ? window.MacSafeI18n.tr(t) : t);
+      let home = null, current = null, selected = null, timer = null, last = null;
+      const api = () => {
+        const a = window.pywebview && window.pywebview.api;
+        return a && typeof a.diskmap_start === 'function' ? a : null;
+      };
+      const sizeText = v => v === null || v === undefined ? '' : v >= 1024 ? `${(v / 1024).toLocaleString('uk-UA', { maximumFractionDigits:1 })} ГБ` : `${v.toLocaleString('uk-UA', { maximumFractionDigits:1 })} МБ`;
+      const sync = () => {
+        const on = !!api();
+        scanBtn.disabled = !on;
+        if (!on) st.textContent = unavailable;
+        else if (st.textContent === unavailable) st.textContent = '';
+      };
+      // Squarified treemap: rows are laid along the shorter side so that blocks stay close to squares
+      function layout(items, x, y, w, h) {
+        const total = items.reduce((n, i) => n + i.sizeMb, 0);
+        const out = [];
+        if (!total || w <= 0 || h <= 0) return out;
+        let rest = items.map(i => ({ item: i, area: i.sizeMb / total * w * h }));
+        const worst = (row, side) => {
+          const sum = row.reduce((n, r) => n + r.area, 0);
+          const max = Math.max(...row.map(r => r.area)), min = Math.min(...row.map(r => r.area));
+          return Math.max(side * side * max / (sum * sum), sum * sum / (side * side * min));
+        };
+        while (rest.length) {
+          const side = Math.min(w, h);
+          let row = [rest[0]], i = 1;
+          while (i < rest.length && worst(row.concat(rest[i]), side) <= worst(row, side)) { row.push(rest[i]); i++; }
+          rest = rest.slice(row.length);
+          const sum = row.reduce((n, r) => n + r.area, 0);
+          if (w >= h) {
+            const rw = sum / h; let cy = y;
+            row.forEach(r => { const rh = r.area / rw; out.push({ item: r.item, x, y: cy, w: rw, h: rh }); cy += rh; });
+            x += rw; w -= rw;
+          } else {
+            const rh = sum / w; let cx = x;
+            row.forEach(r => { const rw = r.area / rh; out.push({ item: r.item, x: cx, y, w: rw, h: rh }); cx += rw; });
+            y += rh; h -= rh;
+          }
+        }
+        return out;
+      }
+      function drawCrumbs(path) {
+        crumbs.replaceChildren();
+        if (!home) return;
+        const rel = path === home ? [] : path.slice(home.length + 1).split('/');
+        const mk = (label, target) => {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'btn'; b.textContent = label;
+          b.addEventListener('click', () => open_(target));
+          crumbs.append(b);
+        };
+        mk('~', home);
+        let acc = home;
+        rel.forEach(part => {
+          acc += '/' + part;
+          crumbs.append(document.createTextNode('›'));
+          mk(part, acc);
+        });
+      }
+      function drawInfo() {
+        info.replaceChildren();
+        if (!selected) return;
+        const label = document.createElement('span');
+        label.textContent = `${selected.name} · ${sizeText(selected.sizeMb)}` + (selected.count ? ` · ${selected.count}` : '');
+        info.append(label);
+        if (!selected.path) return;
+        const btn = (text, handler, danger) => {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'btn' + (danger ? ' btn--danger' : ''); b.textContent = tr_(text);
+          b.addEventListener('click', handler);
+          info.append(b);
+        };
+        if (selected.dir) btn('Відкрити', () => open_(selected.path));
+        btn('Показати у Finder', async () => {
+          const a = api();
+          try { const r = await a.reveal_file(selected.path); if (!r || !r.ok) st.textContent = (r && r.error) || tr_('Помилка'); } catch (e) { st.textContent = `${tr_('Помилка')}: ${errorText(e)}`; }
+        });
+        btn('У кошик', async () => {
+          const a = api();
+          const what = selected.dir ? tr_('Папку з усім вмістом') : tr_('Файл');
+          if (!a || !window.confirm(`${what}: ${selected.name} (${sizeText(selected.sizeMb)})\n${tr_('Перемістити в кошик? Його можна повернути з кошика.')}`)) return;
+          st.textContent = tr_('Переміщую…');
+          try {
+            const r = await a.trash_big(selected.path, true);
+            if (!r || !r.ok) throw new Error(r && r.error || tr_('Помилка'));
+            st.textContent = `${tr_('Переміщено в кошик')}: ${selected.name}.`;
+            selected = null;
+            open_(current, true);
+          } catch (e) { st.textContent = `${tr_('Помилка')}: ${errorText(e)}`; }
+        }, true);
+      }
+      function drawMap(res) {
+        view.replaceChildren();
+        const w = view.clientWidth, h = view.clientHeight;
+        const max = res.items.length ? res.items[0].sizeMb : 1;
+        layout(res.items, 0, 0, w, h).forEach(b => {
+          const el = document.createElement('div');
+          const share = Math.max(0.12, Math.min(1, b.item.sizeMb / max));
+          el.className = 'dm-block' + (selected && selected.path === b.item.path && selected.name === b.item.name ? ' is-selected' : '');
+          el.style.cssText = `left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px;background:color-mix(in srgb, ${b.item.dir ? 'var(--blue)' : 'var(--muted)'} ${Math.round(share * 38)}%, var(--card2));`;
+          const name = document.createElement('b');
+          name.textContent = b.item.name;
+          const size = document.createElement('small');
+          size.textContent = sizeText(b.item.sizeMb);
+          if (b.w > 70 && b.h > 34) el.append(name, size);
+          el.title = `${b.item.name} · ${sizeText(b.item.sizeMb)}`;
+          el.addEventListener('click', () => { selected = b.item; drawMap(res); drawInfo(); });
+          el.addEventListener('dblclick', () => { if (b.item.dir) open_(b.item.path); });
+          view.append(el);
+        });
+        pending.textContent = res.pending ? `${tr_('Ще рахуються папки')}: ${res.pending}. ${tr_('Найбільші можуть з\'явитися пізніше.')}` : '';
+      }
+      async function poll(path) {
+        const a = api();
+        if (!a || path !== current) return;
+        try {
+          const r = await a.diskmap_poll(path);
+          if (!r || !r.ok || path !== current) return;
+          last = r.result;
+          drawMap(r.result);
+          st.textContent = r.done ? `${tr_('Разом')}: ${sizeText(r.result.totalMb)}.` : `${tr_('Рахую')}: ${r.counted}/${r.total}…`;
+          if (!r.done) timer = setTimeout(() => poll(path), 1500);
+          else window.setTileSub('ct-map-sub', sizeText(r.result.totalMb));
+        } catch (e) { st.textContent = `${tr_('Помилка')}: ${errorText(e)}`; }
+      }
+      async function open_(path, fresh) {
+        const a = api();
+        if (!a) { sync(); return; }
+        clearTimeout(timer);
+        if (!fresh) selected = null;
+        current = path; drawCrumbs(path); drawInfo();
+        st.textContent = tr_('Рахую…');
+        try {
+          const r = await a.diskmap_start(path);
+          if (!r || !r.ok) throw new Error(r && r.error || tr_('Помилка'));
+          if (!home) { home = r.result.parent === null ? r.result.path : home; drawCrumbs(path); }
+          poll(path);
+        } catch (e) { st.textContent = `${tr_('Помилка')}: ${errorText(e)}`; }
+      }
+      scanBtn.addEventListener('click', async () => {
+        const a = api();
+        if (!a) return;
+        const r = await a.diskmap_start();
+        if (r && r.ok) { home = r.result.path; open_(home); }
+      });
+      (window.cleanupScans = window.cleanupScans || {}).map = () => scanBtn.click();
+      window.addEventListener('resize', () => { if (last) drawMap(last); });
+      window.addEventListener('pywebviewready', sync);
+      sync();
+    })();
     (window.cleanupScans = window.cleanupScans || {}).cache = scanCaches;
     document.querySelectorAll('#cleanup-tiles .cc-tile').forEach(tile_ => tile_.addEventListener('click', () => {
       document.querySelectorAll('#cleanup-tiles .cc-tile').forEach(t => t.classList.toggle('is-active', t === tile_));
       document.querySelectorAll('#cleanup .cache-panel').forEach(panel => { panel.hidden = panel.id !== tile_.dataset.panel; });
       // The first time a type is opened, its own check runs
-      const kind = { 'cache-panel': 'cache', 'big-panel': 'big', 'left-panel': 'left', 'llm-panel': 'llm', 'apps-panel': 'apps' }[tile_.dataset.panel];
+      const kind = { 'cache-panel': 'cache', 'big-panel': 'big', 'left-panel': 'left', 'llm-panel': 'llm', 'apps-panel': 'apps', 'map-panel': 'map' }[tile_.dataset.panel];
       const run = window.cleanupScans && window.cleanupScans[kind];
       if (run && !tile_.dataset.scanned && cacheApi()) run();
     }));

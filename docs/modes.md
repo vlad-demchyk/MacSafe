@@ -43,6 +43,7 @@ The sidebar groups sections into six areas. Each section shows its issues count 
 ### Maintenance
 
 - **Cleaning**: the cleaning panel (see [Safety](safety.md)), large files, and leftovers of removed apps. Nothing is deleted without confirmation, and removals go to the Trash.
+- **Disk map** (a tile on the Cleaning page): a treemap of what takes space in your home folder, one folder level at a time. Click selects a block, double click opens a folder, and a selected block can be shown in Finder or moved to the Trash after confirmation. Folders are counted in parallel and the map fills in while it works; the biggest folders can take a minute or two the first time, and a result is kept for two minutes.
 - **Programs** (a tile on the Cleaning page): installed apps and command line packages (Homebrew formulae and casks, npm global, cargo, pipx). Removing an app moves it to the Trash together with the Library files you tick; files matched by the app name only are unticked by default. A running app cannot be removed. A command line package is removed by its own manager; a Homebrew package that others depend on is refused.
 - **Action buttons**: commands for Terminal, grouped by purpose. The page runs nothing; you copy a command and run it yourself. Destructive commands are marked in red.
 
