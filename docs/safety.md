@@ -90,3 +90,7 @@ Every removal that starts from the window passes the list in `zones.py`. There a
 The duplicates search skips isolated zones and tells you which ones it left out. A one click removal of a large file, a disk map block or a duplicate is refused inside an isolated zone: handle those by hand in Finder. A stray marker file directly in Downloads, Documents, Desktop, Pictures, Movies or Music does not isolate that whole folder.
 
 Findings that are not worth attention are not shown: a group of duplicates that would free less than 5 MB is dropped, and the search starts at 5 MB per file.
+
+## Games and other storage
+
+The game removal works only on items from a fresh scan. A Steam game goes to the Trash with its `appmanifest`, `compatdata` and `shadercache` entries, so Steam does not think it is still installed. A running Steam or Wine process blocks the removal. Launcher and emulator data, virtual machine images and developer data (simulators, SDKs, Gradle, Rust) have no remove button: a damaged image or SDK is hard to repair, so they are shown with their size and place and removed from their own programs. The Trash step still passes the hard zones in `zones.py`.

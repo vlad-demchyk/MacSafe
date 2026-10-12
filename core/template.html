@@ -1101,6 +1101,12 @@
  "Дублікати в проєктах, хмарних папках і сховищах програм мають сенс, тому вони виключені.": "Duplicates in projects, cloud folders and app stores are normal, so they are excluded.",
  "Захищено від видалення": "Protected from removal",
  "Температура і потужність за тиждень": "Temperature and power over the week",
+ "Що зайняло місце на іграх і де це лежить. Ігри Steam, застосунки й ботли йдуть у кошик; дані лаунчерів і емуляторів видаляйте з самих програм.": "What games take and where they live. Steam games, apps and bottles go to the Trash; remove launcher and emulator data from the programs themselves.",
+ "Що займає місце і де це лежить. Видаляйте з самої програми або її командами: тут лише показ.": "What takes space and where it lives. Remove it from the program itself or with its commands: this is view only.",
+ "Для ігор Steam разом із записом про встановлення та даними. Закрийте Steam або лаунчер.": "For Steam games together with the install record and data. Quit Steam or the launcher.",
+ "Ігри": "Games",
+ "Віртуальні машини і контейнери": "Virtual machines and containers",
+ "Інструменти розробки": "Developer tools",
  "Знайти великі файли": "Find large files",
  "Знайти залишки": "Find leftovers",
  "Значення в момент звіту.": "Value at the time of the report.",
@@ -4106,6 +4112,116 @@
       (window.cleanupScans = window.cleanupScans || {}).dup = loadRoots;
       window.addEventListener('pywebviewready', () => { sync(); loadRoots(); });
       sync();
+    })();
+    // Storage categories (games, virtual machines, developer data): a tile and a panel appear only when something is found
+    (() => {
+      const tiles = document.getElementById('cleanup-tiles');
+      const anchor = document.querySelector('#cleanup details.more-details');
+      const tr_ = t => (window.MacSafeI18n ? window.MacSafeI18n.tr(t) : t);
+      const api = () => {
+        const a = window.pywebview && window.pywebview.api;
+        return a && typeof a.storage_overview === 'function' ? a : null;
+      };
+      const sizeText = v => v === null || v === undefined ? '' : v >= 1024 ? `${(v / 1024).toLocaleString('uk-UA', { maximumFractionDigits:1 })} ГБ` : `${v.toLocaleString('uk-UA', { maximumFractionDigits:1 })} МБ`;
+      const ICONS = {
+        games: '<rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 10v5M4.5 12.5h5M16 11h.01M18.5 13.5h.01"/>',
+        vms: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+        dev: '<path d="m8 8-5 4 5 4M16 8l5 4-5 4M14 5l-4 14"/>',
+      };
+      const built = {};
+      const note = text => { const p = document.createElement('p'); p.className = 'hint'; p.textContent = tr_(text); return p; };
+      function build(cat) {
+        if (built[cat.id]) { built[cat.id].sub.textContent = `${cat.count} · ${sizeText(cat.sizeMb)}`; return; }
+        const panelId = `store-${cat.id}-panel`;
+        const tile = document.createElement('button');
+        tile.type = 'button'; tile.className = 'cc-tile cc-tile--read'; tile.dataset.panel = panelId;
+        tile.innerHTML = `<span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[cat.id] || ICONS.dev}</svg></span><span class="cc-txt"><b></b><small></small></span>`;
+        tile.querySelector('b').textContent = tr_(cat.title);
+        const sub = tile.querySelector('small');
+        sub.textContent = `${cat.count} · ${sizeText(cat.sizeMb)}`;
+        tiles.append(tile);
+        const panel = document.createElement('article');
+        panel.className = 'card cache-panel'; panel.id = panelId; panel.hidden = true;
+        const head = document.createElement('h3'); head.textContent = tr_(cat.title);
+        const hint = note(cat.id === 'games' ? 'Що зайняло місце на іграх і де це лежить. Ігри Steam, застосунки й ботли йдуть у кошик; дані лаунчерів і емуляторів видаляйте з самих програм.' : 'Що займає місце і де це лежить. Видаляйте з самої програми або її командами: тут лише показ.');
+        const actions = document.createElement('div'); actions.className = 'cache-actions';
+        const scanBtn = document.createElement('button'); scanBtn.type = 'button'; scanBtn.className = 'btn'; scanBtn.textContent = tr_('Порахувати');
+        const rmBtn = document.createElement('button'); rmBtn.type = 'button'; rmBtn.className = 'btn btn--danger'; rmBtn.textContent = tr_('У кошик вибране'); rmBtn.disabled = true;
+        rmBtn.hidden = cat.id !== 'games';
+        actions.append(scanBtn, rmBtn);
+        const status = document.createElement('p'); status.className = 'hint'; status.setAttribute('role', 'status');
+        const list = document.createElement('div'); list.className = 'cache-list';
+        panel.append(head, hint, actions, status, list);
+        (anchor || tiles.parentElement).before(panel);
+        const chosen = new Set();
+        let rows = [];
+        const sync = () => { rmBtn.disabled = !chosen.size; };
+        function draw() {
+          list.replaceChildren();
+          rows.forEach(item => {
+            const row = document.createElement('div'); row.className = 'cache-item';
+            if (cat.id === 'games') {
+              const box = document.createElement('input'); box.type = 'checkbox'; box.disabled = !item.removable; box.checked = chosen.has(item.id);
+              box.addEventListener('change', () => { if (box.checked) chosen.add(item.id); else chosen.delete(item.id); sync(); });
+              row.append(box);
+            }
+            const copy = document.createElement('span'); copy.className = 'cache-copy';
+            const name = document.createElement('span'); name.className = 'cache-title'; name.textContent = item.name;
+            const meta = document.createElement('span'); meta.className = 'big-path';
+            meta.textContent = `${item.tool} · ${item.path.replace(/^\/Users\/[^/]+/, '~')}` + (item.removable || !item.hint ? '' : ` · ${item.hint}`);
+            copy.append(name, meta);
+            const size = document.createElement('span'); size.className = 'cache-size'; size.textContent = sizeText(item.sizeMb);
+            const show = document.createElement('button'); show.type = 'button'; show.className = 'btn'; show.textContent = tr_('Показати у Finder');
+            show.addEventListener('click', async () => { const a = api(); if (!a) return; const r = await a.storage_reveal(cat.id, item.path); if (r && !r.ok) status.textContent = r.error; });
+            row.append(copy, size, show);
+            list.append(row);
+          });
+          sync();
+        }
+        async function scan() {
+          const a = api(); if (!a) return;
+          scanBtn.disabled = true; status.textContent = tr_('Рахую…'); chosen.clear();
+          try {
+            const r = await a.storage_scan(cat.id);
+            rows = Array.isArray(r.items) ? r.items : [];
+            const total = rows.reduce((n, x) => n + (x.sizeMb || 0), 0);
+            status.textContent = `${tr_('Разом')}: ${sizeText(total)}.`;
+            sub.textContent = `${rows.length} · ${sizeText(total)}`;
+            draw();
+          } catch (e) { status.textContent = `${tr_('Помилка')}: ${errorText(e)}`; }
+          finally { scanBtn.disabled = false; }
+        }
+        rmBtn.addEventListener('click', async () => {
+          const a = api(); const ids = [...chosen]; if (!a || !ids.length) return;
+          if (!window.confirm(`${tr_('Перемістити в кошик')}: ${ids.length}?\n${tr_('Для ігор Steam разом із записом про встановлення та даними. Закрийте Steam або лаунчер.')}`)) return;
+          rmBtn.disabled = true; status.textContent = tr_('Переміщую…');
+          try {
+            const r = await a.storage_remove(ids, true);
+            if (!r || !r.ok) throw new Error(r && r.error || tr_('Помилка'));
+            const failed = r.results.filter(x => !x.ok);
+            status.textContent = `${tr_('Звільнено близько')} ${sizeText(r.freedMb)}` + (failed.length ? `; ${tr_('не вдалося')}: ${failed.length} (${failed[0].error})` : '') + '.';
+            await scan();
+          } catch (e) { status.textContent = `${tr_('Помилка')}: ${errorText(e)}`; }
+          finally { sync(); }
+        });
+        scanBtn.addEventListener('click', scan);
+        let scanned = false;
+        tile.addEventListener('click', () => {
+          tiles.querySelectorAll('.cc-tile').forEach(t => t.classList.toggle('is-active', t === tile));
+          document.querySelectorAll('#cleanup .cache-panel').forEach(p => { p.hidden = p.id !== panelId; });
+          if (!scanned) { scanned = true; scan(); }
+        });
+        built[cat.id] = { sub };
+      }
+      let loaded = false;
+      async function load() {
+        const a = api();
+        if (!a || loaded) return;
+        loaded = true;
+        try { const r = await a.storage_overview(); (r.items || []).forEach(build); } catch (e) { loaded = false; }
+      }
+      window.addEventListener('pywebviewready', load);
+      load();
     })();
     (window.cleanupScans = window.cleanupScans || {}).cache = scanCaches;
     document.querySelectorAll('#cleanup-tiles .cc-tile').forEach(tile_ => tile_.addEventListener('click', () => {
