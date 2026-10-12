@@ -691,9 +691,8 @@ class _PopoverPanel:
         self.note.cell().setLineBreakMode_(AppKit.NSLineBreakByTruncatingTail)
         # The panel scrolls when it is taller than the screen
         self.scroll = AppKit.NSScrollView.alloc().initWithFrame_(NSMakeRect(0, 0, PANEL_W, 300))
-        self.scroll.setHasVerticalScroller_(True)
-        self.scroll.setAutohidesScrollers_(True)
-        self.scroll.setScrollerStyle_(AppKit.NSScrollerStyleOverlay)
+        self.scroll.setHasVerticalScroller_(False)   # no scroll bar in the widget: the wheel and the trackpad still scroll
+        self.scroll.setHasHorizontalScroller_(False)
         self.scroll.setDrawsBackground_(False)
         self.scroll.setBorderType_(AppKit.NSNoBorder)
         self.scroll.setDocumentView_(root)
