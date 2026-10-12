@@ -382,6 +382,14 @@ CPU_TEMP_C=""; GPU_TEMP_C=""; SSD_TEMP_C=""
 is_number "$CPU_TEMP_RAW" && CPU_TEMP_C="$(div "$CPU_TEMP_RAW" 100 '%.1f')"
 is_number "$GPU_TEMP_RAW" && GPU_TEMP_C="$(div "$GPU_TEMP_RAW" 100 '%.1f')"
 is_number "$SSD_TEMP_RAW" && SSD_TEMP_C="$(div "$SSD_TEMP_RAW" 100 '%.1f')"
+# Apple Silicon: ioreg has no temperatures and powermetrics needs root, but the HID thermal sensors are readable by a user
+if [ -z "$CPU_TEMP_C" ] && [ -n "${MACSAFE_PYTHON:-}" ] && [ -f "${MACSAFE_HELPERS:-}/thermal_hid.py" ]; then
+  HID_TEMPS="$("$MACSAFE_PYTHON" "$MACSAFE_HELPERS/thermal_hid.py" 2>/dev/null || true)"
+  hid_temp() { printf '%s' "$HID_TEMPS" | sed -nE "s/.*(^| )$1=([0-9.]+).*/\2/p" | head -1; }
+  CPU_TEMP_C="$(hid_temp cpu)"
+  [ -n "$SSD_TEMP_C" ] || SSD_TEMP_C="$(hid_temp ssd)"
+  [ -n "$BATT_TEMP_C" ] || BATT_TEMP_C="$(hid_temp battery)"
+fi
 FAN_COUNT="$(printf '%s\n' "$IOREG_ALL" | awk -F= '/"Fan.*Count"/ { gsub(/[^0-9]/,"",$2); print $2; exit }')"
 FAN_SPEED="$(printf '%s\n' "$IOREG_ALL" | awk -F= '/"Fan.*CurrentSpeed"/ { gsub(/[^0-9]/,"",$2); printf "%s ", $2 }' | sed 's/ *$//')"
 THROTTLE_STATUS="Не виявлено"; THROTTLE_KIND="good"
@@ -698,7 +706,9 @@ add_issue() {
   shift 8
   for step in "$@"; do fix="${fix:+$fix,}$(jstr "$step")"; done
   ISSUES+=("$(obj "$(kv sev "$sev")" "$(kv cat "$cat")" "$(kv title "$title")" "$(kv detail "$detail")" "$(kv evidence "$evidence")" "$(kv why "$why")" "$(kv verify "$verify")" "$(kv risk "$risk")" "$(kr fix "[$fix]")")")
-  case "$sev" in
+  # The counters under the score follow the penalty: the daemon's issues are counted as recommendations
+  [ "$cat" = "XBrain daemon" ] && [ "$sev" != info ] && sev_count=info || sev_count="$sev"
+  case "$sev_count" in
     critical) N_CRIT=$((N_CRIT + 1)) ;;
     warning)  N_WARN=$((N_WARN + 1)) ;;
     *)        N_INFO=$((N_INFO + 1)) ;;
@@ -770,7 +780,7 @@ if [ "${#SECRET_JSON[@]}" -gt 0 ]; then
     "Значення секрету в звіті не показується. Ротуйте його, якщо plist читався іншими."
 fi
 if [ "$BACKUP_KIND" = warning ]; then
-  add_issue info "Резервні копії" "Резервні копії не налаштовано або копій немає" "$BACKUP_TEXT" \
+  add_issue warning "Резервні копії" "Резервні копії не налаштовано або копій немає" "$BACKUP_TEXT" \
     "tmutil destinationinfo: $([ "$BACKUP_DEST" -eq 0 ] && echo 'немає призначення' || echo 'призначення є, копій немає')" \
     "Без копії втрата диска означає втрату даних." \
     "tmutil latestbackup" "низький" \

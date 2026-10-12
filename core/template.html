@@ -84,6 +84,30 @@
     .cc-tile { min-height:76px; }
     .cc-txt b { font-size:14px; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
     .cc-txt small { min-height:2.6em; }
+    .stages { list-style:none; display:flex; flex-wrap:wrap; gap:6px; padding:0; margin:10px 0 12px; font-size:12.5px; }
+    .stages li { padding:4px 11px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+    .stages li.is-now { border-color:var(--blue); color:var(--ink); font-weight:600; }
+    .stages li.is-now::before { content:''; display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--blue); margin-right:7px; animation:cc-pulse 1s ease-in-out infinite; }
+    .stages li.is-done { color:var(--good); border-color:transparent; }
+    .stages li.is-done::before { content:'✓ '; }
+    @media (prefers-reduced-motion:reduce) { .stages li.is-now::before { animation:none; } }
+    .btn.btn--accent { background:var(--accent); color:var(--on-accent, #fff); border-color:transparent; font-weight:600; }
+    .btn.btn--accent:hover:not(:disabled) { filter:brightness(1.08); }
+    .btn.btn--accent:disabled { background:var(--card2); color:var(--muted); }
+    .cleanup-bar { align-items:center; margin:0 0 12px; }
+    #cache-panel .cache-filters legend { display:none; }
+    #cache-panel .cache-filters { border:0; padding:0; margin:4px 0 8px; }
+    #cache-panel .cache-memory { font-size:12px; padding:6px 10px; }
+    #cache-panel .cache-list { gap:6px; }
+    #cache-panel .cache-item { padding:9px 12px; border-radius:12px; align-items:center; }
+    #cache-panel .cache-item input { margin:0; }
+    #cache-panel .cache-copy { min-width:0; flex:1; }
+    #cache-panel .cache-title { font-size:14px; }
+    #cache-panel .cache-note { font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+    #cache-panel .cache-size { font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .cleanup-tiles { margin-bottom:12px; }
+    .cleanup-tiles .cc-tile.is-active { border-color:var(--accent); box-shadow:0 0 0 2px var(--soft); }
+    .cache-panel[hidden] { display:none; }
     .more-details { margin-top:14px; } .more-details > summary { cursor:pointer; font-weight:600; }
     .cc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px; margin:6px 0 16px; }
     .cc-tile { display:flex; align-items:center; gap:12px; text-align:left; padding:12px 14px; border:1px solid var(--line); border-radius:18px; background:var(--card); color:var(--ink); cursor:pointer; font:inherit; box-shadow:var(--shadow); transition:transform .15s var(--ease), background .15s var(--ease); }
@@ -424,9 +448,9 @@
         </div>
       </section>
 
-      <section class="view" data-view="memory" aria-label="Памʼять">
+      <section class="view" data-view="memory" aria-label="RAM">
         <div class="block" id="memory">
-          <div class="block__head"><h2>Памʼять</h2><p class="hint">Тиск памʼяті, swap, стиснення і хто займає памʼять.</p></div>
+          <div class="block__head"><h2>RAM</h2><p class="hint">Тиск RAM, swap на SSD, стиснення і хто займає RAM.</p></div>
           <div id="memory-body"></div>
         </div>
       </section>
@@ -476,31 +500,40 @@
       <!-- Mode “Cleaning” -->
       <section class="view" data-view="cleanup" aria-label="Очищення">
         <div class="block" id="cleanup">
-          <div class="block__head"><h2>Очищення</h2><p class="hint">Кандидати з розміром і командою. Звіт нічого не видаляє сам.</p></div>
+          <div class="block__head"><h2>Очищення</h2></div>
+          <div class="cache-actions cleanup-bar"><button class="btn btn--accent" id="clean-all" type="button" disabled>Перевірити все</button><span class="muted" id="clean-all-status" role="status"></span></div>
+          <div class="cc-grid cleanup-tiles" id="cleanup-tiles">
+            <button class="cc-tile cc-tile--read is-active" type="button" data-panel="cache-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/></svg></span><span class="cc-txt"><b>Кеші</b><small id="ct-cache-sub">Не перевірено</small></span></button>
+            <button class="cc-tile cc-tile--read" type="button" data-panel="big-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/></svg></span><span class="cc-txt"><b>Великі файли</b><small id="ct-big-sub">Не перевірено</small></span></button>
+            <button class="cc-tile cc-tile--read" type="button" data-panel="left-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></span><span class="cc-txt"><b>Залишки застосунків</b><small id="ct-left-sub">Не перевірено</small></span></button>
+            <button class="cc-tile cc-tile--read" type="button" data-panel="llm-panel"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></span><span class="cc-txt"><b>Локальні LLM</b><small id="ct-llm-sub">Не перевірено</small></span></button>
+          </div>
           <article class="card cache-panel" id="cache-panel" aria-labelledby="cache-heading" aria-busy="false">
             <h3 id="cache-heading">Кеші застосунків</h3>
-            <p class="hint">Перевірте поточні розміри й виберіть папки. Очищення видаляє лише їхній вміст.</p>
+            <p class="hint">Звільняє місце на SSD, не RAM.</p>
+            <ol class="stages" id="cache-stages" aria-label="Етапи"></ol>
             <div class="cache-actions">
               <button class="btn" id="cache-scan" type="button" disabled>Перевірити кеші</button>
+              <button class="btn btn--accent" id="cache-auto" type="button" disabled title="Безпечні кеші розробника й логи старші за вибраний вік, без списку вибору">Авто-очищення</button>
               <label class="cache-days">Файли старші за
                 <select id="cache-days" disabled><option value="7">7 днів</option><option value="30" selected>30 днів</option><option value="90">90 днів</option></select>
               </label>
             </div>
-            <fieldset class="cache-filters" id="cache-filters" hidden><legend>Що очищати (усе безпечне: кеші й логи, які створяться знову)</legend></fieldset>
+            <fieldset class="cache-filters" id="cache-filters" hidden><legend>Що очищати</legend></fieldset>
             <p class="cache-memory" id="cache-memory" role="status" hidden></p>
             <p class="hint" id="cache-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
             <p class="hint cache-root" id="cache-root" hidden></p>
             <div class="cache-list" id="cache-list" role="group" aria-label="Кеші для очищення"></div>
-            <label class="cache-confirm"><input id="cache-confirm" type="checkbox" disabled><span>Я закрив застосунки, кеші яких очищую, і розумію, що вміст папок буде видалено</span></label>
-            <div class="cache-actions">
+            <label class="cache-confirm"><input id="cache-confirm" type="checkbox" disabled><span>Я закрив ці застосунки і розумію, що вміст буде видалено</span></label>
+            <div class="cache-actions" id="cache-foot" hidden>
               <p class="cache-summary" id="cache-selected" aria-live="polite">Вибрано: 0 МБ</p>
               <button class="btn btn--danger" id="cache-clean" type="button" disabled>Очистити вибране</button>
             </div>
             <div class="cache-results" id="cache-results" role="status" aria-live="polite" aria-atomic="true"></div>
           </article>
-          <article class="card cache-panel" id="big-panel" aria-labelledby="big-heading" aria-busy="false">
+          <article class="card cache-panel" id="big-panel" hidden aria-labelledby="big-heading" aria-busy="false">
             <h3 id="big-heading">Великі файли</h3>
-            <p class="hint">Пошук у домашній папці без Library. Тільки перегляд: файли не видаляються, їх можна показати у Finder. Downloads і Documents macOS може попросити дозволити.</p>
+            <p class="hint">Файли від вибраного розміру в домашній папці. Тільки перегляд і показ у Finder.</p>
             <div class="cache-actions">
               <button class="btn" id="big-scan" type="button" disabled>Знайти великі файли</button>
               <label class="cache-days">Від
@@ -510,9 +543,9 @@
             <p class="hint" id="big-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
             <div class="cache-list" id="big-list"></div>
           </article>
-          <article class="card cache-panel" id="left-panel" aria-labelledby="left-heading" aria-busy="false">
+          <article class="card cache-panel" id="left-panel" hidden aria-labelledby="left-heading" aria-busy="false">
             <h3 id="left-heading">Залишки видалених застосунків</h3>
-            <p class="hint">Папки з іменем bundle id в ~/Library, для яких застосунка вже немає, не змінені понад 30 днів. Вибране переміщується в кошик, його можна повернути.</p>
+            <p class="hint">Папки видалених застосунків у ~/Library. Вибране йде в кошик.</p>
             <div class="cache-actions">
               <button class="btn" id="left-scan" type="button" disabled>Знайти залишки</button>
               <button class="btn btn--danger" id="left-trash" type="button" disabled>У кошик вибране</button>
@@ -520,9 +553,9 @@
             <p class="hint" id="left-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
             <div class="cache-list" id="left-list"></div>
           </article>
-          <article class="card cache-panel" id="llm-panel" aria-labelledby="llm-heading" aria-busy="false">
+          <article class="card cache-panel" id="llm-panel" hidden aria-labelledby="llm-heading" aria-busy="false">
             <h3 id="llm-heading">Локальні LLM</h3>
-            <p class="hint">Моделі Ollama, Hugging Face, LM Studio, GPT4All, Jan, llama.cpp. Це ручна категорія: в авто-очищення не входить і за замовчуванням нічого не відмічено. Файли йдуть у кошик, модель Ollama видаляється командою ollama rm.</p>
+            <p class="hint">Ручна категорія: не входить в авто-очищення. Файли йдуть у кошик, модель Ollama видаляється командою.</p>
             <div class="cache-actions">
               <button class="btn" id="llm-scan" type="button" disabled>Знайти моделі</button>
               <button class="btn btn--danger" id="llm-remove" type="button" disabled>Видалити вибране</button>
@@ -530,8 +563,10 @@
             <p class="hint" id="llm-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
             <div class="cache-list" id="llm-list"></div>
           </article>
-          <p class="card" id="cleanup-summary"></p>
-          <div class="stack" id="cleanup-list" style="margin-top:10px"></div>
+          <details class="card more-details"><summary>Рекомендації зі звіту</summary>
+            <p id="cleanup-summary"></p>
+            <div class="stack" id="cleanup-list" style="margin-top:10px"></div>
+          </details>
         </div>
       </section>
 
@@ -794,7 +829,7 @@
  "Вибір дня звіту": "Pick a report day",
  "Вибір проблеми": "Choose an issue",
  "Виведення сторінок за # с (Swapouts / Pageouts)": "Page output in # s (Swapouts / Pageouts)",
- "Видалення кешів на диску майже не змінює памʼять: це знімок, а не обіцянка.": "Deleting caches on disk barely changes memory: this is a snapshot, not a promise.",
+ "Очищення кешів звільняє місце на SSD, а не RAM: RAM майже не змінюється.": "Cleaning caches frees space on the SSD, not RAM: RAM barely changes.",
  "Видаляйте агенти від застосунків, які вже видалено": "Remove agents of apps that are already uninstalled",
  "Видаліть відповідний plist з ~/Library/LaunchAgents.": "Delete the matching plist from ~/Library/LaunchAgents.",
  "Видимих користувачу TCP-слухачів поза localhost: #. Доступність з мережі не перевірена.": "User-visible TCP listeners outside localhost: #. Network reachability was not checked.",
@@ -811,7 +846,9 @@
  "Від": "From",
  "Відкрийте останній .panic і знайдіть рядок panic string або Process name.": "Open the latest .panic and find the panic string or Process name line.",
  "Відкриті вікна з’являться знову": "Open windows will appear again",
- "Вільна памʼять (memory_pressure)": "Free memory (memory_pressure)",
+ "Вільна RAM": "Free RAM",
+ "SSD заповнено": "SSD full",
+ "Swap на SSD": "Swap on SSD",
  "Вільна памʼять, %": "Free memory, %",
  "Вільна памʼять: #% → #%": "Free memory: #% → #%",
  "Вільна памʼять: #%.": "Free memory: #%.",
@@ -963,6 +1000,21 @@
  "Кеш застосунку": "App cache",
  "Локальні LLM": "Local LLMs",
  "Запустити": "Run",
+ "Звільняє місце на SSD, не RAM.": "Frees space on the SSD, not RAM.",
+ "Перевірити все": "Check all",
+ "Кеші": "Caches",
+ "Залишки застосунків": "App leftovers",
+ "Не перевірено": "Not checked",
+ "Нічого": "Nothing",
+ "Що очищати": "What to clean",
+ "Рекомендації зі звіту": "Report recommendations",
+ "Я закрив ці застосунки і розумію, що вміст буде видалено": "I have closed these apps and understand the contents will be deleted",
+ "Файли від вибраного розміру в домашній папці. Тільки перегляд і показ у Finder.": "Files above the chosen size in the home folder. View only and show in Finder.",
+ "Папки видалених застосунків у ~/Library. Вибране йде в кошик.": "Folders of removed apps in ~/Library. The selection goes to the Trash.",
+ "Ручна категорія: не входить в авто-очищення. Файли йдуть у кошик, модель Ollama видаляється командою.": "A manual category: not part of auto clean. Files go to the Trash, an Ollama model is removed by command.",
+ "Авто-очищення": "Auto clean",
+ "Вибір": "Choose",
+ "Етапи": "Stages",
  "дн": "d",
  "Рекомендація": "Recommendation",
  "Штраф": "Penalty",
@@ -1191,9 +1243,9 @@
  "Памʼять": "Memory",
  "Памʼять (RSS)": "Memory (RSS)",
  "Памʼять daemon: # МБ": "Daemon memory: # MB",
- "Памʼять до і після: доступно": "Memory before and after: available",
+ "RAM до і після: доступно": "RAM before and after: available",
  "Памʼять за застосунками": "Memory by app",
- "Памʼять зараз: доступно": "Memory now: available",
+ "RAM зараз: доступно": "RAM now: available",
  "Памʼять, що стиснута або в swap, не зникає сама. Закриття невикористаних вікон звільняє її найшвидше.": "Memory that is compressed or in swap does not disappear by itself. Closing unused windows frees it fastest.",
  "Панель відкриття і збереження сканує папку": "The open and save panel scans the folder",
  "Панель відкриття/збереження (Apple)": "Open/save panel (Apple)",
@@ -1700,7 +1752,7 @@
     // Modes and sections: the order here defines the sidebar and the keys 1–9
     const MODES = [
       { id: 'state', title: 'Огляд', sections: [['overview', 'Стан'], ['issues', 'Проблеми'], ['plan', 'План дій']] },
-      { id: 'system', title: 'Система', sections: [['system', 'Mac'], ['memory', 'Памʼять'], ['processes', 'Процеси'], ['thermal', 'Температури']] },
+      { id: 'system', title: 'Система', sections: [['system', 'Mac'], ['memory', 'RAM'], ['processes', 'Процеси'], ['thermal', 'Температури']] },
       { id: 'security', title: 'Безпека', sections: [['security', 'Перевірки'], ['launch', 'Автозапуск'], ['crashes', 'Збої'], ['daemon', 'XBrain daemon']] },
       { id: 'cleanup', title: 'Обслуговування', sections: [['cleanup', 'Очищення'], ['actions', 'Кнопки дій']] },
       { id: 'help', title: 'Довідка', sections: [['advice', 'Поради'], ['agents', 'Агенти']] },
@@ -1746,6 +1798,7 @@
     };
     // Stat card: value, name, details line and a status bar; the icon sits next to the name
     const tile = (label, valueHtml, kind, pct, detail, icon) => `<div class="metric"><div class="metric__value">${valueHtml}</div><div class="metric__label">${icon ? `<svg class="metric__ico" viewBox="0 0 24 24" aria-hidden="true">${FLAG_ICONS[icon] || ACTION_ICONS[icon] || ''}</svg>` : ''}${esc(label)}</div>${detail ? `<div class="metric__detail">${esc(detail)}</div>` : ''}${bar(pct, kind)}</div>`;
+    window.setTileSub = (id, text) => { const el = document.getElementById(id); if (el) { el.textContent = text; const tile_ = el.closest('.cc-tile'); if (tile_) tile_.dataset.scanned = '1'; } };
     const tt = text => (window.MacSafeI18n ? window.MacSafeI18n.tr(text) : text);
     const parts = (...xs) => xs.filter(x => x !== null && x !== undefined && x !== '' && x !== false).join(' · ');
     const rows = pairs => `<dl class="kvs">${pairs.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
@@ -1835,15 +1888,14 @@
           <div>
             <p class="score__num">${esc(clamp(h.score))}<small class="score__of"> /100</small></p>
             <p class="score__label">${esc(h.text || NA)}</p>
-            <p class="score__copy">${esc(h.summary || '')}</p>
-            <p class="score__copy">${esc(tt('Штраф'))}: −${esc(h.penalty ?? 0)} · ${esc(tt('критичні'))} ${esc((h.counts || {}).critical ?? 0)} · ${esc(tt('попередження'))} ${esc((h.counts || {}).warning ?? 0)} · ${esc(tt('рекомендації'))} ${esc((h.counts || {}).info ?? 0)} (0)</p>
+            <p class="score__copy">${esc((h.counts || {}).critical ?? 0)} ${esc(tt('критичні'))} · ${esc((h.counts || {}).warning ?? 0)} ${esc(tt('попередження'))} · ${esc((h.counts || {}).info ?? 0)} ${esc(tt('рекомендації'))}</p>
           </div>
         </article>
         <div class="tiles">
           ${tile('CPU зараз', fmt(l.cpuTotal, '%'), cpuKind, l.cpuTotal, parts(has(l.ncpu) && `${l.ncpu} ${tt('ядер')}`, has(l.l1) && `${tt('навантаження')} ${l.l1}`), 'cpu')}
-          ${tile('Вільна памʼять (memory_pressure)', fmt(m.freePct, '%'), memKind, m.freePct, parts(m.usedText, has(m.compressorMb) && `${tt('стиснуто')} ${m.compressorMb} ${tt('МБ')}`, m.pressure && `${tt('тиск')}: ${m.pressure}`), 'ram')}
-          ${tile('Swap', has(m.swapMb) ? `${esc(m.swapMb)} МБ` : NA, swapKind, has(m.swapMb) ? m.swapMb / 20 : null, has(m.swapoutsIn5s) ? `${tt('запис у swap за 5 с')}: ${m.swapoutsIn5s}` : '', 'swap')}
-          ${tile('Диск заповнено', fmt(s.pct, '%'), diskKind, s.pct, parts(has(s.usedGb) && has(s.totalGb) && `${s.usedGb} ${tt('з')} ${s.totalGb} ${tt('ГБ')}`, has(s.availGb) && `${s.availGb} ${tt('ГБ')} ${tt('вільно')}`, s.smart && `SMART: ${s.smart}`), 'disk_free')}
+          ${tile('Вільна RAM', fmt(m.freePct, '%'), memKind, m.freePct, parts(m.usedText, has(m.compressorMb) && `${tt('стиснуто')} ${m.compressorMb} ${tt('МБ')}`, m.pressure && `${tt('тиск')}: ${m.pressure}`), 'ram')}
+          ${tile('Swap на SSD', has(m.swapMb) ? `${esc(m.swapMb)} МБ` : NA, swapKind, has(m.swapMb) ? m.swapMb / 20 : null, has(m.swapoutsIn5s) ? `${tt('запис у swap за 5 с')}: ${m.swapoutsIn5s}` : '', 'swap')}
+          ${tile('SSD заповнено', fmt(s.pct, '%'), diskKind, s.pct, parts(has(s.usedGb) && has(s.totalGb) && `${s.usedGb} ${tt('з')} ${s.totalGb} ${tt('ГБ')}`, has(s.availGb) && `${s.availGb} ${tt('ГБ')} ${tt('вільно')}`, s.smart && `SMART: ${s.smart}`), 'disk_free')}
           ${tile('Ємність батареї', batValue, batKind, b.healthPct, b.present === false ? '' : parts(has(b.cycles) && `${b.cycles} ${tt('циклів')}`, b.state, b.remain && `${tt('залишилось')} ${b.remain}`, has(b.tempC) && `${b.tempC}°C`), 'battery')}
           ${has(t.cpuTemp) ? tile('Температура CPU', fmt(t.cpuTemp, '°C'), tempKind, t.cpuTemp, parts(has(t.gpuTemp) && `GPU ${t.gpuTemp}°C`, has(t.ssdTemp) && `SSD ${t.ssdTemp}°C`, has(t.fans) && `${tt('вентилятори')}: ${t.fans}`, t.pmsetPressure && `pmset: ${t.pmsetPressure}`), 'thermal') : uptimeTile}
         </div>`;
@@ -2093,7 +2145,7 @@
       ]);
       $('#system-body').innerHTML = `<div class="grid">
         ${card('Mac і macOS', rows([
-          ['Модель', fmt(s.model)], ['Чип', fmt(s.chip)], ['Ядра', fmt(s.cores)], ['Памʼять', fmt(s.memory)],
+          ['Модель', fmt(s.model)], ['Чип', fmt(s.chip)], ['Ядра', fmt(s.cores)], ['RAM', fmt(s.memory)],
           ['macOS', fmt(s.os)], ['Збірка', fmt(s.build)], ['Ядро', fmt(s.kernel)],
           ['Безперервна робота', fmt(s.uptime)], ['Останнє завантаження', fmt(s.bootDate)],
         ]))}
@@ -2831,7 +2883,7 @@
     function renderMemory(snap) {
       memoryBox.hidden = !snap;
       if (!snap) return;
-      memoryBox.textContent = `Памʼять зараз: доступно ${snap.availableMb} МБ, вільна ${snap.freeMb} МБ, неактивна ${snap.inactiveMb} МБ, swap ${snap.swapMb} МБ`;
+      memoryBox.textContent = `RAM зараз: доступно ${snap.availableMb} МБ, вільна ${snap.freeMb} МБ, неактивна ${snap.inactiveMb} МБ, swap ${snap.swapMb} МБ`;
     }
     function renderFilters() {
       filters.replaceChildren();
@@ -2876,7 +2928,11 @@
       const unknown = chosen.filter(item => !knownSize(item.sizeMb)).length;
       summary.textContent = `Вибрано: ${mb(total)} МБ` + (unknown ? ` · розмір н/д: ${unknown}` : '');
       scanButton.disabled = busy || !available;
+      if (typeof updateAuto === 'function') updateAuto();
       confirmation.disabled = busy || !available || !items.length;
+      const foot_ = document.getElementById('cache-foot');
+      if (foot_) foot_.hidden = !chosen.length;
+      confirmation.closest('label').hidden = !chosen.length;
       daysSelect.disabled = busy || !available;
       cleanButton.disabled = busy || !available || !chosen.length || !confirmation.checked;
       list.querySelectorAll('input').forEach((input, i) => { const it = visible()[i]; input.disabled = busy || !available || !!(it && it.blocked); });
@@ -2946,9 +3002,12 @@
       renderFilters();
       renderMemory(scan.memory);
       root.textContent = scan.cacheRoot ? `Папка кешів: ${scan.cacheRoot}` : '';
-      root.hidden = !scan.cacheRoot;
+      root.hidden = true;
       renderCacheItems();
-      status.textContent = items.length ? 'Виберіть кеші для очищення.' : 'Кешів для очищення не знайдено.';
+      status.textContent = items.length ? 'Виберіть кеші для очищення або натисніть «Авто-очищення».' : 'Кешів для очищення не знайдено.';
+      const free_ = items.filter(i => !i.blocked && knownSize(i.sizeMb));
+      window.setTileSub('ct-cache-sub', free_.length ? `${mb(free_.reduce((n, i) => n + i.sizeMb, 0))} МБ · ${free_.length}` : 'Нічого');
+      setStage(items.length ? 1 : 3);
     }
 
     async function scanCaches() {
@@ -2956,12 +3015,14 @@
       const api = cacheApi();
       if (!api) { status.textContent = unavailable; updateCacheControls(); return; }
       busy = true;
+      setStage(0);
       status.textContent = 'Перевіряю кеші…';
       updateCacheControls();
       try {
         await refreshCacheItems(api);
       } catch (error) {
         status.textContent = `Не вдалося перевірити кеші: ${errorText(error)}`;
+        setStage(-1);
       } finally {
         busy = false;
         updateCacheControls();
@@ -2995,19 +3056,48 @@
       const mem = outcome.memory;
       if (mem && mem.before && mem.after && mem.delta) {
         const note = document.createElement('p');
-        note.textContent = `Памʼять до і після: доступно ${mem.before.availableMb} → ${mem.after.availableMb} МБ (${signed(mem.delta.availableMb)}), `
+        note.textContent = `RAM до і після: доступно ${mem.before.availableMb} → ${mem.after.availableMb} МБ (${signed(mem.delta.availableMb)}), `
           + `вільна ${signed(mem.delta.freeMb)}, неактивна ${signed(mem.delta.inactiveMb)}, swap ${signed(mem.delta.swapMb)}. `
-          + 'Видалення кешів на диску майже не змінює памʼять: це знімок, а не обіцянка.';
+          + 'Очищення кешів звільняє місце на SSD, а не RAM: RAM майже не змінюється.';
         results.append(note);
       }
     }
 
+    // Where the user is: scanning, choosing what to clean (or the auto path), cleaning, done
+    const STAGE_NAMES = ['Перевірка', 'Вибір', 'Очищення', 'Готово'];
+    const stageBar = document.getElementById('cache-stages');
+    const autoButton = document.getElementById('cache-auto');
+    function setStage(index) {
+      const tr_ = t => (window.MacSafeI18n ? window.MacSafeI18n.tr(t) : t);
+      stageBar.innerHTML = STAGE_NAMES.map((name, i) => `<li class="${index < 0 ? '' : i < index ? 'is-done' : i === index ? 'is-now' : ''}">${tr_(name)}</li>`).join('');
+    }
+    setStage(-1);
+    // Auto path: only the fixed developer caches and logs that are not blocked; the same guarded cleaning as the manual one
+    const AUTO_IDS = ['npm', 'pip', 'brew', 'xcode', 'logs'];
+    const autoItems = () => items.filter(item => AUTO_IDS.includes(item.id) && !item.blocked && knownSize(item.sizeMb) && item.sizeMb > 0);
+    function updateAuto() {
+      const list_ = autoItems();
+      const total = list_.reduce((sum, item) => sum + item.sizeMb, 0);
+      autoButton.disabled = busy || !cacheApi() || !list_.length;
+      autoButton.textContent = list_.length ? `Авто-очищення (${mb(total)} МБ)` : 'Авто-очищення';
+    }
+    async function cleanAuto() {
+      const list_ = autoItems();
+      if (busy || !list_.length) return;
+      const total = list_.reduce((sum, item) => sum + item.sizeMb, 0);
+      if (!window.confirm(`Авто-очищення: ${list_.map(i => i.title).join(', ')}.\n\nВидалить файли старші за ${daysSelect.value} дн., близько ${mb(total)} МБ, без кошика. Це кеші й логи, які створяться знову. Продовжити?`)) return;
+      return cleanIds(list_.map(i => i.id));
+    }
     async function cleanCaches() {
+      const ids = visible().filter(item => selected.has(item.id) && !item.blocked).map(item => item.id);
+      if (!ids.length || !confirmation.checked) return;
+      return cleanIds(ids);
+    }
+    async function cleanIds(ids) {
       if (busy) return;
       const api = cacheApi();
       if (!api) { status.textContent = unavailable; updateCacheControls(); return; }
-      const ids = visible().filter(item => selected.has(item.id) && !item.blocked).map(item => item.id);
-      if (!ids.length || !confirmation.checked) return;
+      setStage(2);
       const titles = new Map(items.map(item => [item.id, item.title]));
       busy = true;
       cleanButton.textContent = 'Очищую…';
@@ -3030,6 +3120,7 @@
         } finally {
           busy = false;
           cleanButton.textContent = 'Очистити вибране';
+          setStage(3);
           updateCacheControls();
         }
       }
@@ -3051,8 +3142,8 @@
         return api && typeof api.big_files === 'function' ? api : null;
       };
       const sizeText = v => v >= 1024 ? `${(v / 1024).toLocaleString('uk-UA', { maximumFractionDigits:1 })} ГБ` : `${Math.round(v)} МБ`;
-      const sync = () => { const on = !!bigApi(); btn.disabled = !on; minSel.disabled = !on; if (!on) st.textContent = unavailable; };
-      btn.addEventListener('click', async () => {
+      const sync = () => { const on = !!bigApi(); btn.disabled = !on; minSel.disabled = !on; if (!on) st.textContent = unavailable; else if (st.textContent === unavailable) st.textContent = ''; };
+      const runBig = async () => {
         const api = bigApi();
         if (!api) { sync(); return; }
         btn.disabled = true; minSel.disabled = true;
@@ -3063,6 +3154,7 @@
           if (!r || !Array.isArray(r.files)) throw new Error('Некоректна відповідь');
           st.textContent = (r.files.length ? `Знайдено ${r.files.length}, переглянуто файлів: ${r.scanned.toLocaleString('uk-UA')}.` : 'Файлів такого розміру не знайдено.')
             + (r.truncated ? ' Пошук зупинено за часом: список неповний.' : '');
+          window.setTileSub('ct-big-sub', r.files.length ? `${r.files.length}` : 'Нічого');
           r.files.forEach(f => {
             const row = document.createElement('div');
             row.className = 'cache-item big-item';
@@ -3101,7 +3193,9 @@
         } finally {
           sync();
         }
-      });
+      };
+      btn.addEventListener('click', runBig);
+      (window.cleanupScans = window.cleanupScans || {}).big = runBig;
       window.addEventListener('pywebviewready', sync);
       sync();
     })();
@@ -3152,7 +3246,7 @@
         });
         sync();
       }
-      scanBtn.addEventListener('click', async () => {
+      const runLeft = async () => {
         const api = lApi();
         if (!api) { sync(); return; }
         scanBtn.disabled = true; st.textContent = 'Шукаю…'; chosen.clear();
@@ -3160,11 +3254,14 @@
           const r = await api.leftovers_scan();
           rows = Array.isArray(r.items) ? r.items : [];
           st.textContent = rows.length ? `Знайдено: ${rows.length}. Позначте те, що точно не потрібне.` : 'Залишків не знайдено.';
+          window.setTileSub('ct-left-sub', rows.length ? `${rows.length}` : 'Нічого');
           draw();
         } catch (error) {
           st.textContent = `Не вдалося знайти: ${errorText(error)}`;
         } finally { sync(); }
-      });
+      };
+      scanBtn.addEventListener('click', runLeft);
+      (window.cleanupScans = window.cleanupScans || {}).left = runLeft;
       trashBtn.addEventListener('click', async () => {
         const api = lApi();
         const paths = [...chosen];
@@ -3253,13 +3350,15 @@
           const r = await a.llm_scan();
           rows = Array.isArray(r.items) ? r.items : [];
           const total = rows.reduce((n, x) => n + (x.sizeMb || 0), 0);
-          st.textContent = rows.length ? `Знайдено моделей: ${rows.length}, разом ${sizeText(total)}. Позначте лише ті, що точно не потрібні.` : 'Локальних моделей не знайдено.';
+          st.textContent = rows.length ? `Знайдено моделей: ${rows.length}, разом ${sizeText(total)}.` : 'Локальних моделей не знайдено.';
+          window.setTileSub('ct-llm-sub', rows.length ? `${rows.length} · ${sizeText(total)}` : 'Немає');
           draw();
         } catch (error) {
           st.textContent = `Не вдалося знайти: ${errorText(error)}`;
         } finally { sync(); }
       }
       scanBtn.addEventListener('click', find);
+      (window.cleanupScans = window.cleanupScans || {}).llm = find;
       rmBtn.addEventListener('click', async () => {
         const a = api();
         const ids = [...chosen];
@@ -3284,8 +3383,35 @@
       window.addEventListener('pywebviewready', sync);
       sync();
     })();
+    (window.cleanupScans = window.cleanupScans || {}).cache = scanCaches;
+    document.querySelectorAll('#cleanup-tiles .cc-tile').forEach(tile_ => tile_.addEventListener('click', () => {
+      document.querySelectorAll('#cleanup-tiles .cc-tile').forEach(t => t.classList.toggle('is-active', t === tile_));
+      document.querySelectorAll('#cleanup .cache-panel').forEach(panel => { panel.hidden = panel.id !== tile_.dataset.panel; });
+      // The first time a type is opened, its own check runs
+      const kind = { 'cache-panel': 'cache', 'big-panel': 'big', 'left-panel': 'left', 'llm-panel': 'llm' }[tile_.dataset.panel];
+      const run = window.cleanupScans && window.cleanupScans[kind];
+      if (run && !tile_.dataset.scanned && cacheApi()) run();
+    }));
+    // The general check: every type one after another
+    const allButton = document.getElementById('clean-all');
+    const allStatus = document.getElementById('clean-all-status');
+    allButton.addEventListener('click', async () => {
+      if (busy || !cacheApi()) return;
+      allButton.disabled = true;
+      const order = [['cache', 'Кеші'], ['llm', 'Локальні LLM'], ['left', 'Залишки застосунків'], ['big', 'Великі файли']];
+      for (let i = 0; i < order.length; i++) {
+        const [kind, title] = order[i];
+        allStatus.textContent = `${i + 1}/${order.length} ${(window.MacSafeI18n ? window.MacSafeI18n.tr(title) : title)}`;
+        try { await window.cleanupScans[kind](); } catch (error) { /* each panel shows its own error */ }
+      }
+      allStatus.textContent = '';
+      allButton.disabled = false;
+    });
+    window.addEventListener('pywebviewready', () => { allButton.disabled = !cacheApi(); });
+    allButton.disabled = !cacheApi();
     scanButton.addEventListener('click', scanCaches);
     cleanButton.addEventListener('click', cleanCaches);
+    autoButton.addEventListener('click', cleanAuto);
     confirmation.addEventListener('change', updateCacheControls);
     daysSelect.addEventListener('change', () => { if (!busy && items.length) scanCaches(); });
     window.addEventListener('pywebviewready', syncCacheAvailability);

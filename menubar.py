@@ -1423,7 +1423,7 @@ class StatusBar:
             self.set_note((result or {}).get("error") or T("Не вдалося очистити кеші"))
             return
         delta = (result.get("memory") or {}).get("delta")
-        mem = T(". Памʼять: доступно {avail:+d} МБ, swap {swap:+d} МБ", avail=delta["availableMb"], swap=delta["swapMb"]) if delta else ""
+        mem = T(". RAM: доступно {avail:+d} МБ, swap {swap:+d} МБ", avail=delta["availableMb"], swap=delta["swapMb"]) if delta else ""
         self.set_note(T("Звільнено на диску: {freed:.0f} МБ{mem}", freed=result.get("freedMb", 0), mem=mem))
 
     def toggle_autostart(self):

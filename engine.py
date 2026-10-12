@@ -11,6 +11,7 @@ import pathlib
 import re
 import signal
 import subprocess
+import sys
 import threading
 import time
 from collections import deque
@@ -33,7 +34,7 @@ REPORT_DIR = DATA_DIR                                      # the generator's wor
 GENERATOR = os.path.join(HERE, "core", "generate-report.sh")
 DATA_REPORTS = DATA_DIR                                    # reports, snapshots, history
 MARKER = os.path.join(DATA_DIR, "дані", ".first-run-done")
-GEN_ENV = dict(os.environ, AUDIT_DATA_DIR=DATA_DIR)
+GEN_ENV = dict(os.environ, AUDIT_DATA_DIR=DATA_DIR, MACSAFE_PYTHON=sys.executable, MACSAFE_HELPERS=HERE)
 DAY_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")   # one report per day: the ID is the date
 DASHBOARD = os.path.join(DATA_DIR, "dashboard.html")
 LOCK_DIR = os.path.join(DATA_DIR, "дані", ".lock")

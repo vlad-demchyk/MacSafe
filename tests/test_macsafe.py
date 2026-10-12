@@ -653,6 +653,33 @@ class QuickMetricsTests(unittest.TestCase):
 
 
 
+class ThermalHidTests(unittest.TestCase):
+    def setUp(self):
+        import thermal_hid
+        self.mod = thermal_hid
+
+    def test_summary_takes_die_nand_and_battery_sensors(self):
+        r = [("PMU tdie1", 50.0), ("PMU2 tdie1", 60.0), ("PMU tdev1", -22.0), ("NAND CH0 temp", 48.0),
+             ("gas gauge battery", 35.0), ("gas gauge battery", 37.0)]
+        self.assertEqual(self.mod.summarize(r), {"cpu": 55.0, "ssd": 48.0, "battery": 36.0})
+
+    def test_nonsense_values_are_dropped_and_missing_sensors_are_absent(self):
+        self.assertEqual(self.mod.summarize([("PMU tdie1", -22.0), ("PMU tdie2", 500.0)]), {})
+        self.assertEqual(self.mod.summarize([]), {})
+
+    def test_read_never_raises_and_gives_plausible_values_when_sensors_exist(self):
+        got = self.mod.read()
+        if got and "cpu" in got:
+            self.assertTrue(10 < got["cpu"] < 120)
+
+    def test_the_report_asks_the_helper_without_root(self):
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(here, "core", "generate-report.sh"), encoding="utf-8") as fh:
+            script = fh.read()
+        self.assertIn("thermal_hid.py", script)
+        self.assertNotIn("sudo powermetrics", script)
+
+
 class ScoreModelTests(unittest.TestCase):
     """The score: critical problems count, warnings are capped, recommendations and the daemon do not."""
 
@@ -699,8 +726,12 @@ class ScoreModelTests(unittest.TestCase):
         line = next(l for l in self.script.splitlines() if "Процес навантажує CPU: ${sname}" in l)
         self.assertIn("add_issue info", line)
 
+    def test_missing_backups_stay_a_warning_because_data_loss_is_a_real_risk(self):
+        line = next(l for l in self.script.splitlines() if "Резервні копії не налаштовано" in l and "add_issue" in l)
+        self.assertIn("add_issue warning", line)
+
     def test_recommendations_are_not_warnings(self):
-        for title in ("Брандмауер macOS вимкнено", "Резервні копії не налаштовано", "Доступні оновлення macOS"):
+        for title in ("Брандмауер macOS вимкнено", "Доступні оновлення macOS"):
             line = next(l for l in self.script.splitlines() if title in l and "add_issue" in l)
             self.assertIn("add_issue info", line, title)
 

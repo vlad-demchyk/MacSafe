@@ -155,7 +155,7 @@ EN = {
     "Ще раз: очистити {size} старше {days} днів: {names}": "Click again: clean {size} older than {days} days: {names}",
     "Не вдалося очистити кеші": "Could not clean the caches",
     "Звільнено на диску: {freed:.0f} МБ{mem}": "Freed on disk: {freed:.0f} MB{mem}",
-    ". Памʼять: доступно {avail:+d} МБ, swap {swap:+d} МБ": ". Memory: available {avail:+d} MB, swap {swap:+d} MB",
+    ". RAM: доступно {avail:+d} МБ, swap {swap:+d} МБ": ". RAM: available {avail:+d} MB, swap {swap:+d} MB",
     "Має лишитися увімкненим хоча б один показник": "At least one metric must stay on",
     "Зафіксовано: {name}. Ще раз по назві — зняти вибір": "Pinned: {name}. Click the name again to clear",
     "Вибір знято": "Selection cleared",

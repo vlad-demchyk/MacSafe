@@ -14,6 +14,11 @@
     #audit-state { font-weight:650; }
     #audit-msg { color:#acbbcd; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
     #audit-state.running { color:#6fb5ff; } #audit-state.done { color:#4cd18b; } #audit-state.error { color:#ff6f7f; }
+    #audit-steps { display:inline-flex; gap:4px; align-items:center; }
+    #audit-steps i { display:block; width:22px; height:5px; border-radius:3px; background:#3a3a3f; }
+    #audit-steps i.done { background:#4cd18b; } #audit-steps i.now { background:#6fb5ff; animation:audit-pulse 1s ease-in-out infinite; }
+    @keyframes audit-pulse { 50% { opacity:.4; } }
+    @media (prefers-reduced-motion:reduce) { #audit-steps i.now { animation:none; } }
     #audit-purge { margin-left:0; }
     #audit-setup { position:fixed; right:16px; bottom:16px; z-index:9999; width:340px; padding:14px 16px; border-radius:14px;
       background:#101d2d; color:#eaf0f8; border:1px solid #243851; box-shadow:0 18px 52px rgba(0,0,0,.35);
@@ -33,7 +38,7 @@
   bar.id = 'audit-bar';
   bar.innerHTML = '<button id="audit-run" type="button" disabled>Запустити перевірку</button>'
     + '<button id="audit-purge" type="button" disabled title="Потрібен пароль адміністратора при кожному виклику">Звільнити памʼять</button>'
-    + '<span id="audit-state">Завантаження…</span><span id="audit-msg"></span>';
+    + '<span id="audit-state">Завантаження…</span><span id="audit-steps" hidden></span><span id="audit-msg"></span>';
   document.body.prepend(bar);
 
   const STATE = { idle: 'Готовий', running: 'Виконується', done: 'Завершено', error: 'Помилка' };
@@ -41,6 +46,21 @@
   const stateEl = document.getElementById('audit-state');
   const msgEl = document.getElementById('audit-msg');
   let polling = false;
+
+  // The check script reports its stages as "Collecting: ..." lines. We show them as step N of 5 instead of raw text.
+  const STAGES = [
+    [/hardware/i, 'Система'], [/load, memory/i, 'Памʼять і процеси'], [/security/i, 'Безпека й мережа'],
+    [/caches/i, 'Кеші'], [/Building/i, 'Звіт'],
+  ];
+  const stepsEl = document.getElementById('audit-steps');
+  const stageOf = msg => STAGES.findIndex(([re]) => re.test(msg || ''));
+  const renderSteps = s => {
+    const n = s.status === 'running' ? stageOf(s.message) : -1;
+    stepsEl.hidden = n < 0;
+    if (n < 0) return null;
+    stepsEl.innerHTML = STAGES.map((_, i) => `<i class="${i < n ? 'done' : i === n ? 'now' : ''}"></i>`).join('');
+    return `${n + 1}/${STAGES.length} ${STAGES[n][1]}`;
+  };
 
   const render = s => {
     stateEl.textContent = STATE[s.status] || s.status;
@@ -52,7 +72,8 @@
       const sec = Math.max(0, Math.round(end - s.started));
       extra = ` · ${Math.floor(sec / 60)} хв ${String(sec % 60).padStart(2, '0')} с`;
     }
-    msgEl.textContent = (s.message || '') + extra;
+    const stage = renderSteps(s);
+    msgEl.textContent = (stage || s.message || '') + extra;
   };
 
   const poll = async () => {
