@@ -39,14 +39,14 @@ class Alerts:
         out = []
         ram = (snap.get("ram") or {}).get("percent")
         self._fire("ram", ram is not None and ram >= RAM_PERCENT, now, out,
-                   "Памʼять майже вичерпана", T("Зайнято {ram:.0f}%. Закрийте важкі застосунки або відкрийте «Процеси».", ram=ram) if ram else "")
+                   T("Памʼять майже вичерпана"), T("Зайнято {ram:.0f}%. Закрийте важкі застосунки або відкрийте «Процеси».", ram=ram) if ram else "")
         disk = snap.get("disk")
         low = disk is not None and disk["freeGb"] < DISK_FREE_GB
-        self._fire("disk", low, now, out, "Мало місця на диску",
+        self._fire("disk", low, now, out, T("Мало місця на диску"),
                    T("Вільно {free:.1f} ГБ. Спробуйте «Детальне очищення».", free=disk["freeGb"]) if low else "", hold=0)
         bat = snap.get("battery")
         flat = bat is not None and not bat["plugged"] and bat["percent"] <= BATTERY_LOW
-        self._fire("battery", flat, now, out, "Низький заряд батареї",
+        self._fire("battery", flat, now, out, T("Низький заряд батареї"),
                    T("Залишилось {pct:.0f}%.", pct=bat["percent"]) if flat else "", hold=0)
         if security is not None and security.get("level") != "none":
             issues = int(security.get("issues", 0))
