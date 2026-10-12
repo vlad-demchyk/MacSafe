@@ -52,3 +52,8 @@ Security checks read only what macOS exposes without root. Values that need root
 - Reports, history and settings are stored only in `~/Library/Application Support/MacSafe`.
 - MacSafe makes no network requests. The Agents section copies commands for Terminal, and you run them yourself.
 - Secret values in files are never printed in reports. Only the path and permissions are shown.
+
+## Programs
+
+- An app is removed only if it sits directly in `/Applications` or `~/Applications`, is not an Apple app, is not running and is not MacSafe. It goes to the Trash with the related Library files you chose; the page can only choose from the list MacSafe just found for that app.
+- A command line package is removed with the manager's own command, a fixed argument list with no shell and no input, so a command that asks for a password fails instead of hanging. The name must match a strict pattern and appear in a fresh listing of that manager.

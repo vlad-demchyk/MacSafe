@@ -43,6 +43,7 @@ The sidebar groups sections into six areas. Each section shows its issues count 
 ### Maintenance
 
 - **Cleaning**: the cleaning panel (see [Safety](safety.md)), large files, and leftovers of removed apps. Nothing is deleted without confirmation, and removals go to the Trash.
+- **Programs** (a tile on the Cleaning page): installed apps and command line packages (Homebrew formulae and casks, npm global, cargo, pipx). Removing an app moves it to the Trash together with the Library files you tick; files matched by the app name only are unticked by default. A running app cannot be removed. A command line package is removed by its own manager; a Homebrew package that others depend on is refused.
 - **Action buttons**: commands for Terminal, grouped by purpose. The page runs nothing; you copy a command and run it yourself. Destructive commands are marked in red.
 
 ### Help
