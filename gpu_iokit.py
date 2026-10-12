@@ -217,3 +217,48 @@ def gpu_time_by_pid():
         for k in keys:
             _cf.CFRelease(k)
     return totals
+
+
+def battery_iokit():
+    """{"load": SystemLoad mW, "volt": mV, "amp": mA (negative while discharging), "pct"} of AppleSmartBattery.
+
+    Only the values that were found. None if IOKit is unavailable or there is no battery. Replaces a fork of ioreg.
+    """
+    if not _ok:
+        return None
+    matching = _iokit.IOServiceMatching(b"AppleSmartBattery")
+    iterator = ctypes.c_uint32(0)
+    if not matching or _iokit.IOServiceGetMatchingServices(0, matching, ctypes.byref(iterator)) != 0:
+        return None
+    out = {}
+    try:
+        service = _iokit.IOIteratorNext(iterator.value)
+        if not service:
+            return None
+        try:
+            for key, name in (("volt", "Voltage"), ("amp", "Amperage"), ("pct", "CurrentCapacity")):
+                k = _cfstr(name)
+                ref = _iokit.IORegistryEntryCreateCFProperty(service, k, None, 0)
+                _cf.CFRelease(k)
+                if ref:
+                    value = _number(ref)
+                    _cf.CFRelease(ref)
+                    if value is not None:
+                        out[key] = value
+            k = _cfstr("PowerTelemetryData")
+            ref = _iokit.IORegistryEntryCreateCFProperty(service, k, None, 0)
+            _cf.CFRelease(k)
+            if ref:
+                if _cf.CFGetTypeID(ref) == _cf.CFDictionaryGetTypeID():
+                    k = _cfstr("SystemLoad")
+                    inner = _cf.CFDictionaryGetValue(ref, k)
+                    _cf.CFRelease(k)
+                    value = _number(inner) if inner else None
+                    if value is not None:
+                        out["load"] = value
+                _cf.CFRelease(ref)
+        finally:
+            _iokit.IOObjectRelease(service)
+    finally:
+        _iokit.IOObjectRelease(iterator.value)
+    return out or None

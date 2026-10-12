@@ -32,6 +32,20 @@ def _signed64(value):
 def battery_power():
     """{"sysW", "batW"} from AppleSmartBattery (SystemLoad in mW, voltage * amperage), or {}."""
     try:
+        import gpu_iokit
+        raw = gpu_iokit.battery_iokit()
+    except Exception:
+        raw = None
+    if raw:
+        result = {}
+        if "load" in raw:
+            result["sysW"] = round(raw["load"] / 1000, 2)
+        if "volt" in raw and "amp" in raw:
+            result["batW"] = round(raw["volt"] / 1000 * raw["amp"] / 1000, 2)
+        if "pct" in raw:
+            result["pct"] = raw["pct"]
+        return result
+    try:
         out = subprocess.run(["/usr/sbin/ioreg", "-rn", "AppleSmartBattery"], capture_output=True, text=True, timeout=10).stdout
     except (OSError, subprocess.SubprocessError):
         return {}
