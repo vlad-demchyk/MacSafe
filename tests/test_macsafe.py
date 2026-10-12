@@ -9,6 +9,7 @@ import os
 import plistlib
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -650,6 +651,25 @@ class QuickMetricsTests(unittest.TestCase):
         snap = metrics.take_quick()
         self.assertEqual(len(snap["perCore"]), psutil.cpu_count())
 
+
+
+class BatteryHealthSourceTests(unittest.TestCase):
+    """The report takes the battery health that macOS itself shows, not the raw FullChargeCapacity ratio."""
+
+    def setUp(self):
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(here, "core", "generate-report.sh"), encoding="utf-8") as fh:
+            self.script = fh.read()
+
+    def test_maximum_capacity_from_system_profiler_is_parsed(self):
+        sample = "      Health Information:\n          Cycle Count: 91\n          Condition: Normal\n          Maximum Capacity: 97%\n"
+        line = next(l for l in self.script.splitlines() if "Maximum Capacity" in l and "sed -nE" in l)
+        expr = line.split("sed -nE '", 1)[1].split("'", 1)[0]
+        r = subprocess.run(["sed", "-nE", expr], input=sample, capture_output=True, text=True)
+        self.assertEqual(r.stdout.strip(), "97")
+
+    def test_system_profiler_comes_before_the_raw_ratio(self):
+        self.assertLess(self.script.index("macOS Maximum Capacity"), self.script.index("FullChargeCapacity / DesignCapacity"))
 
 
 class ActionsTests(unittest.TestCase):

@@ -71,6 +71,13 @@
     .cache-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:14px; }
     .cache-list { display:grid; gap:8px; margin:14px 0; }
     .cache-item { display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--card2); cursor:pointer; }
+    .flags { display:flex; flex-wrap:wrap; gap:8px; align-content:center; }
+    .flag { display:inline-flex; align-items:center; gap:7px; padding:8px 13px; border:1px solid var(--line); border-radius:999px; background:var(--card); font-size:13px; }
+    .flag svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+    .flag__label { color:var(--muted); }
+    .flag--good svg { color:var(--good); } .flag--warning svg { color:var(--warn); } .flag--critical svg { color:var(--critical); } .flag--info svg { color:var(--muted); }
+    .flag--critical { border-color:var(--critical); } .flag--warning { border-color:var(--warn); }
+    .more-details { margin-top:14px; } .more-details > summary { cursor:pointer; font-weight:600; }
     .cc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px; margin:6px 0 16px; }
     .cc-tile { display:flex; align-items:center; gap:12px; text-align:left; padding:12px 14px; border:1px solid var(--line); border-radius:18px; background:var(--card); color:var(--ink); cursor:pointer; font:inherit; box-shadow:var(--shadow); transition:transform .15s var(--ease), background .15s var(--ease); }
     .cc-tile:hover:not(:disabled) { background:var(--card2); }
@@ -366,8 +373,11 @@
         </div>
         <div class="hero" id="hero"></div>
         <div class="block" id="overview-priorities"></div>
-        <div class="block" id="overview-changes"></div>
-        <div class="block" id="overview-facts"></div>
+        <div class="block" id="overview-quick"></div>
+        <details class="card more-details"><summary>Деталі звіту</summary>
+          <div id="overview-changes"></div>
+          <div id="overview-facts"></div>
+        </details>
       </section>
 
       <section class="view" data-view="issues" aria-label="Проблеми">
@@ -946,6 +956,13 @@
  "Кеш застосунку": "App cache",
  "Локальні LLM": "Local LLMs",
  "Запустити": "Run",
+ "Джерело здоровʼя": "Health source",
+ "Швидкі дії": "Quick actions",
+ "Що зробити зараз": "What to do now",
+ "Деталі звіту": "Report details",
+ "вільно": "free",
+ "Кеші, великі файли, LLM": "Caches, large files, LLMs",
+ "Диск": "Disk",
  "Що не дає Mac заснути": "What keeps the Mac awake",
  "Чи не перегрівається процесор": "Is the processor overheating",
  "Заряд і живлення": "Charge and power",
@@ -1695,6 +1712,12 @@
     const clamp = v => Math.max(0, Math.min(100, Number(v) || 0));
     const badge = (kind, text) => `<span class="badge badge--${esc(kind || 'info')}">${esc(text)}</span>`;
     const bar = (pct, kind = 'info') => `<div class="bar"><span class="bar__fill bar__fill--${esc(kind)}" data-w="${clamp(pct).toFixed(1)}"></span></div>`;
+    // A state as a flag: icon, name, value, colour by severity
+    const FLAG_ICONS = {
+      ram: '<rect x="3" y="8" width="18" height="8" rx="1"/><path d="M7 8v8M11 8v8M15 8v8"/>',
+      swap: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>'
+    };
+    const flag = (icon, label, valueHtml, kind) => `<span class="flag flag--${esc(kind || 'info')}" title="${esc(label)}"><svg viewBox="0 0 24 24" aria-hidden="true">${FLAG_ICONS[icon] || ACTION_ICONS[icon] || ''}</svg><span class="flag__label">${esc(label)}</span><b>${valueHtml}</b></span>`;
     const tile = (label, valueHtml, kind, pct) => `<div class="metric"><div class="metric__value">${valueHtml}</div><div class="metric__label">${esc(label)}</div>${bar(pct, kind)}</div>`;
     const rows = pairs => `<dl class="kvs">${pairs.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
     const card = (title, body) => `<article class="card"><h3>${esc(title)}</h3>${body}</article>`;
@@ -1783,15 +1806,13 @@
             <p class="score__copy">${esc(h.summary || '')} Штрафи: ${esc(h.penalty ?? 0)}.</p>
           </div>
         </article>
-        <div class="tiles">
-          ${tile('CPU зараз', fmt(l.cpuTotal, '%'), cpuKind, l.cpuTotal)}
-          ${tile('Навантаження на ядро (5 хв)', fmt(l.perCore5), loadKind, loadPct)}
-          ${tile('Вільна памʼять (memory_pressure)', fmt(m.freePct, '%'), memKind, m.freePct)}
-          ${tile('Swap', has(m.swapMb) ? `${esc(m.swapMb)} МБ` : NA, swapKind, has(m.swapMb) ? m.swapMb / 20 : null)}
-          ${tile('Диск заповнено', fmt(s.pct, '%'), diskKind, s.pct)}
-          ${tile('Ємність батареї', batValue, batKind, b.healthPct)}
-          ${tile('Температура CPU', fmt(t.cpuTemp, '°C'), tempKind, t.cpuTemp)}
-          ${tile('Вільно на диску', fmt(s.availGb, 'ГБ'), diskKind, has(s.pct) ? 100 - s.pct : null)}
+        <div class="flags">
+          ${flag('top_cpu', 'CPU', fmt(l.cpuTotal, '%'), cpuKind)}
+          ${flag('ram', 'Памʼять', `${fmt(m.freePct, '%')} <span class="flag__label">вільно</span>`, memKind)}
+          ${flag('swap', 'Swap', has(m.swapMb) ? `${esc(m.swapMb)} МБ` : NA, swapKind)}
+          ${flag('disk_free', 'Диск', fmt(s.pct, '%'), diskKind)}
+          ${flag('battery', 'Батарея', batValue, batKind)}
+          ${flag('thermal', 'Температура', fmt(t.cpuTemp, '°C'), tempKind)}
         </div>`;
       const ring = $('.ring__fg');
       requestAnimationFrame(() => { ring.style.strokeDashoffset = ring.dataset.off; });
@@ -1829,7 +1850,7 @@
     }
 
     function renderOverview() {
-      const top = sortedIssues().filter(i => i.sev === 'critical' || i.sev === 'warning').slice(0, 5);
+      const top = sortedIssues().filter(i => i.sev === 'critical' || i.sev === 'warning').slice(0, 3);
       const pri = top.length
         ? top.map(i => `<a class="sec-link" href="#issues">${badge(i.sev, KIND_TEXT[i.sev])}<span>${esc(i.title)}</span></a>`).join('')
         : '<p class="muted">Критичних проблем і попереджень немає.</p>';
@@ -1837,7 +1858,8 @@
       const ageH = has(m.generatedEpoch) ? Math.floor((Date.now() / 1000 - m.generatedEpoch) / 3600) : null;
       const ageText = ageH === null ? NA : ageH < 1 ? 'менше години тому' : `${ageH} год тому`;
       const stale = ageH !== null && ageH >= 168 ? ` ${badge('warning', 'знімку понад тиждень')}` : '';
-      $('#overview-priorities').innerHTML = card('З чого почати', `<div class="stack">${pri}</div>`);
+      $('#overview-priorities').innerHTML = card('Що зробити зараз', `<div class="stack">${pri}</div>`);
+      renderQuick();
       renderOverviewChanges();
       $('#overview-facts').innerHTML = `<div class="grid">
         ${card('Знімок', rows([
@@ -2029,6 +2051,7 @@
         ['Заряд і стан', `${fmt(b.pct, '%')} · ${fmt(b.state)}`],
         ['До розрядження', fmt(b.remain)],
         ['Здоровʼя', fmt(b.healthPct, '%')],
+        ...(b.healthSource ? [['Джерело здоровʼя', fmt(b.healthSource)]] : []),
         ['Цикли', fmt(b.cycles)],
         ['Ємність, поточна / проєктна', `${fmt(b.maxCapacity)} / ${fmt(b.designCapacity)} мАг`],
         ['Температура', fmt(b.tempC, '°C')],
@@ -2309,6 +2332,19 @@
         const a = ACTION_CMDS.find(x => x.id === r.id);
         return `<div class="card act-result"><p><b>${esc(a.title)}</b> ${badge(r.ok ? 'good' : 'critical', r.ok ? 'готово' : 'помилка')} ${copyBtn(a.cmd)}</p><pre class="cmd" style="white-space:pre-wrap">${esc(r.text)}</pre></div>` })() : '';
       $('#actions-body').innerHTML = `${groups}${res}`;
+      renderQuick();
+    }
+
+    // Home: the daily actions as the same tiles, plus a way into cleaning
+    const QUICK_IDS = ['updates', 'disk_free', 'firewall', 'filevault', 'top_cpu', 'restart_finder'];
+    function renderQuick() {
+      const box = $('#overview-quick');
+      if (!box) return;
+      const tiles = QUICK_IDS.map(id => ACTION_CMDS.find(a => a.id === id)).filter(Boolean).map(actionTile).join('');
+      const clean = `<a class="cc-tile cc-tile--read" href="#cleanup" style="text-decoration:none"><span class="cc-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${ACTION_ICONS.empty_trash}</svg></span><span class="cc-txt"><b>Очищення</b><small>Кеші, великі файли, LLM</small></span></a>`;
+      const r = actionResult && QUICK_IDS.includes(actionResult.id) ? actionResult : null;
+      const res = r ? `<div class="card act-result"><p><b>${esc(ACTION_CMDS.find(x => x.id === r.id).title)}</b> ${badge(r.ok ? 'good' : 'critical', r.ok ? 'готово' : 'помилка')}</p><pre class="cmd" style="white-space:pre-wrap">${esc(r.text)}</pre></div>` : '';
+      box.innerHTML = `<h4>Швидкі дії</h4><div class="cc-grid">${tiles}${clean}</div>${res}`;
     }
 
     async function refreshActionAvailability() {
