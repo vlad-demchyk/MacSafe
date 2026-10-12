@@ -19,6 +19,7 @@ import autostart
 import bigfiles
 import cleanup
 import leftovers
+import llm
 import trash
 from diff import security_changes
 
@@ -279,6 +280,17 @@ class Api:
             if ok:
                 freed += item["sizeMb"]
         return {"ok": True, "results": results, "freedMb": round(freed, 1)}
+
+    # ---------- Local LLM models (a manual category, never part of the automatic cleaning) ----------
+    def llm_scan(self):
+        """Local models of known tools with size and last use. Changes nothing."""
+        return {"items": llm.scan()}
+
+    def llm_remove(self, ids, confirm):
+        """Removes the chosen models: files go to the Trash, an Ollama model through `ollama rm`. Only with confirmation."""
+        if confirm is not True:
+            return {"ok": False, "error": T("Потрібне підтвердження")}
+        return llm.remove(ids)
 
     def set_language(self, code):
         """Language choice from the report window's Settings. The agent saves it and restarts: this only leaves a request."""

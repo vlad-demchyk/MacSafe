@@ -46,6 +46,7 @@ PROTECTED_WORDS = (
     "spotify", "dropbox", "googledrive", "google drive", "drivefs", "onedrive", "pcloud", "syncthing", "icloud",
     "cloudkit", "1password", "bitwarden", "keepass", "signal", "telegram", "whatsapp", "docker", "parallels",
     "vmware", "virtualbox", "utm", "mail", "photos", "music", "podcasts", "tv", "backup", "timemachine",
+    "llama", "lm-studio", "lmstudio", "gpt4all", "huggingface", "ollama",   # local LLM models: see llm.py
 )
 # Fixed caches that belong to a tool: the clean is skipped while the tool runs (process name or bundle id).
 FIXED_BUSY = {

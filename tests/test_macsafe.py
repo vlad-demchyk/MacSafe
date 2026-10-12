@@ -652,6 +652,72 @@ class QuickMetricsTests(unittest.TestCase):
 
 
 
+class LlmTests(unittest.TestCase):
+    """llm reads HOME on import, so the module is reloaded with a temporary home."""
+
+    def setUp(self):
+        self.home = os.path.realpath(tempfile.mkdtemp(prefix="macsafe-llm-"))
+        self.saved_home = os.environ.get("HOME")
+        os.environ["HOME"] = self.home
+        man = os.path.join(self.home, ".ollama", "models", "manifests", "registry.ollama.ai", "library", "tiny")
+        os.makedirs(man)
+        with open(os.path.join(man, "latest"), "w") as fh:
+            json.dump({"config": {"size": 1024 * 1024}, "layers": [{"size": 3 * 1024 * 1024}]}, fh)
+        hf = os.path.join(self.home, ".cache", "huggingface", "hub", "models--org--embed", "blobs")
+        os.makedirs(hf)
+        with open(os.path.join(hf, "abc"), "wb") as fh:
+            fh.write(b"x" * (2 * 1024 * 1024))
+        os.makedirs(os.path.join(self.home, ".cache", "huggingface", "hub", "datasets--org--data"))
+        lm = os.path.join(self.home, ".lmstudio", "models", "pub", "model")
+        os.makedirs(lm)
+        with open(os.path.join(lm, "m.gguf"), "wb") as fh:
+            fh.write(b"x" * (1024 * 1024))
+        import llm
+        self.llm = importlib.reload(llm)
+        self.llm._running_names = lambda: set()
+
+    def tearDown(self):
+        if self.saved_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = self.saved_home
+        shutil.rmtree(self.home, ignore_errors=True)
+        importlib.reload(self.llm)
+
+    def test_scan_finds_models_of_all_tools(self):
+        found = {i["id"]: i for i in self.llm.scan()}
+        self.assertEqual(set(found), {"ollama:tiny:latest", "huggingface:org/embed", "lmstudio:pub/model"})
+        self.assertAlmostEqual(found["ollama:tiny:latest"]["sizeMb"], 4.0, delta=0.1)
+        self.assertAlmostEqual(found["huggingface:org/embed"]["sizeMb"], 2.0, delta=0.1)
+
+    def test_remove_refuses_unknown_ids_and_empty_list(self):
+        self.assertFalse(self.llm.remove([])["ok"])
+        r = self.llm.remove(["../../etc", "huggingface:nope"])["results"]
+        self.assertTrue(all(not x["ok"] for x in r))
+        self.assertTrue(os.path.isdir(os.path.join(self.home, ".cache", "huggingface", "hub", "models--org--embed")))
+
+    def test_ollama_model_is_removed_through_the_command_only(self):
+        calls = []
+        self.llm._ollama_bin = lambda: "/bin/ollama"
+        fake = lambda cmd, **kw: (calls.append(cmd), type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())[1]
+        with unittest.mock.patch.object(self.llm.subprocess, "run", fake):
+            r = self.llm.remove(["ollama:tiny:latest"])
+        self.assertEqual(calls, [["/bin/ollama", "rm", "tiny:latest"]])
+        self.assertTrue(r["results"][0]["ok"])
+
+    def test_blocked_tool_is_skipped(self):
+        self.llm._running_names = lambda: {"lm studio helper"}
+        item = next(i for i in self.llm.scan() if i["tool"] == "lmstudio")
+        self.assertTrue(item["blocked"])
+        r = self.llm.remove(["lmstudio:pub/model"])["results"][0]
+        self.assertTrue(r.get("skipped"))
+        self.assertTrue(os.path.isfile(os.path.join(self.home, ".lmstudio", "models", "pub", "model", "m.gguf")))
+
+    def test_models_are_never_in_the_cache_cleaning(self):
+        import cleanup
+        self.assertTrue(any(w in "llama.cpp" for w in cleanup.PROTECTED_WORDS))
+
+
 class OldCacheCleanTests(unittest.TestCase):
     """Quick clean: only files older than the threshold; recent files, symbolic links and the root stay."""
 

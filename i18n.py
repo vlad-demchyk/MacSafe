@@ -189,6 +189,8 @@ EN = {
     "Категорію не вибрано": "Category not selected",
     "Кеш застосунку. Закрийте його перед очищенням.": "App cache. Quit the app before cleaning.",
     "Запущено. Закрийте і повторіть.": "Running. Quit it and try again.",
+    "Не є локальною моделлю": "Not a local model",
+    "Не знайдено команду ollama": "The ollama command was not found",
     "Захищено: тут можуть бути дані, які важко відновити.": "Protected: this may hold data that is hard to restore.",
     "Застосунок запущено. Закрийте його і повторіть.": "The app is running. Quit it and try again.",
     "Не вибрано жодного кешу": "No cache selected",

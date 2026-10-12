@@ -485,6 +485,16 @@
             <p class="hint" id="left-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
             <div class="cache-list" id="left-list"></div>
           </article>
+          <article class="card cache-panel" id="llm-panel" aria-labelledby="llm-heading" aria-busy="false">
+            <h3 id="llm-heading">Локальні LLM</h3>
+            <p class="hint">Моделі Ollama, Hugging Face, LM Studio, GPT4All, Jan, llama.cpp. Це ручна категорія: в авто-очищення не входить і за замовчуванням нічого не відмічено. Файли йдуть у кошик, модель Ollama видаляється командою ollama rm.</p>
+            <div class="cache-actions">
+              <button class="btn" id="llm-scan" type="button" disabled>Знайти моделі</button>
+              <button class="btn btn--danger" id="llm-remove" type="button" disabled>Видалити вибране</button>
+            </div>
+            <p class="hint" id="llm-status" role="status" aria-live="polite">Доступно лише в застосунку MacSafe</p>
+            <div class="cache-list" id="llm-list"></div>
+          </article>
           <p class="card" id="cleanup-summary"></p>
           <div class="stack" id="cleanup-list" style="margin-top:10px"></div>
         </div>
@@ -916,6 +926,9 @@
  "Кеш pip": "pip cache",
  "Кеш відновлюється сам. Закрийте застосунок перед очищенням.": "The cache rebuilds itself. Close the app before cleaning.",
  "Кеш застосунку": "App cache",
+ "Локальні LLM": "Local LLMs",
+ "Знайти моделі": "Find models",
+ "Видалити вибране": "Remove selected",
  "пропущено.": "skipped.",
  "файлів": "files",
  "Кеш пакетів Python.": "Python package cache.",
@@ -2876,6 +2889,7 @@
         scanBtn.disabled = !on;
         trashBtn.disabled = !on || !chosen.size;
         if (!on) st.textContent = unavailable;
+        else if (st.textContent === unavailable) st.textContent = '';
       };
       function draw() {
         out.replaceChildren();
@@ -2939,6 +2953,94 @@
       sync();
     })();
 
+
+    // Local LLM models: a manual category. Found with the cache check, removed only by explicit choice
+    (() => {
+      const scanBtn = document.getElementById('llm-scan');
+      const rmBtn = document.getElementById('llm-remove');
+      const st = document.getElementById('llm-status');
+      const out = document.getElementById('llm-list');
+      const chosen = new Set();
+      let rows = [];
+      const api = () => {
+        const a = window.pywebview && window.pywebview.api;
+        return a && typeof a.llm_scan === 'function' ? a : null;
+      };
+      const sizeText = v => v >= 1024 ? `${(v / 1024).toLocaleString('uk-UA', { maximumFractionDigits:1 })} ГБ` : `${v.toLocaleString('uk-UA', { maximumFractionDigits:1 })} МБ`;
+      const sync = () => {
+        const on = !!api();
+        scanBtn.disabled = !on;
+        rmBtn.disabled = !on || !chosen.size;
+        if (!on) st.textContent = unavailable;
+        else if (st.textContent === unavailable) st.textContent = '';
+      };
+      function draw() {
+        out.replaceChildren();
+        rows.forEach(item => {
+          const label = document.createElement('label');
+          label.className = 'cache-item' + (item.blocked ? ' cache-item--blocked' : '');
+          const box = document.createElement('input');
+          box.type = 'checkbox';
+          box.disabled = !!item.blocked;
+          box.checked = chosen.has(item.id) && !item.blocked;
+          box.addEventListener('change', () => { if (box.checked) chosen.add(item.id); else chosen.delete(item.id); sync(); });
+          const copy = document.createElement('span');
+          copy.className = 'cache-copy';
+          const name = document.createElement('span');
+          name.className = 'cache-title';
+          name.textContent = `${item.name}`;
+          const meta = document.createElement('span');
+          meta.className = 'big-path';
+          const used = item.days === null || item.days === undefined ? '' : ` · ${item.days} дн.`;
+          meta.textContent = item.blocked ? item.blocked : `${item.toolTitle}${used} · ${item.path}`;
+          copy.append(name, meta);
+          const size = document.createElement('span');
+          size.className = 'cache-size';
+          size.textContent = sizeText(item.sizeMb);
+          label.append(box, copy, size);
+          out.append(label);
+        });
+        sync();
+      }
+      async function find() {
+        const a = api();
+        if (!a) { sync(); return; }
+        scanBtn.disabled = true; st.textContent = 'Шукаю моделі…'; chosen.clear();
+        try {
+          const r = await a.llm_scan();
+          rows = Array.isArray(r.items) ? r.items : [];
+          const total = rows.reduce((n, x) => n + (x.sizeMb || 0), 0);
+          st.textContent = rows.length ? `Знайдено моделей: ${rows.length}, разом ${sizeText(total)}. Позначте лише ті, що точно не потрібні.` : 'Локальних моделей не знайдено.';
+          draw();
+        } catch (error) {
+          st.textContent = `Не вдалося знайти: ${errorText(error)}`;
+        } finally { sync(); }
+      }
+      scanBtn.addEventListener('click', find);
+      rmBtn.addEventListener('click', async () => {
+        const a = api();
+        const ids = [...chosen];
+        if (!a || !ids.length) return;
+        if (!window.confirm(`Видалити моделей: ${ids.length}?\nФайли підуть у кошик, моделі Ollama видаляться без кошика й завантажаться знову довго.`)) return;
+        rmBtn.disabled = true; st.textContent = 'Видаляю…';
+        try {
+          const r = await a.llm_remove(ids, true);
+          if (!r || !r.ok) throw new Error(r && r.error || 'Помилка');
+          const failed = r.results.filter(x => !x.ok).length;
+          st.textContent = `Звільнено близько ${sizeText(r.freedMb)}` + (failed ? `; не вдалося: ${failed}` : '') + '.';
+          const done = new Set(r.results.filter(x => x.ok).map(x => x.id));
+          rows = rows.filter(x => !done.has(x.id));
+          done.forEach(i => chosen.delete(i));
+          draw();
+        } catch (error) {
+          st.textContent = `Помилка: ${errorText(error)}`;
+        } finally { sync(); }
+      });
+      // The cache check also looks for models, so the list is there without a separate click
+      document.getElementById('cache-scan').addEventListener('click', () => { if (api()) find(); });
+      window.addEventListener('pywebviewready', sync);
+      sync();
+    })();
     scanButton.addEventListener('click', scanCaches);
     cleanButton.addEventListener('click', cleanCaches);
     confirmation.addEventListener('change', updateCacheControls);
