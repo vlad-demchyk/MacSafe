@@ -1471,6 +1471,72 @@ class DiskMapTests(unittest.TestCase):
         self.assertFalse(self.dm.start("/etc")["ok"])
 
 
+class DuplicatesTests(unittest.TestCase):
+    def setUp(self):
+        import duplicates
+        self.d = duplicates
+        self.home = os.path.realpath(tempfile.mkdtemp())
+        self.docs = os.path.join(self.home, "Documents")
+        os.makedirs(os.path.join(self.docs, "sub"))
+        self.a = self.write("a.bin", b"A" * 2048)
+        self.b = self.write("sub/b.bin", b"A" * 2048)                 # a copy of a
+        self.write("c.bin", b"B" * 2048)                              # same size, other content
+        self.write("tiny.txt", b"A" * 10)
+        self.write("tiny2.txt", b"A" * 10)                            # copies, but under the minimum size
+        os.link(self.a, os.path.join(self.docs, "hard.bin"))          # a hard link is the same file
+        os.symlink(self.a, os.path.join(self.docs, "link.bin"))
+        os.makedirs(os.path.join(self.docs, "X.app"))
+        self.write("X.app/inside.bin", b"A" * 2048)                   # inside a bundle: skipped
+        self.d._JOB["state"] = None
+
+    def tearDown(self):
+        self.d._JOB["state"] = None
+        shutil.rmtree(self.home, ignore_errors=True)
+
+    def write(self, rel, data):
+        path = os.path.join(self.docs, rel)
+        with open(path, "wb") as fh:
+            fh.write(data)
+        return path
+
+    def search(self):
+        self.d.start(["Documents"], min_mb=0.001, home=self.home)
+        for _ in range(100):
+            r = self.d.poll()
+            if r["done"]:
+                return r
+            time.sleep(0.05)
+        self.fail("search did not finish")
+
+    def test_finds_only_real_copies(self):
+        r = self.search()
+        groups = r["result"]["groups"]
+        self.assertEqual(len(groups), 1)
+        self.assertEqual({f["path"] for f in groups[0]["files"]}, {self.a, self.b})
+
+    def test_roots_are_fixed_names(self):
+        self.assertEqual(self.d.resolve_roots(["Documents", "/etc", "../x", 5, "Library"], self.home), [self.docs])
+
+    def test_trash_keeps_one_copy(self):
+        self.search()
+        moved = []
+        trasher = lambda p: (moved.append(p) or (True, ""))
+        refused = self.d.trash_copies([self.a, self.b], trasher)
+        self.assertFalse(refused["ok"])
+        self.assertEqual(moved, [])
+        ok = self.d.trash_copies([self.b], trasher)
+        self.assertTrue(ok["ok"])
+        self.assertEqual(moved, [self.b])
+        self.assertEqual(self.d.poll()["result"]["groups"], [])      # the group has one file left
+
+    def test_trash_refuses_foreign_paths_and_changed_files(self):
+        self.search()
+        self.assertFalse(self.d.trash_copies([os.path.join(self.docs, "c.bin")], lambda p: (True, ""))["ok"])
+        with open(self.b, "wb") as fh:
+            fh.write(b"C" * 2048)                                     # same size, changed content
+        self.assertFalse(self.d.trash_copies([self.b], lambda p: (True, ""))["ok"])
+
+
 class BigFilesTests(unittest.TestCase):
     def setUp(self):
         import bigfiles

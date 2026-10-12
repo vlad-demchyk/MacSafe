@@ -20,6 +20,7 @@ import autostart
 import bigfiles
 import cleanup
 import diskmap
+import duplicates
 import actions
 import apps
 import leftovers
@@ -297,6 +298,29 @@ class Api:
     def reveal_folder(self, path):
         """Shows a folder or file of the disk map in Finder."""
         return self.reveal_file(path)
+
+    # ---------- Duplicate files ----------
+    def dupes_roots(self):
+        """Folders of the home folder the search may look in; the standard ones come ticked."""
+        return {"items": duplicates.available_roots()}
+
+    def dupes_start(self, roots, min_mb=1):
+        """Starts a background search for duplicates in the chosen standard folders. Changes nothing."""
+        return duplicates.start(roots, min_mb)
+
+    def dupes_poll(self):
+        """Progress and, when done, the groups found."""
+        return duplicates.poll()
+
+    def dupes_cancel(self):
+        """Stops a running search."""
+        return duplicates.cancel()
+
+    def dupes_trash(self, paths, confirm):
+        """Moves the chosen copies to the Trash, keeping at least one copy of every group. Only with confirmation."""
+        if confirm is not True:
+            return {"ok": False, "error": T("Потрібне підтвердження")}
+        return duplicates.trash_copies(paths)
 
     # ---------- Programs: apps and command line packages ----------
     def apps_list(self):
